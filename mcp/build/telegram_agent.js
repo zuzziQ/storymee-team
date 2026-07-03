@@ -1,0 +1,614 @@
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.KEYBOARD_UNAUTHORIZED = exports.KEYBOARD_MAIN = exports.processingActions = exports.userFormSession = exports.actionCache = exports.chatHistories = void 0;
+exports.getCachedMembers = getCachedMembers;
+exports.calculateWorkingHours = calculateWorkingHours;
+exports.createCalendarKeyboard = createCalendarKeyboard;
+exports.formatTelegramText = formatTelegramText;
+exports.sendMessage = sendMessage;
+exports.parseMarkdownRules = parseMarkdownRules;
+exports.filterRelevantRules = filterRelevantRules;
+exports.sendDailySummaryAndNotify = sendDailySummaryAndNotify;
+exports.checkRealtimeOverdueDeadlines = checkRealtimeOverdueDeadlines;
+exports.handleTelegramMessage = handleTelegramMessage;
+exports.handleCallbackQuery = handleCallbackQuery;
+exports.startTelegramPolling = startTelegramPolling;
+const fetchAxios_1 = require("./fetchAxios");
+const dotenv = __importStar(require("dotenv"));
+const express_1 = __importDefault(require("express"));
+const fs = __importStar(require("fs"));
+const path = __importStar(require("path"));
+const api_client_1 = require("@storymee/api-client");
+dotenv.config();
+// --- CACHE HỆ THỐNG ---
+const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+let membersCache = null;
+async function getCachedMembers() {
+    const now = Date.now();
+    if (membersCache && (now - membersCache.timestamp < CACHE_TTL)) {
+        return membersCache.data;
+    }
+    try {
+        const json = await apiClient.get("/hr/team-members");
+        const dataArr = Array.isArray(json) ? json : (json?.data || []);
+        if (Array.isArray(dataArr)) {
+            const now = Date.now();
+            membersCache = { data: dataArr, timestamp: now };
+            return dataArr;
+        }
+    }
+    catch (err) {
+        console.error("Lỗi fetch team-members:", err);
+    }
+    return membersCache ? membersCache.data : [];
+}
+// ----------------------
+function calculateWorkingHours(start, end) {
+    if (start >= end)
+        return 0;
+    let totalHours = 0;
+    let current = new Date(start.getTime());
+    while (current < end) {
+        const currentDay = current.getDay();
+        const isWeekend = currentDay === 0 || currentDay === 6;
+        if (!isWeekend) {
+            const morningStart = new Date(current);
+            morningStart.setHours(8, 30, 0, 0);
+            const morningEnd = new Date(current);
+            morningEnd.setHours(12, 0, 0, 0);
+            const afternoonStart = new Date(current);
+            afternoonStart.setHours(13, 30, 0, 0);
+            const afternoonEnd = new Date(current);
+            afternoonEnd.setHours(18, 0, 0, 0);
+            const morningOverlapStart = current > morningStart ? current : morningStart;
+            const morningOverlapEnd = end < morningEnd ? end : morningEnd;
+            if (morningOverlapStart < morningOverlapEnd) {
+                totalHours += (morningOverlapEnd.getTime() - morningOverlapStart.getTime()) / (1000 * 60 * 60);
+            }
+            const afternoonOverlapStart = current > afternoonStart ? current : afternoonStart;
+            const afternoonOverlapEnd = end < afternoonEnd ? end : afternoonEnd;
+            if (afternoonOverlapStart < afternoonOverlapEnd) {
+                totalHours += (afternoonOverlapEnd.getTime() - afternoonOverlapStart.getTime()) / (1000 * 60 * 60);
+            }
+        }
+        current.setDate(current.getDate() + 1);
+        current.setHours(0, 0, 0, 0);
+    }
+    return Math.round(totalHours * 10) / 10;
+}
+/**
+ * TELEGRAM AGENT - KẾT NỐI POSTGRES API VÀ OMNIROUTER THỰC TẾ
+ *
+ * Lắng nghe tin nhắn qua Long Polling, định danh nhân viên qua Telegram Username,
+ * tự động lưu Chat ID, và chạy cronjob nhắc nhở/cảnh báo deadline quá hạn qua Postgres.
+ */
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
+const TELEGRAM_API = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
+const WEB_PORTAL_URL = process.env.WEB_PORTAL_URL || "http://localhost:3010";
+const OMNIROUTER_API_URL = process.env.OMNIROUTER_API_URL || `${WEB_PORTAL_URL}/api/ai/chat`;
+const CORE_API_URL = process.env.CORE_API_URL || "http://localhost:4500";
+let apiClient = new api_client_1.CoreApiClient({ baseURL: CORE_API_URL });
+exports.chatHistories = {};
+exports.actionCache = {};
+exports.userFormSession = {};
+exports.processingActions = new Set();
+function createCalendarKeyboard(year, month, actionType) {
+    const inline_keyboard = [];
+    // Hàng 1: Navigation chuyển tháng
+    const prevMonth = month === 1 ? 12 : month - 1;
+    const prevYear = month === 1 ? year - 1 : year;
+    const nextMonth = month === 12 ? 1 : month + 1;
+    const nextYear = month === 12 ? year + 1 : year;
+    inline_keyboard.push([
+        { text: "◀️", callback_data: `cal_nav:${prevYear}:${prevMonth}:${actionType}` },
+        { text: `${month}/${year}`, callback_data: "cal_ignore" },
+        { text: "▶️", callback_data: `cal_nav:${nextYear}:${nextMonth}:${actionType}` }
+    ]);
+    // Hàng 2: Thứ
+    inline_keyboard.push([
+        { text: "Hai", callback_data: "cal_ignore" },
+        { text: "Ba", callback_data: "cal_ignore" },
+        { text: "Tư", callback_data: "cal_ignore" },
+        { text: "Năm", callback_data: "cal_ignore" },
+        { text: "Sáu", callback_data: "cal_ignore" },
+        { text: "Bảy", callback_data: "cal_ignore" },
+        { text: "CN", callback_data: "cal_ignore" }
+    ]);
+    // Tính ngày trong tháng
+    const startDate = new Date(year, month - 1, 1);
+    const endDate = new Date(year, month, 0);
+    const totalDays = endDate.getDate();
+    // Lấy thứ của ngày đầu tiên (0: CN, 1: T2, ..., 6: T7)
+    // Chuyển đổi sang chuẩn T2=0, ..., CN=6
+    let startDay = startDate.getDay();
+    startDay = startDay === 0 ? 6 : startDay - 1;
+    let currentWeek = [];
+    // Thêm khoảng trống đầu tháng
+    for (let i = 0; i < startDay; i++) {
+        currentWeek.push({ text: " ", callback_data: "cal_ignore" });
+    }
+    // Thêm các ngày (không cho phép chọn ngày quá khứ)
+    const now = new Date();
+    const vietnamOffset = 7 * 60 * 60 * 1000;
+    const todayVn = new Date(now.getTime() + vietnamOffset);
+    const todayStr = todayVn.toISOString().split('T')[0];
+    for (let day = 1; day <= totalDays; day++) {
+        const dayStr = day < 10 ? `0${day}` : `${day}`;
+        const monthStr = month < 10 ? `0${month}` : `${month}`;
+        const dateVal = `${year}-${monthStr}-${dayStr}`;
+        const isPast = dateVal < todayStr;
+        const btnText = isPast ? "·" : `${day}`;
+        const btnCallback = isPast ? "cal_ignore" : `cal_day:${dateVal}:${actionType}`;
+        currentWeek.push({ text: btnText, callback_data: btnCallback });
+        if (currentWeek.length === 7) {
+            inline_keyboard.push(currentWeek);
+            currentWeek = [];
+        }
+    }
+    // Điền nốt khoảng trống cuối tháng
+    if (currentWeek.length > 0) {
+        while (currentWeek.length < 7) {
+            currentWeek.push({ text: " ", callback_data: "cal_ignore" });
+        }
+        inline_keyboard.push(currentWeek);
+    }
+    return { inline_keyboard };
+}
+exports.KEYBOARD_MAIN = {
+    keyboard: [
+        [
+            { text: "🌅 Điểm danh (Check-in/out)" },
+            { text: "📊 Trạng thái thành viên" }
+        ],
+        [
+            { text: "📝 Công việc của tôi" },
+            { text: "📝 Đăng ký Nghỉ phép / Remote" }
+        ],
+        [
+            { text: "👤 Hồ sơ của tôi" },
+            { text: "🌐 Mở Web Portal" }
+        ]
+    ],
+    resize_keyboard: true,
+    one_time_keyboard: false
+};
+exports.KEYBOARD_UNAUTHORIZED = {
+    keyboard: [
+        [
+            { text: "👤 Đăng ký nhân viên mới" }
+        ]
+    ],
+    resize_keyboard: true,
+    one_time_keyboard: false
+};
+function formatTelegramText(text) {
+    if (!text)
+        return '';
+    return text
+        .replace(/<\/?ul>/gi, '')
+        .replace(/<\/li>/gi, '\n')
+        .replace(/<li>/gi, '• ')
+        .replace(/<b>(.*?)<\/b>/gi, '*$1*')
+        .replace(/<strong>(.*?)<\/strong>/gi, '*$1*')
+        .replace(/<i>(.*?)<\/i>/gi, '_$1_')
+        .replace(/<em>(.*?)<\/em>/gi, '_$1_')
+        .replace(/<br\s*\/?>/gi, '\n');
+}
+const KEYBOARD_REMOVE = {
+    remove_keyboard: true
+};
+async function sendMessage(chatId, text, replyMarkup) {
+    if (!TELEGRAM_BOT_TOKEN) {
+        console.log(`[Mock Telegram Send to ${chatId}]: ${text}`);
+        return;
+    }
+    const formattedText = formatTelegramText(text);
+    const isGroup = chatId < 0;
+    let finalMarkup = replyMarkup;
+    if (!finalMarkup) {
+        finalMarkup = isGroup ? KEYBOARD_REMOVE : exports.KEYBOARD_MAIN;
+    }
+    try {
+        let res = await (0, fetchAxios_1.fetchAxios)(`${TELEGRAM_API}/sendMessage`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                chat_id: chatId,
+                text: formattedText,
+                parse_mode: "Markdown",
+                reply_markup: finalMarkup
+            }),
+        });
+        // If Markdown parsing fails (Telegram is very strict), fallback to plain text
+        if (res.status === 400) {
+            const errText = await res.text();
+            console.warn(`[Telegram API Warning] Markdown failed (${errText}). Falling back to plain text...`);
+            res = await (0, fetchAxios_1.fetchAxios)(`${TELEGRAM_API}/sendMessage`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    chat_id: chatId,
+                    text: formattedText,
+                    reply_markup: finalMarkup
+                }),
+            });
+        }
+        if (!res.ok) {
+            const errText = await res.text();
+            console.error(`[Telegram API Error] /sendMessage status=${res.status}:`, errText);
+        }
+    }
+    catch (err) {
+        console.error("Lỗi gửi tin nhắn Telegram:", err);
+    }
+}
+// Helper filter rules tương tự ở frontend
+function parseMarkdownRules(mdText) {
+    if (!mdText)
+        return [];
+    const blocks = mdText.split(/###\s*(?=ĐIỀU|Chương)/gi);
+    return blocks.map(block => {
+        const lines = block.trim().split('\n');
+        const title = lines[0]?.replace(/^###\s*/, '').trim() || 'Quy định bổ sung';
+        const content = lines.slice(1).join('\n').trim();
+        const keywords = title.toLowerCase()
+            .replace(/[^a-z0-9àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹ\s]/g, '')
+            .split(/\s+/)
+            .filter(w => w.length > 2);
+        return { title, content, keywords };
+    });
+}
+function filterRelevantRules(message, rawRules) {
+    if (!rawRules)
+        return '';
+    const m = message.toLowerCase();
+    const parsedRules = parseMarkdownRules(rawRules);
+    let relevantContent = '';
+    parsedRules.forEach(rule => {
+        const titleMatch = rule.title.toLowerCase().includes(m) || m.includes(rule.title.toLowerCase());
+        const kwMatch = rule.keywords.some(kw => m.includes(kw));
+        if (titleMatch || kwMatch) {
+            relevantContent += `### ${rule.title}\n${rule.content}\n\n`;
+        }
+    });
+    return relevantContent.trim();
+}
+/**
+ * 1A. Gửi báo cáo tổng hợp 8h30 sáng và 17h chiều hàng ngày
+ */
+async function sendDailySummaryAndNotify(type) {
+    console.log(`⏰ [Cron Summary] Bắt đầu gửi báo cáo tổng hợp: ${type}`);
+    try {
+        const members = await getCachedMembers();
+        if (!members || members.length === 0)
+            throw new Error("Không thể fetch team members");
+        let dbTasks = [];
+        try {
+            const tasksData = (await apiClient.get("/omnitask/"));
+            dbTasks = Array.isArray(tasksData) ? tasksData : (tasksData?.data || []);
+        }
+        catch (err) {
+            throw new Error("Không thể fetch tasks");
+        }
+        // Send group summary if configured
+        const groupId = process.env.TELEGRAM_GROUP_ID;
+        if (groupId) {
+            if (type === "morning") {
+                await handleTelegramMessage({
+                    chat: { id: Number(groupId) },
+                    from: { username: "cron_system", first_name: "System" },
+                    text: "/check_team"
+                });
+                await sendMessage(Number(groupId), "🌅 Chúc toàn đội ngũ một ngày làm việc năng suất! Nhớ cập nhật trạng thái các task trên bảng Kanban nhé.");
+            }
+            else {
+                await sendMessage(Number(groupId), "🌙 17h00 rồi! Đội ngũ vui lòng dành ít phút review lại tiến độ công việc trong ngày và kéo thẻ Kanban trước khi ra về nhé. Cảm ơn mọi người!");
+            }
+        }
+        for (const m of members) {
+            if (!m.telegramChatId)
+                continue;
+            const chatId = Number(m.telegramChatId);
+            // Lọc subtask của người này
+            const mySubTasks = [];
+            dbTasks.forEach((t) => {
+                if (Array.isArray(t.subTasks)) {
+                    t.subTasks.forEach((sub) => {
+                        if (sub.assigneeId === m.id) {
+                            mySubTasks.push(sub);
+                        }
+                    });
+                }
+            });
+            if (type === "morning") {
+                const pendingTasks = mySubTasks.filter(s => s.status !== 'done');
+                if (pendingTasks.length === 0) {
+                    await sendMessage(chatId, `☀️ *BÁO CÁO ĐẦU NGÀY (8h30)*\n\nChào *${m.fullName}*, hôm nay bạn không có công việc nào đang chờ xử lý. Chúc bạn một ngày mới làm việc tràn đầy năng lượng!`);
+                    continue;
+                }
+                let taskListStr = "";
+                pendingTasks.forEach(s => {
+                    const dlStr = s.deadline ? s.deadline.split('T')[0] : 'Chưa có';
+                    taskListStr += `• *${s.planeTaskId || 'Task'}: ${s.title}* (Trạng thái: *${s.status}*, Hạn chót: *${dlStr}*)\n`;
+                });
+                const msg = `☀️ *BÁO CÁO CÔNG VIỆC ĐẦU NGÀY (8h30)*\n\nChào *${m.fullName}*, dưới đây là danh sách các công việc bạn cần tập trung xử lý trong hôm nay:\n\n${taskListStr}\n💪 Chúc bạn một ngày làm việc hiệu quả và hoàn thành xuất sắc mục tiêu!`;
+                await sendMessage(chatId, msg);
+                // Gửi thông báo lên Web Dashboard Bell icon
+                try {
+                    await (0, fetchAxios_1.fetchAxios)(`${WEB_PORTAL_URL}/api/ai/announcements`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            title: `☀️ Báo cáo đầu ngày (8h30): ${m.fullName}`,
+                            content: `Hệ thống tự động nhắc nhở đầu ngày cho ${m.fullName}. Số task cần làm: ${pendingTasks.length}.`,
+                            sender: "Bot AI Tự động"
+                        })
+                    });
+                }
+                catch (e) { }
+            }
+            else {
+                const activeTasks = mySubTasks.filter(s => s.status === 'in_progress' || s.status === 'pending');
+                if (activeTasks.length === 0)
+                    continue;
+                let taskListStr = "";
+                activeTasks.forEach(s => {
+                    taskListStr += `• *${s.planeTaskId || 'Task'}: ${s.title}* (Trạng thái: *${s.status}*)\n`;
+                });
+                const msg = `🌙 *CẬP NHẬT TIẾN ĐỘ CUỐI NGÀY (17h00)*\n\nChào *${m.fullName}*, bạn vui lòng dành ít phút cập nhật tiến trình hoặc trạng thái hoàn thành của các công việc sau lên bảng Kanban trước khi ra về nhé:\n\n${taskListStr}\n🙏 Cảm ơn bạn và chúc bạn có một buổi tối thư giãn vui vẻ!`;
+                await sendMessage(chatId, msg);
+                // Gửi thông báo lên Web Dashboard Bell icon
+                try {
+                    await (0, fetchAxios_1.fetchAxios)(`${WEB_PORTAL_URL}/api/ai/announcements`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            title: `🌙 Nhắc tiến độ cuối ngày (17h00): ${m.fullName}`,
+                            content: `Hệ thống nhắc nhở cập nhật trạng thái cuối ngày cho ${m.fullName}. Số task đang làm: ${activeTasks.length}.`,
+                            sender: "Bot AI Tự động"
+                        })
+                    });
+                }
+                catch (e) { }
+            }
+        }
+    }
+    catch (err) {
+        console.error("Lỗi gửi báo cáo summary:", err);
+    }
+}
+/**
+ * 1B. Quét deadline quá hạn realtime và gửi thông báo ngay lập tức
+ */
+async function checkRealtimeOverdueDeadlines() {
+    console.log("⏰ [Cron Overdue] Đang quét deadline quá hạn realtime...");
+    try {
+        const members = await getCachedMembers();
+        if (!members || members.length === 0)
+            throw new Error("Không thể fetch team members");
+        let dbTasks = [];
+        try {
+            const tasksData = (await apiClient.get("/omnitask/"));
+            dbTasks = Array.isArray(tasksData) ? tasksData : (tasksData?.data || []);
+        }
+        catch (err) {
+            throw new Error("Không thể fetch tasks");
+        }
+        const now = new Date();
+        // Đọc cache danh sách đã cảnh báo để tránh trùng lặp
+        const alertedDir = path.join(__dirname, "../data");
+        if (!fs.existsSync(alertedDir)) {
+            fs.mkdirSync(alertedDir, { recursive: true });
+        }
+        const alertedFile = path.join(alertedDir, "alerted_subtasks.json");
+        let alertedIds = new Set();
+        if (fs.existsSync(alertedFile)) {
+            try {
+                const arr = JSON.parse(fs.readFileSync(alertedFile, "utf-8"));
+                alertedIds = new Set(arr);
+            }
+            catch (e) { }
+        }
+        let alertCount = 0;
+        for (const t of dbTasks) {
+            if (Array.isArray(t.subTasks)) {
+                for (const sub of t.subTasks) {
+                    if (sub.status === 'done')
+                        continue;
+                    if (!sub.deadline)
+                        continue;
+                    const deadline = new Date(sub.deadline);
+                    // Quá hạn và chưa từng gửi thông báo cho id này
+                    if (deadline <= now && !alertedIds.has(sub.id)) {
+                        // Tìm nhân sự phụ trách
+                        const member = (members || []).find((m) => m.id === sub.assigneeId);
+                        if (!member || !member.telegramChatId)
+                            continue;
+                        const chatId = Number(member.telegramChatId);
+                        const dlStr = sub.deadline.split('T')[0] + ' ' + sub.deadline.split('T')[1].substring(0, 5);
+                        // 1. Gửi tin nhắn Telegram
+                        await sendMessage(chatId, `🚨 *CẢNH BÁO QUÁ HẠN DEADLINE REALTIME!*\n\n• Nhiệm vụ: *${sub.planeTaskId || 'Task'}: ${sub.title}*\n• Người phụ trách: *${member.fullName}*\n• Hạn chót: *${dlStr}* (Đã quá hạn)\n\n⚠️ Vui lòng cập nhật trạng thái công việc hoặc liên hệ admin hoãn task ngay lập tức!`);
+                        // 2. Gửi thông báo lên Web Bell icon
+                        try {
+                            await (0, fetchAxios_1.fetchAxios)(`${WEB_PORTAL_URL}/api/ai/announcements`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    title: `🚨 Quá hạn Realtime: ${sub.title}`,
+                                    content: `Nhiệm vụ '${sub.title}' giao cho ${member.fullName} đã quá hạn vào lúc ${dlStr}.`,
+                                    sender: "Cảnh báo Hệ thống"
+                                })
+                            });
+                        }
+                        catch (e) { }
+                        alertedIds.add(sub.id);
+                        alertCount++;
+                    }
+                }
+            }
+        }
+        if (alertCount > 0) {
+            fs.writeFileSync(alertedFile, JSON.stringify(Array.from(alertedIds), null, 2));
+            console.log(`⏰ [Cron Overdue] Đã gửi ${alertCount} thông báo quá hạn realtime.`);
+            const groupId = process.env.TELEGRAM_GROUP_ID;
+            if (groupId) {
+                await sendMessage(Number(groupId), `🚨 *CẢNH BÁO NHÓM:* Có ${alertCount} nhiệm vụ vừa bị quá hạn! Vui lòng gọi lệnh /check_team để xem danh sách tiến độ.`);
+            }
+        }
+    }
+    catch (err) {
+        console.error("Lỗi check deadline realtime:", err);
+    }
+}
+async function handleTelegramMessage(message) {
+    return (await Promise.resolve().then(() => __importStar(require('./telegram/handlers/messageHandler')))).handleTelegramMessage(message);
+}
+async function handleCallbackQuery(callbackQuery) {
+    return (await Promise.resolve().then(() => __importStar(require('./telegram/handlers/callbackQueryHandler')))).handleCallbackQuery(callbackQuery);
+}
+/**
+ * 3. Bắt đầu cơ chế Long Polling & Cron Job nội bộ
+ */
+async function setupBotCommands() {
+    try {
+        const res = await (0, fetchAxios_1.fetchAxios)(`${TELEGRAM_API}/setMyCommands`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                commands: [
+                    { command: "start", description: "Khởi động trợ lý AI & hiện khay phím tắt" },
+                    { command: "register", description: "Đăng ký liên kết tài khoản cho nhân sự mới" },
+                    { command: "ho_so", description: "Xem thông tin hồ sơ cá nhân của tôi" },
+                    { command: "portal", description: "Đăng nhập nhanh vào Web Portal" },
+                    { command: "dang_ky", description: "Đăng ký Nghỉ phép / Làm Remote" },
+                    { command: "cong_viec", description: "Xem danh sách công việc của tôi" },
+                    { command: "check", description: "Quét deadline quá hạn realtime (Admin)" },
+                    { command: "check_all", description: "Báo cáo trạng thái toàn bộ nhân viên" }
+                ]
+            })
+        });
+        if (res.ok) {
+            console.log("🤖 [Telegram] Đã tự động cấu hình các nút lệnh Commands thành công!");
+        }
+    }
+    catch (err) {
+        console.error("Lỗi setMyCommands:", err);
+    }
+}
+async function startTelegramPolling() {
+    if (!TELEGRAM_BOT_TOKEN) {
+        console.log("⚠️ CHƯA CẤU HÌNH TELEGRAM_BOT_TOKEN. Chạy bot ở chế độ MOCK (Giả lập console).");
+        return;
+    }
+    console.log(`🤖 Telegram Bot đang khởi động chế độ Webhook (Token: ...${TELEGRAM_BOT_TOKEN.substring(0, 8)})...`);
+    await setupBotCommands();
+    // Vòng lặp Cron Worker nội bộ check giờ từng phút
+    setInterval(async () => {
+        try {
+            const now = new Date();
+            const hours = now.getHours();
+            const minutes = now.getMinutes();
+            // Trigger lúc 8h30 sáng
+            if (hours === 8 && minutes === 30) {
+                console.log("⏰ [Cron Summary] Đến giờ 8h30 sáng, gửi báo cáo đầu ngày...");
+                await sendDailySummaryAndNotify("morning");
+            }
+            // Trigger lúc 17h00 chiều
+            if (hours === 17 && minutes === 0) {
+                console.log("⏰ [Cron Summary] Đến giờ 17h00 chiều, gửi nhắc nhở cuối ngày...");
+                await sendDailySummaryAndNotify("evening");
+            }
+            // Quét deadline quá hạn realtime mỗi 5 phút (khi minutes chia hết cho 5)
+            if (minutes % 5 === 0) {
+                await checkRealtimeOverdueDeadlines();
+            }
+        }
+        catch (err) {
+            console.error("Lỗi cron check giờ:", err);
+        }
+    }, 60 * 1000); // 1 phút
+    // Quét ngay lần đầu chạy
+    setTimeout(() => {
+        checkRealtimeOverdueDeadlines();
+    }, 5000);
+    // SETUP EXPRESS WEBHOOK SERVER
+    const app = (0, express_1.default)();
+    app.use(express_1.default.json());
+    // Webhook Route
+    app.post('/bot-webhook', async (req, res) => {
+        try {
+            const update = req.body;
+            if (update.message && update.message.text) {
+                await handleTelegramMessage(update.message);
+            }
+            else if (update.callback_query) {
+                await handleCallbackQuery(update.callback_query);
+            }
+            res.sendStatus(200);
+        }
+        catch (err) {
+            console.error("Lỗi xử lý webhook:", err);
+            // TRẢ VỀ 200 OK NGAY LẬP TỨC để Telegram không gửi lại (retry) tin nhắn
+            res.sendStatus(200);
+        }
+    });
+    const WEBHOOK_PORT = 4501; // Cổng chạy riêng cho Bot Webhook
+    app.listen(WEBHOOK_PORT, async () => {
+        console.log(`🚀 Telegram Webhook Server đang chạy tại port ${WEBHOOK_PORT}...`);
+        // Đăng ký Webhook URL với Telegram
+        const WEBHOOK_URL = `https://hub.storymee.com/bot-webhook`;
+        try {
+            const res = await (0, fetchAxios_1.fetchAxios)(`${TELEGRAM_API}/setWebhook?url=${WEBHOOK_URL}`);
+            const data = await res.json();
+            if (data.ok) {
+                console.log(`✅ Đã đăng ký Telegram Webhook thành công: ${WEBHOOK_URL}`);
+            }
+            else {
+                console.error("❌ Lỗi đăng ký Webhook:", data);
+            }
+        }
+        catch (e) {
+            console.error("❌ Lỗi kết nối đăng ký Webhook:", e);
+        }
+    });
+}
+// Khởi chạy
+const cronJobs_js_1 = require("./cronJobs.js");
+(0, cronJobs_js_1.startCronJobs)(apiClient, sendMessage);
+startTelegramPolling();
