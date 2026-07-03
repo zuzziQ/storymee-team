@@ -32,11 +32,11 @@ case "check_in_out": {
 
       let checkinData;
           try {
-            checkinData = (await apiClient.post("/omnitask/hr/attendance/checkin", JSON.stringify({
+            checkinData = (await apiClient.post("/omnitask/hr/attendance/checkin", {
                     memberId: targetMember.id,
                     status: status || "present",
                     notes: notes || `Checkin/checkout từ Telegram`
-                  }))) as any;
+                  })) as any;
           } catch (err: any) {
             throw new McpError(ErrorCode.InternalError, "Lỗi kết nối điểm danh với Core API.");
           }

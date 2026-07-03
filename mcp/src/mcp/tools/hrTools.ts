@@ -28,13 +28,14 @@ case "submit_leave_request": {
 
       let resJson;
           try {
-            resJson = (await apiClient.post(API_ROUTES.HR.LEAVE_REQUESTS, JSON.stringify({
+            resJson = (await apiClient.post(API_ROUTES.HR.LEAVE_REQUESTS, {
+                    memberId: user.id,
                     telegramUsername: user.telegramUsername || user.fullName,
                     leaveType: finalLeaveType,
                     startDate: finalStartDate,
                     endDate: finalEndDate,
                     reason: reason || "Xin nghỉ phép qua Bot Telegram"
-                  }))) as any;
+                  })) as any;
           } catch (err: any) {
             throw new McpError(ErrorCode.InternalError, "Lỗi tạo đơn xin nghỉ phép tại Core API.");
           }
@@ -173,7 +174,7 @@ case "update_personal_info": {
       const { bank_account, bank_name } = args as any;
 
       try {
-            await apiClient.post(API_ROUTES.HR.TEAM_MEMBERS, JSON.stringify({
+            await apiClient.post(API_ROUTES.HR.TEAM_MEMBERS, {
                     fullName: user.fullName,
                     email: user.email,
                     bankName: bank_name,
@@ -183,7 +184,7 @@ case "update_personal_info": {
                     role: user.role,
                     skills: user.skills,
                     phone: user.phone
-                  }));
+                  });
           } catch (err: any) {
             throw new McpError(ErrorCode.InternalError, "Lỗi cập nhật thông tin tại Core API.");
           }
@@ -205,7 +206,7 @@ case "upsert_team_member": {
       }
 
       try {
-            await apiClient.post(API_ROUTES.HR.TEAM_MEMBERS, JSON.stringify({
+            await apiClient.post(API_ROUTES.HR.TEAM_MEMBERS, {
                     email,
                     fullName,
                     role: role || undefined,
@@ -215,7 +216,7 @@ case "upsert_team_member": {
                     telegramChatId: telegramChatId ? Number(telegramChatId) : undefined,
                     bankName: bankName || undefined,
                     bankAccount: bankAccount || undefined
-                  }));
+                  });
           } catch (err: any) {
             throw new McpError(ErrorCode.InternalError, "Lỗi cập nhật nhân sự tại Core API.");
           }

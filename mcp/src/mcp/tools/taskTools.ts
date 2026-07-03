@@ -115,7 +115,7 @@ case "create_task": {
 
       let resJson;
           try {
-            resJson = (await apiClient.post(API_ROUTES.OMNITASK.ROOT, JSON.stringify({
+            resJson = (await apiClient.post(API_ROUTES.OMNITASK.ROOT, {
                     title,
                     description: "Tạo tự động qua Model Context Protocol (MCP)",
                     subtasks: [
@@ -128,7 +128,7 @@ case "create_task": {
                         deadlineDays: deadlineDays
                       }
                     ]
-                  }))) as any;
+                  })) as any;
           } catch (err: any) {
             throw new McpError(ErrorCode.InternalError, "Lỗi tạo task tại Core API Service.");
           }
@@ -180,7 +180,7 @@ case "update_task_status": {
       const apiStatus = status === 'Todo' ? 'pending' : status === 'In Progress' ? 'working' : 'done';
 
       try {
-            await apiClient.patch(`${API_ROUTES.HR.SUBTASKS}/${foundSubtask.id}`, JSON.stringify({ status: apiStatus }));
+            await apiClient.patch(`${API_ROUTES.HR.SUBTASKS}/${foundSubtask.id}`, { status: apiStatus });
           } catch (err: any) {
             throw new McpError(ErrorCode.InternalError, "Lỗi cập nhật trạng thái task tại Core API.");
           }
@@ -231,7 +231,7 @@ case "assign_task": {
       }
 
       try {
-            await apiClient.patch(`${API_ROUTES.HR.SUBTASKS}/${foundSubtask.id}`, JSON.stringify({ assigneeId: targetUser.id }));
+            await apiClient.patch(`${API_ROUTES.HR.SUBTASKS}/${foundSubtask.id}`, { assigneeId: targetUser.id });
           } catch (err: any) {
             throw new McpError(ErrorCode.InternalError, "Lỗi bàn giao công việc tại Core API.");
           }
@@ -288,13 +288,13 @@ case "update_task": {
       }
 
       try {
-            await apiClient.patch(`${API_ROUTES.HR.SUBTASKS}/${foundSubtask.id}`, JSON.stringify({
+            await apiClient.patch(`${API_ROUTES.HR.SUBTASKS}/${foundSubtask.id}`, {
                     status: apiStatus,
                     assigneeId: assigneeId,
                     priority: priority ? priority.toLowerCase() : undefined,
                     deadline: deadline || undefined,
                     estimatedHours: estimate || undefined
-                  }));
+                  });
           } catch (err: any) {
             throw new McpError(ErrorCode.InternalError, "Lỗi cập nhật task tại Core API.");
           }
@@ -392,10 +392,10 @@ case "breakdown_task": {
       const breakdownRes = await fetchAxios(`${portalUrl}/api/ai/breakdown`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        body: {
           title: matchedSubtask.title,
           description: matchedSubtask.description || ""
-        })
+        }
       });
 
       if (!breakdownRes.ok) {
@@ -417,7 +417,7 @@ case "breakdown_task": {
         subIdx++;
 
         try {
-            await apiClient.post("/hr/subtasks", JSON.stringify({
+            await apiClient.post("/hr/subtasks", {
                       title: `[${task_id}] ${item.title}`,
                       estimatedHours: 2, // Mặc định 2 giờ mỗi subtask
                       priority: matchedSubtask.priority || "medium",
@@ -425,7 +425,7 @@ case "breakdown_task": {
                       parentTaskId: matchedSubtask.projectId,
                       status: "pending",
                       planeTaskId: subtaskIdStr
-                    }));
+                    });
           } catch (err: any) {
             throw err;
           }
@@ -509,7 +509,7 @@ case "update_subtasks": {
         subIdx++;
 
         try {
-            await apiClient.post("/hr/subtasks", JSON.stringify({
+            await apiClient.post("/hr/subtasks", {
                       title: `[${task_id}] ${cleanTitle}`,
                       estimatedHours: 2,
                       priority: matchedSubtask.priority || "medium",
@@ -517,7 +517,7 @@ case "update_subtasks": {
                       parentTaskId: matchedSubtask.projectId,
                       status: "pending",
                       planeTaskId: subtaskIdStr
-                    }));
+                    });
           } catch (err: any) {
             throw err;
           }
@@ -564,7 +564,7 @@ case "request_task_approval": {
       }
 
       try {
-            await apiClient.post(`/omnitask/hr/tasks/${foundSubtask.id}/request`, JSON.stringify({ type, reason, newDeadline: new_deadline }));
+            await apiClient.post(`/omnitask/hr/tasks/${foundSubtask.id}/request`, { type, reason, newDeadline: new_deadline });
           } catch (err: any) {
             throw new McpError(ErrorCode.InternalError, "Lỗi khi gọi API xin duyệt.");
           }
@@ -605,7 +605,7 @@ case "approve_task_request": {
       }
 
       try {
-            await apiClient.post(`/omnitask/hr/tasks/${foundSubtask.id}/approve`, JSON.stringify({ type, decision, newDeadline: new_deadline }));
+            await apiClient.post(`/omnitask/hr/tasks/${foundSubtask.id}/approve`, { type, decision, newDeadline: new_deadline });
           } catch (err: any) {
             throw new McpError(ErrorCode.InternalError, "Lỗi khi gọi API duyệt yêu cầu.");
           }
