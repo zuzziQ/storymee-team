@@ -125,6 +125,35 @@ async function handleCallbackQuery(callbackQuery: any) {
     return;
   }
 
+  // Handle Project & Task creation
+  if (data === "start_create_project") {
+    userFormSession[chatId] = { action: 'create_project', step: 'create_project_name' };
+    await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: `📂 *TẠO DỰ ÁN MỚI*\n\nVui lòng nhập **Tên Dự án**:`,
+        reply_markup: { force_reply: true, selective: true }
+      })
+    });
+    return;
+  }
+
+  if (data === "start_create_task") {
+    userFormSession[chatId] = { action: 'create_task', step: 'create_task_title' };
+    await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: `📋 *TẠO TASK MỚI*\n\nVui lòng nhập **Tiêu đề Task**:`,
+        reply_markup: { force_reply: true, selective: true }
+      })
+    });
+    return;
+  }
+
   // Xử lý các Inline Keyboard tác vụ nhanh
   if (data.startsWith("leave_mode:")) {
     const parts = data.split(":");

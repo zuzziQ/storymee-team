@@ -99,15 +99,7 @@ interface ChatMessage {
 
 export const chatHistories: Record<number, ChatMessage[]> = {};
 export const actionCache: Record<string, { action: string; payload: any; member: any }> = {};
-export const userFormSession: Record<number, {
-  type: 'leave' | 'remote';
-  leaveType?: string;
-  remoteSession?: string;
-  startDate?: string;
-  endDate?: string;
-  reason?: string;
-  step: 'awaiting_start_date' | 'awaiting_end_date' | 'awaiting_reason';
-}> = {};
+export const userFormSession: Record<number, any> = {};
 export const processingActions = new Set<string>();
 
 export function createCalendarKeyboard(year: number, month: number, actionType: string) {
@@ -200,6 +192,9 @@ export const KEYBOARD_MAIN = {
     [
       { text: "👤 Hồ sơ của tôi" },
       { text: "🌐 Mở Web Portal" }
+    ],
+    [
+      { text: "📁 Quản lý Dự án & Task" }
     ]
   ],
   resize_keyboard: true,

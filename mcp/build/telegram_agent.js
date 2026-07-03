@@ -203,6 +203,9 @@ exports.KEYBOARD_MAIN = {
         [
             { text: "👤 Hồ sơ của tôi" },
             { text: "🌐 Mở Web Portal" }
+        ],
+        [
+            { text: "📁 Quản lý Dự án & Task" }
         ]
     ],
     resize_keyboard: true,

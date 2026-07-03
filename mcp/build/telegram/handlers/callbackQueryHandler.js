@@ -147,6 +147,33 @@ async function handleCallbackQuery(callbackQuery) {
         }
         return;
     }
+    // Handle Project & Task creation
+    if (data === "start_create_project") {
+        telegram_agent_1.userFormSession[chatId] = { action: 'create_project', step: 'create_project_name' };
+        await (0, fetchAxios_1.fetchAxios)(`${TELEGRAM_API}/sendMessage`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                chat_id: chatId,
+                text: `📂 *TẠO DỰ ÁN MỚI*\n\nVui lòng nhập **Tên Dự án**:`,
+                reply_markup: { force_reply: true, selective: true }
+            })
+        });
+        return;
+    }
+    if (data === "start_create_task") {
+        telegram_agent_1.userFormSession[chatId] = { action: 'create_task', step: 'create_task_title' };
+        await (0, fetchAxios_1.fetchAxios)(`${TELEGRAM_API}/sendMessage`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                chat_id: chatId,
+                text: `📋 *TẠO TASK MỚI*\n\nVui lòng nhập **Tiêu đề Task**:`,
+                reply_markup: { force_reply: true, selective: true }
+            })
+        });
+        return;
+    }
     // Xử lý các Inline Keyboard tác vụ nhanh
     if (data.startsWith("leave_mode:")) {
         const parts = data.split(":");
@@ -906,9 +933,9 @@ async function handleCallbackQuery(callbackQuery) {
         const action = data.startsWith("approve_leave:") ? "approve" : "reject";
         const requestId = data.split(":")[1];
         try {
-            const endpoint = action === "approve" ? "approve-leave" : "reject-leave";
+            const statusParam = action === "approve" ? "approved" : "rejected";
             try {
-                const resJson = await apiClient.post(`/omnitask/hr/${endpoint}`, { requestId });
+                const resJson = await apiClient.post(`/hr/leave-requests/${requestId}/approve`, { status: statusParam });
                 const actionStr = action === "approve" ? "Đã Phê duyệt" : "Đã Từ chối";
                 const emoji = action === "approve" ? "✅" : "❌";
                 try {

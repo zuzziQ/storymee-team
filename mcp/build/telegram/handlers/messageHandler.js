@@ -413,6 +413,50 @@ async function handleTelegramMessage(message) {
             }
             return;
         }
+        if (session.step === 'create_project_name') {
+            session.name = cleanText;
+            session.step = 'create_project_desc';
+            await (0, telegram_agent_1.sendMessage)(chatId, `📝 *Dự án:* ${session.name}\n\nNhập **Mô tả dự án** (hoặc gõ 'bỏ qua' nếu không có):`, { reply_markup: { force_reply: true, selective: true } });
+            return;
+        }
+        if (session.step === 'create_project_desc') {
+            const desc = cleanText === 'bỏ qua' ? '' : cleanText;
+            delete telegram_agent_1.userFormSession[chatId];
+            await (0, telegram_agent_1.sendMessage)(chatId, "⏳ Đang tạo dự án...");
+            try {
+                await apiClient.post("/admin/projects", { name: session.name, description: desc });
+                await (0, telegram_agent_1.sendMessage)(chatId, `✅ **Tạo Dự án thành công!**\n\n• Tên: **${session.name}**\n• Mô tả: ${desc || 'Trống'}`);
+            }
+            catch (err) {
+                await (0, telegram_agent_1.sendMessage)(chatId, `❌ Lỗi khi tạo dự án: ${err.message}`);
+            }
+            return;
+        }
+        if (session.step === 'create_task_title') {
+            session.title = cleanText;
+            session.step = 'create_task_desc';
+            await (0, telegram_agent_1.sendMessage)(chatId, `📝 *Task:* ${session.title}\n\nNhập **Mô tả Task** (hoặc gõ 'bỏ qua'):`, { reply_markup: { force_reply: true, selective: true } });
+            return;
+        }
+        if (session.step === 'create_task_desc') {
+            session.description = cleanText === 'bỏ qua' ? '' : cleanText;
+            session.step = 'create_task_project';
+            await (0, telegram_agent_1.sendMessage)(chatId, `Vui lòng nhập **ID Dự án** mà Task này thuộc về (hoặc gõ 'bỏ qua' để không gắn dự án):`, { reply_markup: { force_reply: true, selective: true } });
+            return;
+        }
+        if (session.step === 'create_task_project') {
+            const projectId = cleanText === 'bỏ qua' ? null : cleanText;
+            delete telegram_agent_1.userFormSession[chatId];
+            await (0, telegram_agent_1.sendMessage)(chatId, "⏳ Đang tạo Task...");
+            try {
+                await apiClient.post("/admin/tasks", { title: session.title, description: session.description, projectId });
+                await (0, telegram_agent_1.sendMessage)(chatId, `✅ **Tạo Task thành công!**\n\n• Tiêu đề: **${session.title}**\n• Dự án: ${projectId || 'Không gắn'}`);
+            }
+            catch (err) {
+                await (0, telegram_agent_1.sendMessage)(chatId, `❌ Lỗi khi tạo Task: ${err.message}`);
+            }
+            return;
+        }
     }
     // C. Lệnh /start
     if (text.trim() === "/start") {
@@ -571,11 +615,32 @@ async function handleTelegramMessage(message) {
             await (0, telegram_agent_1.sendMessage)(chatId, "❌ Tài khoản Telegram của bạn chưa được liên kết với nhân sự nào. Vui lòng bấm nút đăng ký hoặc liên kết trước.");
             return;
         }
-        // Nếu chưa có Letta Conversation ID, chúng ta có thể dùng ID của member hoặc tự tạo làm token
         const token = member.lettaConversationId || `conv-${member.id}`;
         const portalUrl = `${WEB_PORTAL_URL}/login?token=${token}`;
-        console.log(`[Portal Link] Generating portal login URL for ${member.fullName}: ${portalUrl}`);
-        await (0, telegram_agent_1.sendMessage)(chatId, `🌐 *ĐĂNG NHẬP NHANH VÀO WEB PORTAL*\n\nBạn có thể click vào đường dẫn sau để đăng nhập tự động vào hệ thống Web Portal:\n👉 ${portalUrl}`);
+        await (0, telegram_agent_1.sendMessage)(chatId, "🌐 Bấm nút dưới đây để mở giao diện Web Portal:", {
+            inline_keyboard: [
+                [
+                    { text: "🚀 Mở Storymee Portal", url: portalUrl }
+                ]
+            ]
+        });
+        return;
+    }
+    if (cleanText === "📁 quản lý dự án & task") {
+        if (!member) {
+            await (0, telegram_agent_1.sendMessage)(chatId, "❌ Tài khoản Telegram của bạn chưa được liên kết với nhân sự nào.");
+            return;
+        }
+        await (0, telegram_agent_1.sendMessage)(chatId, "🚀 *QUẢN LÝ DỰ ÁN & TASK*\n\nVui lòng chọn chức năng bạn muốn thực hiện:", {
+            inline_keyboard: [
+                [
+                    { text: "📂 Tạo Dự án mới", callback_data: "start_create_project" }
+                ],
+                [
+                    { text: "📋 Tạo Task mới", callback_data: "start_create_task" }
+                ]
+            ]
+        });
         return;
     }
     if (cleanText === "🌅 điểm danh (check-in/out)" || cleanText === "/checkin" || cleanText === "/checkout") {
