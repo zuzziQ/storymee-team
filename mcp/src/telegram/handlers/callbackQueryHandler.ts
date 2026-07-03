@@ -897,9 +897,9 @@ async function handleCallbackQuery(callbackQuery: any) {
     const requestId = data.split(":")[1];
 
     try {
-      const endpoint = action === "approve" ? "approve-leave" : "reject-leave";
+      const statusParam = action === "approve" ? "approved" : "rejected";
       try {
-          const resJson = await apiClient.post(`/omnitask/hr/${endpoint}`, { requestId }) as any;
+          const resJson = await apiClient.post(`/hr/leave-requests/${requestId}/approve`, { status: statusParam }) as any;
           const actionStr = action === "approve" ? "Đã Phê duyệt" : "Đã Từ chối";
           const emoji = action === "approve" ? "✅" : "❌";
 
