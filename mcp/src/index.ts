@@ -1,3 +1,4 @@
+import { fetchAxios } from './fetchAxios';
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
@@ -961,7 +962,7 @@ export async function executeMcpTool(
       }
 
       const portalUrl = process.env.WEB_PORTAL_URL || "https://storymee-team.vercel.app";
-      const breakdownRes = await fetch(`${portalUrl}/api/ai/breakdown`, {
+      const breakdownRes = await fetchAxios(`${portalUrl}/api/ai/breakdown`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

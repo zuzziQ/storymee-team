@@ -1,3 +1,4 @@
+import { fetchAxios } from './fetchAxios';
 import * as dotenv from "dotenv";
 import express from "express";
 import * as fs from "fs";
@@ -246,7 +247,7 @@ async function sendMessage(chatId: number, text: string, replyMarkup?: any) {
   }
   
   try {
-    let res = await fetch(`${TELEGRAM_API}/sendMessage`, {
+    let res = await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ 
@@ -261,7 +262,7 @@ async function sendMessage(chatId: number, text: string, replyMarkup?: any) {
     if (res.status === 400) {
       const errText = await res.text();
       console.warn(`[Telegram API Warning] Markdown failed (${errText}). Falling back to plain text...`);
-      res = await fetch(`${TELEGRAM_API}/sendMessage`, {
+      res = await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
@@ -381,7 +382,7 @@ export async function sendDailySummaryAndNotify(type: "morning" | "evening") {
 
         // Gửi thông báo lên Web Dashboard Bell icon
         try {
-          await fetch(`${WEB_PORTAL_URL}/api/ai/announcements`, {
+          await fetchAxios(`${WEB_PORTAL_URL}/api/ai/announcements`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -406,7 +407,7 @@ export async function sendDailySummaryAndNotify(type: "morning" | "evening") {
 
         // Gửi thông báo lên Web Dashboard Bell icon
         try {
-          await fetch(`${WEB_PORTAL_URL}/api/ai/announcements`, {
+          await fetchAxios(`${WEB_PORTAL_URL}/api/ai/announcements`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -482,7 +483,7 @@ export async function checkRealtimeOverdueDeadlines() {
 
             // 2. Gửi thông báo lên Web Bell icon
             try {
-              await fetch(`${WEB_PORTAL_URL}/api/ai/announcements`, {
+              await fetchAxios(`${WEB_PORTAL_URL}/api/ai/announcements`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -722,7 +723,7 @@ export async function handleTelegramMessage(message: {
     const cleanText = text.trim();
     if (session.step === 'awaiting_start_date') {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(cleanText)) {
-        await fetch(`${TELEGRAM_API}/sendMessage`, {
+        await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -741,7 +742,7 @@ export async function handleTelegramMessage(message: {
       const todayStr = todayVn.toISOString().split('T')[0];
 
       if (cleanText < todayStr) {
-        await fetch(`${TELEGRAM_API}/sendMessage`, {
+        await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -757,7 +758,7 @@ export async function handleTelegramMessage(message: {
       
       if (session.type === 'leave') {
         session.step = 'awaiting_end_date';
-        await fetch(`${TELEGRAM_API}/sendMessage`, {
+        await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -769,7 +770,7 @@ export async function handleTelegramMessage(message: {
       } else {
         session.endDate = cleanText;
         session.step = 'awaiting_reason';
-        await fetch(`${TELEGRAM_API}/sendMessage`, {
+        await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -784,7 +785,7 @@ export async function handleTelegramMessage(message: {
 
     if (session.step === 'awaiting_end_date') {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(cleanText)) {
-        await fetch(`${TELEGRAM_API}/sendMessage`, {
+        await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -798,7 +799,7 @@ export async function handleTelegramMessage(message: {
 
       // Kiểm tra ngày kết thúc không được nhỏ hơn ngày bắt đầu
       if (cleanText < session.startDate!) {
-        await fetch(`${TELEGRAM_API}/sendMessage`, {
+        await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -812,7 +813,7 @@ export async function handleTelegramMessage(message: {
 
       session.endDate = cleanText;
       session.step = 'awaiting_reason';
-      await fetch(`${TELEGRAM_API}/sendMessage`, {
+      await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1215,7 +1216,7 @@ export async function handleTelegramMessage(message: {
   // F. Định tuyến cuộc gọi đến OmniRouter AI
   try {
     const history = chatHistories[chatId] || [];
-    const res = await fetch(OMNIROUTER_API_URL, {
+    const res = await fetchAxios(OMNIROUTER_API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -1339,7 +1340,7 @@ async function handleCallbackQuery(callbackQuery: any) {
 
   // 1. Phản hồi để tắt trạng thái loading của nút bấm trên client
   try {
-    await fetch(`${TELEGRAM_API}/answerCallbackQuery`, {
+    await fetchAxios(`${TELEGRAM_API}/answerCallbackQuery`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ callback_query_id: queryId })
@@ -1391,7 +1392,7 @@ async function handleCallbackQuery(callbackQuery: any) {
     const status = data.split(":")[1] || "present";
     
     try {
-      await fetch(`${TELEGRAM_API}/editMessageText`, {
+      await fetchAxios(`${TELEGRAM_API}/editMessageText`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1408,7 +1409,7 @@ async function handleCallbackQuery(callbackQuery: any) {
         notes: "Điểm danh nhanh qua nút bấm Telegram"
       }, member);
 
-      await fetch(`${TELEGRAM_API}/editMessageText`, {
+      await fetchAxios(`${TELEGRAM_API}/editMessageText`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1421,7 +1422,7 @@ async function handleCallbackQuery(callbackQuery: any) {
     } catch (err: any) {
       console.error("Lỗi điểm danh qua callback:", err);
       try {
-        await fetch(`${TELEGRAM_API}/editMessageText`, {
+        await fetchAxios(`${TELEGRAM_API}/editMessageText`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -1443,7 +1444,7 @@ async function handleCallbackQuery(callbackQuery: any) {
     
     if (mode === 'single') {
       try {
-        await fetch(`${TELEGRAM_API}/sendMessage`, {
+        await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -1473,7 +1474,7 @@ async function handleCallbackQuery(callbackQuery: any) {
       };
       const today = new Date();
       try {
-        await fetch(`${TELEGRAM_API}/sendMessage`, {
+        await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -1502,7 +1503,7 @@ async function handleCallbackQuery(callbackQuery: any) {
     
     const today = new Date();
     try {
-      await fetch(`${TELEGRAM_API}/sendMessage`, {
+      await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1518,7 +1519,7 @@ async function handleCallbackQuery(callbackQuery: any) {
 
   if (data === "start_form:leave") {
     try {
-      await fetch(`${TELEGRAM_API}/sendMessage`, {
+      await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1541,7 +1542,7 @@ async function handleCallbackQuery(callbackQuery: any) {
 
   if (data === "start_form:remote") {
     try {
-      await fetch(`${TELEGRAM_API}/sendMessage`, {
+      await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1573,7 +1574,7 @@ async function handleCallbackQuery(callbackQuery: any) {
     };
     const today = new Date();
     try {
-      await fetch(`${TELEGRAM_API}/sendMessage`, {
+      await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1594,7 +1595,7 @@ async function handleCallbackQuery(callbackQuery: any) {
     const actionType = parts[3];
     
     try {
-      await fetch(`${TELEGRAM_API}/editMessageReplyMarkup`, {
+      await fetchAxios(`${TELEGRAM_API}/editMessageReplyMarkup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1625,7 +1626,7 @@ async function handleCallbackQuery(callbackQuery: any) {
       
       const sessionStr = session.remoteSession === 'all' ? 'Nguyên ngày' : session.remoteSession === 'am' ? 'Ca sáng' : 'Ca chiều';
       try {
-        await fetch(`${TELEGRAM_API}/sendMessage`, {
+        await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -1643,7 +1644,7 @@ async function handleCallbackQuery(callbackQuery: any) {
       const month = Number(dateParts[1]);
       
       try {
-        await fetch(`${TELEGRAM_API}/sendMessage`, {
+        await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -1663,7 +1664,7 @@ async function handleCallbackQuery(callbackQuery: any) {
       session.step = 'awaiting_reason';
       
       try {
-        await fetch(`${TELEGRAM_API}/sendMessage`, {
+        await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -1680,7 +1681,7 @@ async function handleCallbackQuery(callbackQuery: any) {
       session.step = 'awaiting_reason';
       
       try {
-        await fetch(`${TELEGRAM_API}/sendMessage`, {
+        await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -1770,7 +1771,7 @@ async function handleCallbackQuery(callbackQuery: any) {
 
     // Edit message sang trạng thái Đang xử lý ngay lập tức để người dùng không bấm lại được nữa
     try {
-      await fetch(`${TELEGRAM_API}/editMessageText`, {
+      await fetchAxios(`${TELEGRAM_API}/editMessageText`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1797,7 +1798,7 @@ async function handleCallbackQuery(callbackQuery: any) {
 
         // Edit message để xoá nút xác nhận
         try {
-          await fetch(`${TELEGRAM_API}/editMessageText`, {
+          await fetchAxios(`${TELEGRAM_API}/editMessageText`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -1819,7 +1820,7 @@ async function handleCallbackQuery(callbackQuery: any) {
               console.log("Found ADMIN:", targetMem.email, "ChatId:", adminChatId);
               const leaveTypeStr = payload.leaveType === 'sick' ? 'Nghỉ ốm' : payload.leaveType === 'annual' ? 'Nghỉ phép năm' : payload.leaveType === 'remote' ? 'Đăng ký Remote' : 'Việc riêng';
               try {
-                await fetch(`${TELEGRAM_API}/sendMessage`, {
+                await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({
@@ -1860,7 +1861,7 @@ async function handleCallbackQuery(callbackQuery: any) {
         }, actionMember);
 
         try {
-          await fetch(`${TELEGRAM_API}/editMessageText`, {
+          await fetchAxios(`${TELEGRAM_API}/editMessageText`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -1888,7 +1889,7 @@ async function handleCallbackQuery(callbackQuery: any) {
         }, actionMember);
 
         try {
-          await fetch(`${TELEGRAM_API}/editMessageText`, {
+          await fetchAxios(`${TELEGRAM_API}/editMessageText`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -1907,7 +1908,7 @@ async function handleCallbackQuery(callbackQuery: any) {
         }, actionMember);
 
         try {
-          await fetch(`${TELEGRAM_API}/editMessageText`, {
+          await fetchAxios(`${TELEGRAM_API}/editMessageText`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -1924,7 +1925,7 @@ async function handleCallbackQuery(callbackQuery: any) {
         }, actionMember);
 
         try {
-          await fetch(`${TELEGRAM_API}/editMessageText`, {
+          await fetchAxios(`${TELEGRAM_API}/editMessageText`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -1942,7 +1943,7 @@ async function handleCallbackQuery(callbackQuery: any) {
         }, actionMember);
 
         try {
-          await fetch(`${TELEGRAM_API}/editMessageText`, {
+          await fetchAxios(`${TELEGRAM_API}/editMessageText`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -1962,7 +1963,7 @@ async function handleCallbackQuery(callbackQuery: any) {
         }, actionMember);
 
         try {
-          await fetch(`${TELEGRAM_API}/editMessageText`, {
+          await fetchAxios(`${TELEGRAM_API}/editMessageText`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -1985,7 +1986,7 @@ async function handleCallbackQuery(callbackQuery: any) {
                 const reqTypeStr = payload.type === 'extend' || payload.type === 'extend_deadline' ? 'Xin dời deadline' : (payload.type === 'archive' || payload.type === 'delete') ? 'Xin lưu trữ' : 'Yêu cầu không hợp lệ';
                 if (payload.type === 'delete') payload.type = 'archive';
                 
-                await fetch(`${TELEGRAM_API}/sendMessage`, {
+                await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({
@@ -2016,7 +2017,7 @@ async function handleCallbackQuery(callbackQuery: any) {
         }, actionMember);
 
         try {
-          await fetch(`${TELEGRAM_API}/editMessageText`, {
+          await fetchAxios(`${TELEGRAM_API}/editMessageText`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -2035,7 +2036,7 @@ async function handleCallbackQuery(callbackQuery: any) {
         }, actionMember);
 
         try {
-          await fetch(`${TELEGRAM_API}/editMessageText`, {
+          await fetchAxios(`${TELEGRAM_API}/editMessageText`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -2063,7 +2064,7 @@ async function handleCallbackQuery(callbackQuery: any) {
     const actionId = data.split(":")[1];
     delete actionCache[actionId];
     try {
-      await fetch(`${TELEGRAM_API}/editMessageText`, {
+      await fetchAxios(`${TELEGRAM_API}/editMessageText`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -2097,7 +2098,7 @@ async function handleCallbackQuery(callbackQuery: any) {
           if (resJson && resJson.data && resJson.data.id) {
             const requestId = resJson.data.id;
             try {
-              await fetch(`${TELEGRAM_API}/editMessageText`, {
+              await fetchAxios(`${TELEGRAM_API}/editMessageText`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -2116,7 +2117,7 @@ async function handleCallbackQuery(callbackQuery: any) {
                 const leaveTypeStr = leaveType === 'sick' ? 'Nghỉ ốm' : leaveType === 'annual' ? 'Nghỉ phép năm' : leaveType === 'remote' ? 'Đăng ký Remote' : 'Việc riêng';
                 
                 try {
-                  await fetch(`${TELEGRAM_API}/sendMessage`, {
+                  await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
@@ -2160,7 +2161,7 @@ async function handleCallbackQuery(callbackQuery: any) {
           const actionStr = action === "approve" ? "Đã Phê duyệt" : "Đã Từ chối";
           const emoji = action === "approve" ? "✅" : "❌";
 
-          await fetch(`${TELEGRAM_API}/editMessageText`, {
+          await fetchAxios(`${TELEGRAM_API}/editMessageText`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -2183,7 +2184,7 @@ async function handleCallbackQuery(callbackQuery: any) {
 
   if (data === "cancel_leave") {
     try {
-      await fetch(`${TELEGRAM_API}/editMessageText`, {
+      await fetchAxios(`${TELEGRAM_API}/editMessageText`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -2214,7 +2215,7 @@ async function handleCallbackQuery(callbackQuery: any) {
           const emoji = action === "approve" ? "✅" : "❌";
 
           try {
-            await fetch(`${TELEGRAM_API}/editMessageText`, {
+            await fetchAxios(`${TELEGRAM_API}/editMessageText`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
@@ -2255,7 +2256,7 @@ async function handleCallbackQuery(callbackQuery: any) {
  */
 async function setupBotCommands() {
   try {
-    const res = await fetch(`${TELEGRAM_API}/setMyCommands`, {
+    const res = await fetchAxios(`${TELEGRAM_API}/setMyCommands`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -2348,9 +2349,9 @@ export async function startTelegramPolling() {
     console.log(`🚀 Telegram Webhook Server đang chạy tại port ${WEBHOOK_PORT}...`);
     
     // Đăng ký Webhook URL với Telegram
-    const WEBHOOK_URL = `https://core-api.storymee.com/bot-webhook`; 
+    const WEBHOOK_URL = `https://hub.storymee.com/bot-webhook`; 
     try {
-      const res = await fetch(`${TELEGRAM_API}/setWebhook?url=${WEBHOOK_URL}`);
+      const res = await fetchAxios(`${TELEGRAM_API}/setWebhook?url=${WEBHOOK_URL}`);
       const data = await res.json() as any;
       if (data.ok) {
         console.log(`✅ Đã đăng ký Telegram Webhook thành công: ${WEBHOOK_URL}`);
