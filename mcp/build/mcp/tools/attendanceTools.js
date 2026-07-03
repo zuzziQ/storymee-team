@@ -28,13 +28,29 @@ async function executeAttendanceTool(name, args, user, isBoss, apiClient) {
             }
             let checkinData;
             try {
-                checkinData = (await apiClient.post("/omnitask/hr/attendance/checkin", {
-                    memberId: targetMember.id,
-                    status: status || "present",
-                    notes: notes || `Checkin/checkout từ Telegram`
-                }));
+                if (status === 'checkout') {
+                    checkinData = (await apiClient.post("/omnitask/hr/attendance/checkout", {
+                        memberId: targetMember.id,
+                        notes: notes || `Checkout từ Telegram`
+                    }));
+                }
+                else {
+                    checkinData = (await apiClient.post("/omnitask/hr/attendance/checkin", {
+                        memberId: targetMember.id,
+                        status: status || "present",
+                        notes: notes || `Checkin từ Telegram`
+                    }));
+                }
             }
             catch (err) {
+                if (err.response?.data?.status === 'already_checked_out') {
+                    return {
+                        content: [{
+                                type: "text",
+                                text: `⚠️ Nhân sự ${targetMember.fullName} đã checkout trước đó rồi.`
+                            }]
+                    };
+                }
                 throw new types_js_1.McpError(types_js_1.ErrorCode.InternalError, "Lỗi kết nối điểm danh với Core API.");
             }
             const att = checkinData.data;

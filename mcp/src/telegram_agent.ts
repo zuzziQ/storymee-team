@@ -339,7 +339,7 @@ export async function sendDailySummaryAndNotify(type: "morning" | "evening") {
         });
         await sendMessage(Number(groupId), "🌅 Chúc toàn đội ngũ một ngày làm việc năng suất! Nhớ cập nhật trạng thái các task trên bảng Kanban nhé.");
       } else {
-        await sendMessage(Number(groupId), "🌙 17h00 rồi! Đội ngũ vui lòng dành ít phút review lại tiến độ công việc trong ngày và kéo thẻ Kanban trước khi ra về nhé. Cảm ơn mọi người!");
+        await sendMessage(Number(groupId), "🌙 18h00 rồi! Đội ngũ vui lòng dành ít phút review lại tiến độ công việc trong ngày, kéo thẻ Kanban và điểm danh ra về nhé. Cảm ơn mọi người!");
       }
     }
 
@@ -362,7 +362,9 @@ export async function sendDailySummaryAndNotify(type: "morning" | "evening") {
       if (type === "morning") {
         const pendingTasks = mySubTasks.filter(s => s.status !== 'done');
         if (pendingTasks.length === 0) {
-          await sendMessage(chatId, `☀️ *BÁO CÁO ĐẦU NGÀY (8h30)*\n\nChào *${m.fullName}*, hôm nay bạn không có công việc nào đang chờ xử lý. Chúc bạn một ngày mới làm việc tràn đầy năng lượng!`);
+          await sendMessage(chatId, `☀️ *BÁO CÁO ĐẦU NGÀY (8h30)*\n\nChào *${m.fullName}*, hôm nay bạn không có công việc nào đang chờ xử lý. Chúc bạn một ngày mới làm việc tràn đầy năng lượng!`, {
+            inline_keyboard: [[{ text: "🌅 Vào ca (Check-in)", callback_data: `attendance_direct:present` }]]
+          });
           continue;
         }
 
@@ -373,7 +375,9 @@ export async function sendDailySummaryAndNotify(type: "morning" | "evening") {
         });
 
         const msg = `☀️ *BÁO CÁO CÔNG VIỆC ĐẦU NGÀY (8h30)*\n\nChào *${m.fullName}*, dưới đây là danh sách các công việc bạn cần tập trung xử lý trong hôm nay:\n\n${taskListStr}\n💪 Chúc bạn một ngày làm việc hiệu quả và hoàn thành xuất sắc mục tiêu!`;
-        await sendMessage(chatId, msg);
+        await sendMessage(chatId, msg, {
+          inline_keyboard: [[{ text: "🌅 Vào ca (Check-in)", callback_data: `attendance_direct:present` }]]
+        });
 
         // Gửi thông báo lên Web Dashboard Bell icon
         try {
@@ -390,15 +394,20 @@ export async function sendDailySummaryAndNotify(type: "morning" | "evening") {
 
       } else {
         const activeTasks = mySubTasks.filter(s => s.status === 'in_progress' || s.status === 'pending');
-        if (activeTasks.length === 0) continue;
-
+        
         let taskListStr = "";
-        activeTasks.forEach(s => {
-          taskListStr += `• *${s.planeTaskId || 'Task'}: ${s.title}* (Trạng thái: *${s.status}*)\n`;
-        });
+        if (activeTasks.length > 0) {
+          activeTasks.forEach(s => {
+            taskListStr += `• *${s.planeTaskId || 'Task'}: ${s.title}* (Trạng thái: *${s.status}*)\n`;
+          });
+        } else {
+          taskListStr = "Không có công việc nào đang mở.";
+        }
 
-        const msg = `🌙 *CẬP NHẬT TIẾN ĐỘ CUỐI NGÀY (17h00)*\n\nChào *${m.fullName}*, bạn vui lòng dành ít phút cập nhật tiến trình hoặc trạng thái hoàn thành của các công việc sau lên bảng Kanban trước khi ra về nhé:\n\n${taskListStr}\n🙏 Cảm ơn bạn và chúc bạn có một buổi tối thư giãn vui vẻ!`;
-        await sendMessage(chatId, msg);
+        const msg = `🌙 *CẬP NHẬT TIẾN ĐỘ CUỐI NGÀY (18h00)*\n\nChào *${m.fullName}*, bạn vui lòng dành ít phút cập nhật tiến trình của các công việc sau lên bảng Kanban trước khi ra về nhé:\n\n${taskListStr}\n🙏 Cảm ơn bạn và chúc bạn có một buổi tối thư giãn vui vẻ!`;
+        await sendMessage(chatId, msg, {
+          inline_keyboard: [[{ text: "🚪 Tan ca (Check-out)", callback_data: `attendance_direct:checkout` }]]
+        });
 
         // Gửi thông báo lên Web Dashboard Bell icon
         try {
@@ -576,9 +585,9 @@ export async function startTelegramPolling() {
         await sendDailySummaryAndNotify("morning");
       }
 
-      // Trigger lúc 17h00 chiều
-      if (hours === 17 && minutes === 0) {
-        console.log("⏰ [Cron Summary] Đến giờ 17h00 chiều, gửi nhắc nhở cuối ngày...");
+      // Trigger lúc 18h00 chiều
+      if (hours === 18 && minutes === 0) {
+        console.log("⏰ [Cron Summary] Đến giờ 18h00 chiều, gửi nhắc nhở cuối ngày...");
         await sendDailySummaryAndNotify("evening");
       }
 
@@ -640,6 +649,6 @@ export async function startTelegramPolling() {
 }
 
 // Khởi chạy
-import { startCronJobs } from "./cronJobs.js";
-startCronJobs(apiClient, sendMessage);
+// import { startCronJobs } from "./cronJobs.js";
+// startCronJobs(apiClient, sendMessage); // Đã gộp vào vòng lặp cron bên trong
 startTelegramPolling();

@@ -34,7 +34,12 @@ function startCronJobs(apiClient, sendMessage) {
                 else {
                     msg += `📋 Bạn chưa có task nào đang mở. Chúc một ngày làm việc hiệu quả!\n`;
                 }
-                await sendMessage(Number(m.telegramChatId), msg);
+                const replyMarkup = {
+                    inline_keyboard: [
+                        [{ text: "🌅 Vào ca (Check-in)", callback_data: `attendance_direct:present` }]
+                    ]
+                };
+                await sendMessage(Number(m.telegramChatId), msg, replyMarkup);
             }
         }
         catch (err) {
@@ -52,7 +57,12 @@ function startCronJobs(apiClient, sendMessage) {
                 let msg = `🌇 *Chào buổi chiều ${m.fullName}!*\n\n`;
                 msg += `🕒 Đã đến giờ nghỉ ngơi, sếp nhớ *Check-out* trước khi về nhé!\n`;
                 msg += `👉 Hãy báo cáo tiến độ các task hôm nay bằng cách chat với bot. (Nếu cần dời deadline, hãy báo lại nhé).\n`;
-                await sendMessage(Number(m.telegramChatId), msg);
+                const replyMarkup = {
+                    inline_keyboard: [
+                        [{ text: "🚪 Tan ca (Check-out)", callback_data: `attendance_direct:checkout` }]
+                    ]
+                };
+                await sendMessage(Number(m.telegramChatId), msg, replyMarkup);
             }
         }
         catch (err) {

@@ -1,7 +1,7 @@
 import cron from "node-cron";
 import { CoreApiClient } from "@storymee/api-client";
 
-export function startCronJobs(apiClient: CoreApiClient, sendMessage: (chatId: number, text: string) => Promise<void>) {
+export function startCronJobs(apiClient: CoreApiClient, sendMessage: (chatId: number, text: string, replyMarkup?: any) => Promise<void>) {
   console.log("🕒 Khởi động hệ thống Report tự động (Cron Jobs)...");
 
   cron.schedule('30 8 * * 1-6', async () => {
@@ -33,7 +33,12 @@ export function startCronJobs(apiClient: CoreApiClient, sendMessage: (chatId: nu
           msg += `📋 Bạn chưa có task nào đang mở. Chúc một ngày làm việc hiệu quả!\n`;
         }
         
-        await sendMessage(Number(m.telegramChatId), msg);
+        const replyMarkup = {
+          inline_keyboard: [
+            [{ text: "🌅 Vào ca (Check-in)", callback_data: `attendance_direct:present` }]
+          ]
+        };
+        await sendMessage(Number(m.telegramChatId), msg, replyMarkup);
       }
     } catch (err) {
       console.error("Lỗi chạy Cron sáng:", err);
@@ -53,7 +58,12 @@ export function startCronJobs(apiClient: CoreApiClient, sendMessage: (chatId: nu
         msg += `🕒 Đã đến giờ nghỉ ngơi, sếp nhớ *Check-out* trước khi về nhé!\n`;
         msg += `👉 Hãy báo cáo tiến độ các task hôm nay bằng cách chat với bot. (Nếu cần dời deadline, hãy báo lại nhé).\n`;
         
-        await sendMessage(Number(m.telegramChatId), msg);
+        const replyMarkup = {
+          inline_keyboard: [
+            [{ text: "🚪 Tan ca (Check-out)", callback_data: `attendance_direct:checkout` }]
+          ]
+        };
+        await sendMessage(Number(m.telegramChatId), msg, replyMarkup);
       }
     } catch (err) {
       console.error("Lỗi chạy Cron chiều:", err);

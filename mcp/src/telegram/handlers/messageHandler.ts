@@ -682,7 +682,7 @@ export async function handleTelegramMessage(message: {
       inline_keyboard: [
         [
           { text: "🌅 Vào ca (Check-in)", callback_data: `attendance_direct:present` },
-          { text: "🚪 Tan ca (Check-out)", callback_data: `attendance_direct:present` }
+          { text: "🚪 Tan ca (Check-out)", callback_data: `attendance_direct:checkout` }
         ]
       ]
     });

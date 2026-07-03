@@ -31,15 +31,30 @@ case "check_in_out": {
       }
 
       let checkinData;
-          try {
-            checkinData = (await apiClient.post("/omnitask/hr/attendance/checkin", {
-                    memberId: targetMember.id,
-                    status: status || "present",
-                    notes: notes || `Checkin/checkout từ Telegram`
-                  })) as any;
-          } catch (err: any) {
-            throw new McpError(ErrorCode.InternalError, "Lỗi kết nối điểm danh với Core API.");
-          }
+      try {
+        if (status === 'checkout') {
+          checkinData = (await apiClient.post("/omnitask/hr/attendance/checkout", {
+            memberId: targetMember.id,
+            notes: notes || `Checkout từ Telegram`
+          })) as any;
+        } else {
+          checkinData = (await apiClient.post("/omnitask/hr/attendance/checkin", {
+            memberId: targetMember.id,
+            status: status || "present",
+            notes: notes || `Checkin từ Telegram`
+          })) as any;
+        }
+      } catch (err: any) {
+        if (err.response?.data?.status === 'already_checked_out') {
+          return {
+            content: [{
+              type: "text",
+              text: `⚠️ Nhân sự ${targetMember.fullName} đã checkout trước đó rồi.`
+            }]
+          };
+        }
+        throw new McpError(ErrorCode.InternalError, "Lỗi kết nối điểm danh với Core API.");
+      }
       const att = checkinData.data;
 
       // Định dạng phản hồi
