@@ -17,7 +17,7 @@ export async function fetchAxios(url: string, options: any = {}) {
       method,
       headers,
       data,
-      timeout: options.timeout || 15000,
+      timeout: options.timeout || 60000,
       signal: options.signal,
       responseType: options.body?.includes('stream') ? 'stream' : undefined
     });
