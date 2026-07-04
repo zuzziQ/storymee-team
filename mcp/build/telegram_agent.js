@@ -54,6 +54,7 @@ const dotenv = __importStar(require("dotenv"));
 const express_1 = __importDefault(require("express"));
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
+const node_cron_1 = __importDefault(require("node-cron"));
 const api_client_1 = require("@storymee/api-client");
 dotenv.config();
 // --- CACHE HỆ THỐNG ---
@@ -550,31 +551,23 @@ async function startTelegramPolling() {
     }
     console.log(`🤖 Telegram Bot đang khởi động chế độ Webhook (Token: ...${TELEGRAM_BOT_TOKEN.substring(0, 8)})...`);
     await setupBotCommands();
-    // Vòng lặp Cron Worker nội bộ check giờ từng phút
-    setInterval(async () => {
+    // Vòng lặp Cron Worker nội bộ với timezone cụ thể
+    node_cron_1.default.schedule('30 8 * * 1-6', async () => {
+        console.log("⏰ [Cron Summary] Đến giờ 8h30 sáng, gửi báo cáo đầu ngày...");
+        await sendDailySummaryAndNotify("morning");
+    }, { timezone: "Asia/Ho_Chi_Minh" });
+    node_cron_1.default.schedule('0 18 * * 1-6', async () => {
+        console.log("⏰ [Cron Summary] Đến giờ 18h00 chiều, gửi nhắc nhở cuối ngày...");
+        await sendDailySummaryAndNotify("evening");
+    }, { timezone: "Asia/Ho_Chi_Minh" });
+    node_cron_1.default.schedule('*/5 * * * *', async () => {
         try {
-            const now = new Date();
-            const hours = now.getHours();
-            const minutes = now.getMinutes();
-            // Trigger lúc 8h30 sáng
-            if (hours === 8 && minutes === 30) {
-                console.log("⏰ [Cron Summary] Đến giờ 8h30 sáng, gửi báo cáo đầu ngày...");
-                await sendDailySummaryAndNotify("morning");
-            }
-            // Trigger lúc 18h00 chiều
-            if (hours === 18 && minutes === 0) {
-                console.log("⏰ [Cron Summary] Đến giờ 18h00 chiều, gửi nhắc nhở cuối ngày...");
-                await sendDailySummaryAndNotify("evening");
-            }
-            // Quét deadline quá hạn realtime mỗi 5 phút (khi minutes chia hết cho 5)
-            if (minutes % 5 === 0) {
-                await checkRealtimeOverdueDeadlines();
-            }
+            await checkRealtimeOverdueDeadlines();
         }
         catch (err) {
-            console.error("Lỗi cron check giờ:", err);
+            console.error("Lỗi cron check deadline:", err);
         }
-    }, 60 * 1000); // 1 phút
+    }, { timezone: "Asia/Ho_Chi_Minh" });
     // Quét ngay lần đầu chạy
     setTimeout(() => {
         checkRealtimeOverdueDeadlines();
