@@ -28,10 +28,18 @@ export async function handleTelegramMessage(message: {
   const isGroup = chatId < 0;
 
   // Hỗ trợ lệnh /ai trong group để bypass Privacy Mode
+  let isAiCommand = false;
   if (text.toLowerCase().startsWith("/ai ")) {
     text = text.substring(4).trim();
+    isAiCommand = true;
   } else if (text.toLowerCase() === "/ai") {
     text = "";
+    isAiCommand = true;
+  }
+
+  // Trong group chat, chỉ xử lý nếu bắt đầu bằng /ai hoặc các lệnh hệ thống (vd: /checkin, /register)
+  if (isGroup && !isAiCommand && !text.startsWith('/')) {
+    return; // Bỏ qua tin nhắn thường trong group
   }
 
   console.log(`[Telegram Msg from @${username} in ${isGroup ? 'Group' : 'Private'} ${chatId}]: ${text}`);
