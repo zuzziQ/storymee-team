@@ -23,6 +23,8 @@ interface HeaderBarProps {
   setTab: (tab: string) => void;
   setHrSubTab: (subTab: 'profile' | 'attendance' | 'leaves' | 'payroll' | 'importer') => void;
   handleCheckinOffice: (memberId: string, notes?: string, workType?: string) => Promise<void>;
+  handleCheckoutOffice: (memberId: string, notes?: string) => Promise<void>;
+  attendanceList: any[];
 }
 
 export default function HeaderBar({
@@ -45,18 +47,22 @@ export default function HeaderBar({
   setSelectedMemberId,
   setTab,
   setHrSubTab,
-  handleCheckinOffice
+  handleCheckinOffice,
+  handleCheckoutOffice,
+  attendanceList
 }: HeaderBarProps) {
-  const [checkedInTime, setCheckedInTime] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    const saved = localStorage.getItem('st_checkin_time');
-    if (saved) {
-      setCheckedInTime(saved);
-    }
-  }, []);
-
   const unreadAnnouncements = announcements.filter(a => !a.readBy.includes(activeUser.id));
+
+  // Determine today's attendance status for active user
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todayRecord = attendanceList?.find(a => a.memberId === activeUser.id && a.date?.startsWith(todayStr));
+  const hasCheckedIn = !!todayRecord?.checkIn;
+  const hasCheckedOut = !!todayRecord?.checkOut;
+  
+  const formatTime = (isoString?: string) => {
+    if (!isoString) return '';
+    return new Date(isoString).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+  };
 
   return (
     <header style={{ height: 56, borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px', background: 'var(--bg-surface)', flexShrink: 0 }}>
@@ -109,44 +115,49 @@ export default function HeaderBar({
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        {/* Quick Check-in Header Widget */}
-        <button
-          onClick={async () => {
-            if (typeof window !== 'undefined' && !checkedInTime && activeUser) {
-              const timeStr = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-              try {
-                await handleCheckinOffice(activeUser.id, 'Check-in từ Header Bar', 'office');
-                localStorage.setItem('st_checkin_time', timeStr);
-                setCheckedInTime(timeStr);
-                alert(`Đã Check-in thành công lúc ${timeStr}!`);
-              } catch (e) {
-                alert('Có lỗi xảy ra khi Check-in. Vui lòng thử lại!');
-              }
-            }
-          }}
-          disabled={!!checkedInTime}
-          style={{
-            padding: '6px 12px',
-            fontSize: 11,
-            fontWeight: 600,
-            borderRadius: 8,
-            border: 'none',
-            background: checkedInTime 
-              ? 'rgba(34,197,94,0.1)' 
-              : 'linear-gradient(135deg, #22c55e, #16a34a)',
-            color: checkedInTime ? '#22c55e' : 'white',
-            cursor: checkedInTime ? 'default' : 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            boxShadow: checkedInTime ? 'none' : '0 2px 8px rgba(34, 197, 94, 0.25)',
-            transition: 'all 0.2s',
-            flexShrink: 0
-          }}
-        >
-          <span>🕒</span>
-          {checkedInTime ? `Đã Check-in lúc ${checkedInTime}` : 'Check-in Văn phòng'}
-        </button>
+        {/* Quick Check-in/out Header Widget */}
+        {hasCheckedOut ? (
+           <button
+             disabled
+             style={{
+               padding: '6px 12px', fontSize: 11, fontWeight: 600, borderRadius: 8, border: 'none',
+               background: 'rgba(161,161,170,0.1)', color: '#a1a1aa', cursor: 'default',
+               display: 'flex', alignItems: 'center', gap: 6
+             }}
+           >
+             <span>👋</span> Đã Check-out lúc {formatTime(todayRecord.checkOut)}
+           </button>
+        ) : hasCheckedIn ? (
+           <button
+             onClick={async () => {
+               if (activeUser) {
+                 await handleCheckoutOffice(activeUser.id, 'Check-out từ Header Bar');
+               }
+             }}
+             style={{
+               padding: '6px 12px', fontSize: 11, fontWeight: 600, borderRadius: 8, border: 'none',
+               background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: 'white', cursor: 'pointer',
+               display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.2s'
+             }}
+           >
+             <span>🏃</span> Check-out (Vào lúc {formatTime(todayRecord.checkIn)})
+           </button>
+        ) : (
+           <button
+             onClick={async () => {
+               if (activeUser) {
+                 await handleCheckinOffice(activeUser.id, 'Check-in từ Header Bar', 'office');
+               }
+             }}
+             style={{
+               padding: '6px 12px', fontSize: 11, fontWeight: 600, borderRadius: 8, border: 'none',
+               background: 'linear-gradient(135deg, #22c55e, #16a34a)', color: 'white', cursor: 'pointer',
+               display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.2s'
+             }}
+           >
+             <span>🕒</span> Check-in Văn phòng
+           </button>
+        )}
 
         {/* Announcement Bell */}
         <div style={{ position: 'relative' }}>

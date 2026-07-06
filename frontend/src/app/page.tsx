@@ -163,6 +163,8 @@ export default function StorymeeTeamPage() {
           setTab={setTab}
           setHrSubTab={setHrSubTab}
           handleCheckinOffice={handleCheckinOffice}
+          handleCheckoutOffice={handleCheckoutOffice}
+          attendanceList={attendanceList}
         />
 
         {/* ===== DATABASE CONNECTION ERROR BANNER ===== */}
