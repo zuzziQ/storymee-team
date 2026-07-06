@@ -125,7 +125,7 @@ export default function HeaderBar({
                display: 'flex', alignItems: 'center', gap: 6
              }}
            >
-             <span>👋</span> Đã Check-out lúc {formatTime(todayRecord.checkOut)}
+             <span>👋</span> Đã Check-out ({formatTime(todayRecord.checkIn)} - {formatTime(todayRecord.checkOut)})
            </button>
         ) : hasCheckedIn ? (
            <button
@@ -140,7 +140,7 @@ export default function HeaderBar({
                display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.2s'
              }}
            >
-             <span>🏃</span> Check-out (Vào lúc {formatTime(todayRecord.checkIn)})
+             <span>🏃</span> Check-out ({formatTime(todayRecord.checkIn)} - --:--)
            </button>
         ) : (
            <button
