@@ -2,7 +2,7 @@ import { fetchAxios } from '@/lib/fetchAxios';
 import React, { useState, useEffect } from 'react';
 import { Calendar, Clock, X, Paperclip, MoreVertical, Search, CheckCircle2, Circle, Bot, AlertCircle, FileText, ExternalLink, Activity, Type, ListTodo, ChevronDown, Check, Plus, Trash2, Edit3, Globe } from 'lucide-react';
 import {
-  Task, SubTask, TeamMember, Priority, TaskStatus,
+  Task, SubTask, TeamMember, Priority, TaskStatus, Project,
   getInitials, getMemberColor, renderFormattedText, getStatusClass
 } from '../../../constants';
 import { coreApiClient } from '../../../../lib/apiClient';
@@ -19,6 +19,7 @@ export default function TaskDetailModal({
   onUpdate,
   tasks,
   teamMembers,
+  projects,
   onAddRoutingLog,
   omniConfig
 }: {
@@ -27,6 +28,7 @@ export default function TaskDetailModal({
   onUpdate: (t: Task) => void;
   tasks: Task[];
   teamMembers: TeamMember[];
+  projects: Project[];
   onAddRoutingLog?: (log: any, sentTokens: number) => void;
   omniConfig?: any;
 }) {
