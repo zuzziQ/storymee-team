@@ -155,57 +155,62 @@ export default function ProfileForm({
           />
         </div>
 
-        {/* ADMIN ONLY: HR Configuration */}
-        {isAdmin && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '12px', background: 'rgba(236,72,153,0.05)', border: '1px solid rgba(236,72,153,0.2)', borderRadius: 10, marginTop: 8 }}>
-            <h4 style={{ margin: 0, fontSize: 11, fontWeight: 600, color: '#ec4899' }}>⚙️ ADMIN: CẤU HÌNH NHÂN SỰ</h4>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <span style={{ fontSize: 10, color: '#71717a', fontWeight: 500 }}>Hình thức làm việc</span>
-              <select
-                className='input-dark'
-                value={myMember.workArrangement || 'office'}
-                onChange={e => {
-                  const val = e.target.value;
-                  setTeamMembers(prev => prev.map(m => m.id === myMember.id ? { ...m, workArrangement: val } : m));
-                }}
-                style={{ padding: '8px 12px', fontSize: 12, borderRadius: 8 }}
-              >
-                <option value="office">Tại văn phòng (Hybrid)</option>
-                <option value="remote">Full Remote</option>
-              </select>
-            </div>
+        {/* HR Configuration */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '12px', background: 'rgba(236,72,153,0.05)', border: '1px solid rgba(236,72,153,0.2)', borderRadius: 10, marginTop: 8 }}>
+          <h4 style={{ margin: 0, fontSize: 11, fontWeight: 600, color: '#ec4899' }}>⚙️ CẤU HÌNH NHÂN SỰ {isAdmin ? '(ADMIN)' : '(CHỈ XEM)'}</h4>
+          
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span style={{ fontSize: 10, color: '#71717a', fontWeight: 500 }}>Hình thức làm việc</span>
+            <select
+              className='input-dark'
+              value={myMember.workArrangement || 'office'}
+              disabled={!isAdmin}
+              onChange={e => {
+                if (!isAdmin) return;
+                const val = e.target.value;
+                setTeamMembers(prev => prev.map(m => m.id === myMember.id ? { ...m, workArrangement: val } : m));
+              }}
+              style={{ padding: '8px 12px', fontSize: 12, borderRadius: 8, opacity: !isAdmin ? 0.6 : 1, cursor: !isAdmin ? 'not-allowed' : 'pointer' }}
+            >
+              <option value="office">Tại văn phòng (Hybrid)</option>
+              <option value="remote">Full Remote</option>
+            </select>
+          </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <span style={{ fontSize: 10, color: '#71717a', fontWeight: 500 }}>Hạn mức phép năm (ngày)</span>
-                <input
-                  type='number'
-                  className='input-dark'
-                  value={myMember.annualLeaveLimit || 12}
-                  onChange={e => {
-                    const val = Number(e.target.value);
-                    setTeamMembers(prev => prev.map(m => m.id === myMember.id ? { ...m, annualLeaveLimit: val } : m));
-                  }}
-                  style={{ padding: '8px 12px', fontSize: 12, borderRadius: 8 }}
-                />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <span style={{ fontSize: 10, color: '#71717a', fontWeight: 500 }}>Hạn mức Remote (ngày/tháng)</span>
-                <input
-                  type='number'
-                  className='input-dark'
-                  value={myMember.remoteLimit || 4}
-                  onChange={e => {
-                    const val = Number(e.target.value);
-                    setTeamMembers(prev => prev.map(m => m.id === myMember.id ? { ...m, remoteLimit: val } : m));
-                  }}
-                  style={{ padding: '8px 12px', fontSize: 12, borderRadius: 8 }}
-                  disabled={myMember.workArrangement === 'remote'}
-                />
-              </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span style={{ fontSize: 10, color: '#71717a', fontWeight: 500 }}>Hạn mức phép năm (ngày)</span>
+              <input
+                type='number'
+                className='input-dark'
+                value={myMember.annualLeaveLimit || 12}
+                disabled={!isAdmin}
+                onChange={e => {
+                  if (!isAdmin) return;
+                  const val = Number(e.target.value);
+                  setTeamMembers(prev => prev.map(m => m.id === myMember.id ? { ...m, annualLeaveLimit: val } : m));
+                }}
+                style={{ padding: '8px 12px', fontSize: 12, borderRadius: 8, opacity: !isAdmin ? 0.6 : 1, cursor: !isAdmin ? 'not-allowed' : 'text' }}
+              />
             </div>
-            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span style={{ fontSize: 10, color: '#71717a', fontWeight: 500 }}>Hạn mức Remote (ngày/tháng)</span>
+              <input
+                type='number'
+                className='input-dark'
+                value={myMember.remoteLimit || 4}
+                disabled={!isAdmin || myMember.workArrangement === 'remote'}
+                onChange={e => {
+                  if (!isAdmin) return;
+                  const val = Number(e.target.value);
+                  setTeamMembers(prev => prev.map(m => m.id === myMember.id ? { ...m, remoteLimit: val } : m));
+                }}
+                style={{ padding: '8px 12px', fontSize: 12, borderRadius: 8, opacity: (!isAdmin || myMember.workArrangement === 'remote') ? 0.6 : 1, cursor: (!isAdmin || myMember.workArrangement === 'remote') ? 'not-allowed' : 'text' }}
+              />
+            </div>
+          </div>
+          
+          {isAdmin && (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <span style={{ fontSize: 10, color: '#71717a', fontWeight: 500 }}>Lương Gross (VNĐ)</span>
@@ -234,8 +239,8 @@ export default function ProfileForm({
                 />
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
         <button
           onClick={() => handleSaveMyProfile(myMember)}

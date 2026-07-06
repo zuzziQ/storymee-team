@@ -42,6 +42,7 @@ export interface Task {
   commits?: string[];
   dbId?: string;
   parentTaskId?: string;
+  outputSuggested?: string;
 }
 export interface TeamMember {
   id: string; name: string; role: string; skills: string[];

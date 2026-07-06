@@ -325,6 +325,7 @@ export default function TaskDetailModal({
             <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', background: 'rgba(255,255,255,0.015)' }}>
               {[
                 { id: 'subtasks', label: `📌 Subtasks (${subtasks.length})` },
+                { id: 'output', label: `📝 Kết quả Output` },
                 { id: 'notes', label: `💬 Bình luận (${notes.length})` },
                 { id: 'attachments', label: `📎 Tài liệu (${attachments.length})` },
                 { id: 'git', label: `💻 Git Commits (${(task.commits || []).length})` },
@@ -445,6 +446,29 @@ export default function TaskDetailModal({
                     >
                       Thêm
                     </button>
+                  </div>
+                </div>
+              )}
+
+              {/* OUTPUT */}
+              {activeSection === 'output' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: 13, fontWeight: 600 }}>Kết quả Output thực hiện</span>
+                  </div>
+                  <div style={{ 
+                    padding: 16, 
+                    background: 'var(--bg-muted)', 
+                    borderRadius: 10, 
+                    border: '1px solid var(--border)',
+                    color: '#fafafa',
+                    fontSize: 13,
+                    whiteSpace: 'pre-wrap',
+                    minHeight: 150
+                  }}>
+                    {task.outputSuggested ? task.outputSuggested : (
+                      <span style={{ color: '#71717a', fontStyle: 'italic' }}>Chưa có kết quả (output) được cập nhật cho task này.</span>
+                    )}
                   </div>
                 </div>
               )}

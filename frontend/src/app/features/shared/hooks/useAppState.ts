@@ -336,6 +336,7 @@ export function useAppState() {
               estimate: sub.estimatedHours || 0,
               parentTaskId: sub.parentTaskId,
               projectId: sub._projectId,
+              outputSuggested: sub.outputSuggested || '',
               subtasks: myChildren.map(c => ({
                  id: c.planeTaskId || c.id,
                  dbId: c.id,
