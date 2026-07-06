@@ -1,0 +1,170 @@
+[
+  {
+    "timestamp": "2026-06-30T05:59:05.326Z",
+    "model": "gemini/gemini-2.5-flash",
+    "latency": 6904,
+    "status": "Success (Letta)"
+  },
+  {
+    "timestamp": "2026-06-30T02:09:32.120Z",
+    "model": "gemini/gemini-2.5-flash",
+    "latency": 5433,
+    "status": "Success (Letta)"
+  },
+  {
+    "timestamp": "2026-06-30T02:06:59.597Z",
+    "model": "gemini/gemini-2.5-flash",
+    "latency": 6199,
+    "status": "Success (Letta)"
+  },
+  {
+    "timestamp": "2026-06-30T02:04:53.995Z",
+    "model": "gemini/gemini-2.5-flash",
+    "latency": 5685,
+    "status": "Success (Letta)"
+  },
+  {
+    "timestamp": "2026-06-30T01:57:48.588Z",
+    "model": "gemini/gemini-2.5-flash",
+    "latency": 5316,
+    "status": "Success (Letta)"
+  },
+  {
+    "timestamp": "2026-06-30T01:57:17.725Z",
+    "model": "gemini/gemini-2.5-flash",
+    "latency": 7166,
+    "status": "Success (Letta)"
+  },
+  {
+    "timestamp": "2026-06-30T01:43:36.151Z",
+    "model": "gemini/gemini-2.5-flash",
+    "latency": 4498,
+    "status": "Success (Letta)"
+  },
+  {
+    "timestamp": "2026-06-29T11:02:26.889Z",
+    "model": "gemini/gemini-2.5-flash",
+    "latency": 3649,
+    "status": "Success (Letta)"
+  },
+  {
+    "timestamp": "2026-06-29T10:46:07.552Z",
+    "model": "gemini/gemini-2.5-flash",
+    "latency": 2474,
+    "status": "Success (Cloud)"
+  },
+  {
+    "timestamp": "2026-06-29T10:27:18.979Z",
+    "model": "gemini-2.5-flash",
+    "latency": 7297,
+    "status": "Fallback (Direct)"
+  },
+  {
+    "timestamp": "2026-06-29T10:17:54.892Z",
+    "model": "gemini-2.5-flash",
+    "latency": 2124,
+    "status": "Success (Cloud)"
+  },
+  {
+    "timestamp": "2026-06-29T10:17:34.192Z",
+    "model": "gemini-2.5-flash",
+    "latency": 2423,
+    "status": "Success (Cloud)"
+  },
+  {
+    "timestamp": "2026-06-29T10:17:18.535Z",
+    "model": "gemini-2.5-flash",
+    "latency": 2078,
+    "status": "Fallback (Direct)"
+  },
+  {
+    "timestamp": "2026-06-29T10:17:10.465Z",
+    "model": "gemini-2.5-flash",
+    "latency": 2362,
+    "status": "Success (Cloud)"
+  },
+  {
+    "timestamp": "2026-06-29T10:17:04.047Z",
+    "model": "gemini-2.5-flash",
+    "latency": 2728,
+    "status": "Success (Cloud)"
+  },
+  {
+    "timestamp": "2026-06-29T10:08:16.492Z",
+    "model": "gemini-2.5-flash",
+    "latency": 2025,
+    "status": "Fallback (Direct)"
+  },
+  {
+    "timestamp": "2026-06-29T10:08:06.902Z",
+    "model": "gemini-2.5-flash",
+    "latency": 2144,
+    "status": "Fallback (Direct)"
+  },
+  {
+    "timestamp": "2026-06-29T10:07:54.017Z",
+    "model": "gemini-2.5-flash",
+    "latency": 3086,
+    "status": "Fallback (Direct)"
+  },
+  {
+    "timestamp": "2026-06-29T10:07:36.917Z",
+    "model": "gemini-2.5-flash",
+    "latency": 4037,
+    "status": "Fallback (Direct)"
+  },
+  {
+    "timestamp": "2026-06-29T10:07:25.022Z",
+    "model": "gemini-2.5-flash",
+    "latency": 3860,
+    "status": "Fallback (Direct)"
+  },
+  {
+    "timestamp": "2026-06-29T10:04:41.779Z",
+    "model": "gemini-2.5-flash",
+    "latency": 2314,
+    "status": "Fallback (Direct)"
+  },
+  {
+    "timestamp": "2026-06-29T10:04:11.323Z",
+    "model": "gemini-2.5-flash",
+    "latency": 2532,
+    "status": "Fallback (Direct)"
+  },
+  {
+    "timestamp": "2026-06-29T10:03:55.246Z",
+    "model": "gemini-2.5-flash",
+    "latency": 2247,
+    "status": "Fallback (Direct)"
+  },
+  {
+    "timestamp": "2026-06-29T10:03:38.781Z",
+    "model": "gemini-2.5-flash",
+    "latency": 1971,
+    "status": "Fallback (Direct)"
+  },
+  {
+    "timestamp": "2026-06-29T10:03:16.622Z",
+    "model": "gemini-2.5-flash",
+    "latency": 3574,
+    "status": "Fallback (Direct)"
+  },
+  {
+    "timestamp": "2026-06-29T09:49:34.853Z",
+    "model": "gemini-2.5-flash",
+    "latency": 3896,
+    "status": "Fallback (Direct)"
+  },
+  {
+    "timestamp": "2026-06-29T09:41:51.997Z",
+    "model": "gemini-2.5-flash",
+    "latency": 3899,
+    "status": "Fallback (Direct)"
+  },
+  {
+    "timestamp": "2026-06-29T09:41:34.290Z",
+    "model": "gemini-2.5-flash",
+    "latency": 3379,
+    "status": "Fallback (Direct)"
+  }
+]
