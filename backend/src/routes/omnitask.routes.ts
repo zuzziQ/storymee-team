@@ -32,6 +32,7 @@ const router = Router();
 // Tasks in our system = SubTasks (the granular work items)
 router.get('/', HrController.getSubtasks);
 router.post('/', AdminController.createTask);
+router.patch('/tasks/:id', HrTaskController.updateTask);
 
 // ── Team members ──────────────────────────────────────────────────────────────
 router.get('/team-members', HrController.getTeamMembers);

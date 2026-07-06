@@ -90,7 +90,7 @@ export class HrService {
 
     static async getSubtasks() {
         return prisma.subTask.findMany({
-            include: { Assignee: true },
+            include: { Assignee: true, Task: true },
             orderBy: { createdAt: 'desc' }
         });
     }

@@ -76,7 +76,8 @@ export class HrController {
       if (!grouped[parentId]) {
         grouped[parentId] = {
           id: parentId,
-          title: sub.title, // fallback title
+          title: sub.Task?.title || sub.title,
+          projectId: sub.Task?.projectId || null,
           subTasks: []
         };
       }

@@ -83,5 +83,23 @@ export class HrTaskController {
       res.status(400).json({ status: 'error', message: 'Loại yêu cầu không hợp lệ' });
     }
   });
-}
+  static updateTask = asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { projectId } = req.body;
 
+    const task = await prisma.task.findUnique({ where: { id } });
+    if (!task) {
+      res.status(404).json({ status: 'error', message: 'Không tìm thấy task mẹ' });
+      return;
+    }
+
+    const updated = await prisma.task.update({
+      where: { id },
+      data: {
+        projectId: projectId === null ? null : projectId
+      }
+    });
+
+    res.status(200).json({ status: 'success', data: serialize(updated) });
+  });
+}

@@ -630,6 +630,31 @@ export default function TaskDetailModal({
           {/* CỘT PHẢI: METADATA & PHÂN BỔ */}
           <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20, background: 'rgba(255,255,255,0.01)', overflowY: 'auto', minWidth: 0 }}>
             
+            {/* Project */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0, width: '100%' }}>
+              <span style={{ fontSize: 10, color: '#71717a', textTransform: 'uppercase', fontWeight: 600 }}>Dự án</span>
+              <select
+                value={task.projectId || 'default_no_project'}
+                onChange={e => handleTaskUpdate({ projectId: e.target.value })}
+                style={{
+                  background: 'var(--bg-muted)',
+                  border: '1px solid var(--border)',
+                  color: '#fafafa',
+                  fontSize: 13,
+                  fontWeight: 500,
+                  padding: '6px 10px',
+                  borderRadius: 8,
+                  outline: 'none',
+                  cursor: 'pointer',
+                  width: '100%'
+                }}
+              >
+                {projects.map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+
             {/* Assignee */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0, width: '100%' }}>
               <span style={{ fontSize: 10, color: '#71717a', textTransform: 'uppercase', fontWeight: 600 }}>Người phụ trách</span>

@@ -7,6 +7,7 @@ WORKDIR /app
 # Copy shared libraries and generate prisma
 COPY 0-Shared-Libs ./0-Shared-Libs
 RUN cd 0-Shared-Libs/prisma-client && npm install && npx prisma generate
+RUN cd 0-Shared-Libs/api-client && npm install && npm run build
 
 # Copy and build target service
 COPY 2-MCP-Core/core-team-api ./2-MCP-Core/core-team-api

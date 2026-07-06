@@ -240,29 +240,31 @@ export function useAppState() {
       }
 
       try {
-        const tasksData = await coreApiClient.get(API_ROUTES.OMNITASK.ROOT);
-        if (tasksData.status === 'success' && Array.isArray(tasksData.data)) {
-          const dbTasks = tasksData.data;
+        const projectsData = await coreApiClient.get(API_ROUTES.HR.PROJECTS);
+        if (projectsData.status === 'success' && Array.isArray(projectsData.data)) {
+          const mappedProjects = projectsData.data.map((p: any) => ({
+            id: p.id,
+            name: p.name,
+            key: p.key || 'OMNI',
+            description: p.description || '',
+            color: p.color || '#6366f1',
+            progress: 0,
+            tasksCount: 0,
+            completedCount: 0
+          }));
           
-          // Map projects dynamically from database
-          const mappedProjects = dbTasks.map((t: any) => {
-            const total = Array.isArray(t.subTasks) ? t.subTasks.length : 0;
-            const completed = Array.isArray(t.subTasks) ? t.subTasks.filter((s: any) => s.status === 'done' || s.status === 'completed').length : 0;
-            // Bỏ qua task archived khỏi danh sách hiển thị
-            if (Array.isArray(t.subTasks)) {
-              t.subTasks = t.subTasks.filter((s: any) => s.status !== 'archived');
-            }
-            return {
-              id: t.id,
-              name: t.title || t.name,
-              key: t.key || 'OMNI',
-              description: t.description || '',
-              color: t.color || '#6366f1',
-              progress: total > 0 ? Math.round((completed / total) * 100) : 0,
-              tasksCount: total,
-              completedCount: completed
-            };
+          // Add default project if no project
+          mappedProjects.unshift({
+            id: 'default_no_project',
+            name: 'Mặc định (Không thuộc dự án nào)',
+            key: 'NO_PROJ',
+            description: 'Các công việc chung, không thuộc dự án cụ thể.',
+            color: '#a1a1aa',
+            progress: 0,
+            tasksCount: 0,
+            completedCount: 0
           });
+
           setProjects(mappedProjects);
           if (mappedProjects.length > 0) {
             setActiveProjectId(prev => {
@@ -272,12 +274,21 @@ export function useAppState() {
               return mappedProjects[0].id;
             });
           }
+        }
+      } catch (err) {
+        console.error("Lỗi fetch projects:", err);
+      }
 
+      try {
+        const tasksData = await coreApiClient.get(API_ROUTES.OMNITASK.ROOT);
+        if (tasksData.status === 'success' && Array.isArray(tasksData.data)) {
+          const dbTasks = tasksData.data;
+          // Remove dynamic project mapping from dbTasks
           const allSubs: any[] = [];
           dbTasks.forEach((t: any) => {
             if (Array.isArray(t.subTasks)) {
               t.subTasks.forEach((sub: any) => {
-                allSubs.push({ ...sub, _projectId: t.id });
+                allSubs.push({ ...sub, _projectId: t.projectId || 'default_no_project', parentTaskId: t.id });
               });
             }
           });
@@ -323,6 +334,7 @@ export function useAppState() {
                     : 'Todo',
               deadline: sub.deadline ? sub.deadline.split('T')[0] : '',
               estimate: sub.estimatedHours || 0,
+              parentTaskId: sub.parentTaskId,
               projectId: sub._projectId,
               subtasks: myChildren.map(c => ({
                  id: c.planeTaskId || c.id,
@@ -481,6 +493,13 @@ export function useAppState() {
         assigneeId: matchedMember ? matchedMember.id : null,
         priority: task.priority.toLowerCase()
       });
+
+      if (task.parentTaskId && task.projectId) {
+        await coreApiClient.patch(`${API_ROUTES.OMNITASK.ROOT}tasks/${task.parentTaskId}`, {
+          projectId: task.projectId === 'default_no_project' ? null : task.projectId
+        });
+      }
+
       await fetchDbData();
     } catch (err) {
       console.error("Lỗi cập nhật task lên Postgres:", err);
