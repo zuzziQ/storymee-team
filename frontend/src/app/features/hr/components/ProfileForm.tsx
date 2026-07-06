@@ -195,18 +195,24 @@ export default function ProfileForm({
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               <span style={{ fontSize: 10, color: '#71717a', fontWeight: 500 }}>Hạn mức Remote (ngày/tháng)</span>
-              <input
-                type='number'
-                className='input-dark'
-                value={myMember.remoteLimit || 4}
-                disabled={!isAdmin || myMember.workArrangement === 'remote'}
-                onChange={e => {
-                  if (!isAdmin) return;
-                  const val = Number(e.target.value);
-                  setTeamMembers(prev => prev.map(m => m.id === myMember.id ? { ...m, remoteLimit: val } : m));
-                }}
-                style={{ padding: '8px 12px', fontSize: 12, borderRadius: 8, opacity: (!isAdmin || myMember.workArrangement === 'remote') ? 0.6 : 1, cursor: (!isAdmin || myMember.workArrangement === 'remote') ? 'not-allowed' : 'text' }}
-              />
+              {myMember.workArrangement === 'remote' ? (
+                <div style={{ padding: '8px 12px', fontSize: 12, borderRadius: 8, color: '#a1a1aa', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', height: 33, display: 'flex', alignItems: 'center' }}>
+                  Không áp dụng (Full Remote)
+                </div>
+              ) : (
+                <input
+                  type='number'
+                  className='input-dark'
+                  value={myMember.remoteLimit || 4}
+                  disabled={!isAdmin}
+                  onChange={e => {
+                    if (!isAdmin) return;
+                    const val = Number(e.target.value);
+                    setTeamMembers(prev => prev.map(m => m.id === myMember.id ? { ...m, remoteLimit: val } : m));
+                  }}
+                  style={{ padding: '8px 12px', fontSize: 12, borderRadius: 8, opacity: !isAdmin ? 0.6 : 1, cursor: !isAdmin ? 'not-allowed' : 'text' }}
+                />
+              )}
             </div>
           </div>
           
