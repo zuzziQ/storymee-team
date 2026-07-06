@@ -40,7 +40,7 @@ export class AdminController {
 
     static async deleteProject(req: Request, res: Response, next: NextFunction) {
         try {
-            const { id } = req.params;
+            const id = req.params.id as string;
             if (!id) return res.status(400).json({ status: 'error', message: 'Project ID is required' });
 
             await prisma.omniProject.delete({

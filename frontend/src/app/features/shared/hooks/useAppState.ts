@@ -507,6 +507,19 @@ export function useAppState() {
     }
   };
 
+  const handleDeleteProject = async (id: string) => {
+    try {
+      await coreApiClient.delete(`${API_ROUTES.HR.PROJECTS}/${id}`);
+      setProjects(prev => prev.filter(p => p.id !== id));
+      if (activeProjectId === id) {
+        setActiveProjectId(projects.find(p => p.id !== id)?.id || '');
+      }
+    } catch (err) {
+      console.error("Lỗi xóa dự án:", err);
+      alert('Không thể xóa dự án: ' + String(err));
+    }
+  };
+
   const handleCreateTask = async (title: string, assignee: string, estimate: number, priority: Priority) => {
     try {
       const matchedMember = teamMembers.find(m => m.name === assignee);
@@ -852,6 +865,7 @@ export function useAppState() {
     handleLogout,
     handleSaveMyProfile,
     handleUpdateTask,
+    handleDeleteProject,
     handleCreateTask,
     handleSendAiChat,
     handleAutoSendChat,
