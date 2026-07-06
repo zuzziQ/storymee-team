@@ -38,6 +38,9 @@ export default function TaskDetailModal({
   const [newLinkLabel, setNewLinkLabel] = useState('');
   const [commitInput, setCommitInput] = useState('');
   const [activeSection, setActiveSection] = useState<'subtasks' | 'notes' | 'resources' | 'activities'>('subtasks');
+  const [taskDescription, setTaskDescription] = useState(task.description || '');
+  const [taskOutput, setTaskOutput] = useState(task.outputSuggested || '');
+  
   const [notes, setNotes] = useState<Note[]>([
     { id: 'n1', text: 'Cần review lại với team trước khi submit.', author: task.assignee, time: '29/06 08:30' }
   ]);
@@ -162,7 +165,7 @@ export default function TaskDetailModal({
     if (typeof window !== 'undefined') {
       localStorage.setItem(`subtasks_checklist_${task.id}`, JSON.stringify(subtasks));
     }
-    onUpdate({ ...task, subtasks });
+    // onUpdate({ ...task, subtasks }); // Xoá tự động update để tránh lỗi 500 khi mở task mới
   }, [subtasks, task.id]);
 
   const col = getMemberColor(task.assignee);
@@ -174,16 +177,22 @@ export default function TaskDetailModal({
       title: title.trim(),
       isDone: false
     };
-    setSubtasks([...subtasks, newSub]);
+    const newSubtasks = [...subtasks, newSub];
+    setSubtasks(newSubtasks);
+    handleTaskUpdate({ subtasks: newSubtasks });
   };
 
   const toggleSubtask = (id: string) => {
-    setSubtasks(subtasks.map(s => s.id === id ? { ...s, isDone: !s.isDone } : s));
+    const newSubtasks = subtasks.map(s => s.id === id ? { ...s, isDone: !s.isDone } : s);
+    setSubtasks(newSubtasks);
+    handleTaskUpdate({ subtasks: newSubtasks });
   };
 
   const handleUpdateSubtaskStatus = async (id: string, newStatus: string) => {
     const isDone = newStatus === 'done' || newStatus === 'completed';
-    setSubtasks(subtasks.map(s => s.id === id ? { ...s, isDone, status: newStatus } : s));
+    const newSubtasks = subtasks.map(s => s.id === id ? { ...s, isDone, status: newStatus } : s);
+    setSubtasks(newSubtasks);
+    handleTaskUpdate({ subtasks: newSubtasks });
     
     const sub = subtasks.find(s => s.id === id);
     if (sub && sub.dbId) {
@@ -240,7 +249,7 @@ export default function TaskDetailModal({
           // Lưu vào DB ngay (nếu có onUpdate)
           if (onUpdate && task.dbId) {
             try {
-              await onUpdate({ ...task, subtasks: [...subtasks, ...uiList] });
+              handleTaskUpdate({ subtasks: [...subtasks, ...uiList] });
             } catch (e) { /* silent fail, UI vẫn hiển thị */ }
           }
 
@@ -503,10 +512,46 @@ export default function TaskDetailModal({
                 </div>
               )}
 
-              {/* RESOURCES (ATTACHMENTS & GIT COMMITS) */}
+              {/* RESOURCES (ATTACHMENTS & GIT COMMITS & CONTENT) */}
               {activeSection === 'resources' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 20, maxHeight: 380, overflowY: 'auto', paddingRight: 6 }}>
                   
+                  {/* Task Content / Description */}
+                  <div>
+                    <span style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 10 }}>📝 Nội dung Task</span>
+                    <textarea
+                      className="input-dark"
+                      placeholder="Nhập nội dung chi tiết của task..."
+                      value={taskDescription}
+                      onChange={(e) => setTaskDescription(e.target.value)}
+                      onBlur={() => {
+                        if (taskDescription !== task.description) {
+                          handleTaskUpdate({ description: taskDescription });
+                        }
+                      }}
+                      style={{ width: '100%', minHeight: 80, padding: '10px', fontSize: 12, borderRadius: 8, resize: 'vertical' }}
+                    />
+                  </div>
+
+                  {/* Task Output */}
+                  <div>
+                    <span style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 10 }}>🎯 Output dự kiến</span>
+                    <textarea
+                      className="input-dark"
+                      placeholder="Nhập kết quả đầu ra (output) yêu cầu..."
+                      value={taskOutput}
+                      onChange={(e) => setTaskOutput(e.target.value)}
+                      onBlur={() => {
+                        if (taskOutput !== task.outputSuggested) {
+                          handleTaskUpdate({ outputSuggested: taskOutput });
+                        }
+                      }}
+                      style={{ width: '100%', minHeight: 60, padding: '10px', fontSize: 12, borderRadius: 8, resize: 'vertical' }}
+                    />
+                  </div>
+                  
+                  <div style={{ borderBottom: '1px solid var(--border)', margin: '4px 0' }} />
+
                   {/* Attachments Section */}
                   <div>
                     <span style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 10 }}>📎 Tài liệu liên kết</span>

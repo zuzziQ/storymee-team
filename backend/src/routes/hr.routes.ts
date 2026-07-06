@@ -24,6 +24,7 @@ router.post('/attendance/checkout', HrController.checkout);
 // Projects & Tasks
 router.get('/projects', AdminController.getProjects);
 router.post('/projects', AdminController.createProject);
+router.delete('/projects/:id', AdminController.deleteProject);
 router.post('/tasks', AdminController.createTask);
 
 // Leave request routes
