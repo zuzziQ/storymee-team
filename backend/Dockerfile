@@ -1,6 +1,7 @@
 # Stage 1: Build
 FROM node:20-alpine AS builder
 RUN apk add --no-cache openssl
+RUN npm install -g typescript
 WORKDIR /app
 
 # Copy shared libraries and generate prisma
