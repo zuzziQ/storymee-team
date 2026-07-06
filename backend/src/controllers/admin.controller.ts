@@ -33,6 +33,20 @@ export class AdminController {
                 data: { name, description, key }
             });
             res.status(201).json({ status: 'success', data: project });
+        } catch (error: any) {
+            next(error);
+        }
+    }
+
+    static async deleteProject(req: Request, res: Response, next: NextFunction) {
+        try {
+            const { id } = req.params;
+            if (!id) return res.status(400).json({ status: 'error', message: 'Project ID is required' });
+
+            await prisma.omniProject.delete({
+                where: { id }
+            });
+            res.json({ status: 'success', message: 'Project deleted successfully' });
         } catch (error) {
             next(error);
         }

@@ -9,6 +9,7 @@ router.get('/worker-requests', AdminController.getWorkerRequests);
 // Projects and Tasks Management
 router.get('/projects', authenticateApiKey, AdminController.getProjects);
 router.post('/projects', authenticateApiKey, AdminController.createProject);
+router.delete('/projects/:id', authenticateApiKey, AdminController.deleteProject);
 router.post('/tasks', authenticateApiKey, AdminController.createTask);
 
 export default router;
