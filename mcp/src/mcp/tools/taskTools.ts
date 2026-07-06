@@ -2,14 +2,7 @@ import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
 import { CoreApiClient, API_ROUTES } from "@storymee/api-client";
 import { fetchAxios } from "../../fetchAxios";
 
-export async function executeTaskTool(name: string, args: any, user: any, isBoss: boolean, apiClient: CoreApiClient): Promise<{ content: Array<{ type: string; text: string }> }> {
-  let data;
-  try {
-    data = (await apiClient.get(API_ROUTES.HR.TEAM_MEMBERS)) as any;
-  } catch (err: any) {
-    throw new McpError(ErrorCode.InternalError, "Không thể kết nối đến Core API Service để lấy danh sách thành viên.");
-  }
-  const members = data.data || [];
+export async function executeTaskTool(name: string, args: any, user: any, isBoss: boolean, apiClient: CoreApiClient, members: any[]): Promise<{ content: Array<{ type: string; text: string }> }> {
 
   switch (name) {
 case "get_my_tasks": {

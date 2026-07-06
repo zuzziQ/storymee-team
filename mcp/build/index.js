@@ -33,6 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.getTeamMembersCache = getTeamMembersCache;
 exports.executeMcpTool = executeMcpTool;
 const index_js_1 = require("@modelcontextprotocol/sdk/server/index.js");
 const stdio_js_1 = require("@modelcontextprotocol/sdk/server/stdio.js");
@@ -43,20 +44,30 @@ const nats_1 = require("nats");
 dotenv.config();
 const CORE_API_URL = process.env.CORE_API_URL || "http://localhost:4500";
 let apiClient = new api_client_1.CoreApiClient({ baseURL: CORE_API_URL });
+let cachedMembers = null;
+let lastCacheTime = 0;
+async function getTeamMembersCache() {
+    if (cachedMembers && Date.now() - lastCacheTime < 60000) {
+        return cachedMembers;
+    }
+    try {
+        const data = (await apiClient.get(api_client_1.API_ROUTES.HR.TEAM_MEMBERS));
+        cachedMembers = data.data || [];
+        lastCacheTime = Date.now();
+        return cachedMembers;
+    }
+    catch (err) {
+        console.error("[MCP Error] 32603 - Core API connect failed:", err.message);
+        throw new types_js_1.McpError(types_js_1.ErrorCode.InternalError, `Không thể kết nối đến Core API Service (32603): ${err.message}`);
+    }
+}
 // Trợ giúp phân quyền & xác thực
 async function authorizeClient() {
     const email = process.env.STORYMEE_USER_EMAIL;
     if (!email) {
         throw new types_js_1.McpError(types_js_1.ErrorCode.InvalidParams, "LỖI BẢO MẬT: Chưa cấu hình biến môi trường STORYMEE_USER_EMAIL trong file settings MCP.");
     }
-    let data;
-    try {
-        data = (await apiClient.get(api_client_1.API_ROUTES.HR.TEAM_MEMBERS));
-    }
-    catch (err) {
-        throw new types_js_1.McpError(types_js_1.ErrorCode.InternalError, "Không thể kết nối đến Core API Service.");
-    }
-    const members = data.data || [];
+    const members = await getTeamMembersCache();
     const user = members.find((m) => m.email.toLowerCase() === email.toLowerCase());
     if (!user) {
         throw new types_js_1.McpError(types_js_1.ErrorCode.InvalidParams, `LỖI BẢO MẬT: Không tìm thấy nhân sự có email ${email} trong hệ thống.`);
@@ -306,22 +317,15 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
 });
 async function executeMcpTool(name, args, user) {
     const isBoss = ["kimngan151091@gmail.com", "lehuyducanh.vn@gmail.com", "zuzzivn@gmail.com"].includes(user.email.toLowerCase());
-    let data;
-    try {
-        data = (await apiClient.get(api_client_1.API_ROUTES.HR.TEAM_MEMBERS));
-    }
-    catch (err) {
-        throw new types_js_1.McpError(types_js_1.ErrorCode.InternalError, "Không thể kết nối đến Core API Service để lấy danh sách thành viên.");
-    }
-    const members = data.data || [];
+    const members = await getTeamMembersCache();
     if (['get_my_tasks', 'create_task', 'update_task', 'update_task_status', 'assign_task', 'breakdown_task', 'update_subtasks', 'request_task_approval', 'approve_task_request', 'get_task_details'].includes(name)) {
-        return (await Promise.resolve().then(() => __importStar(require('./mcp/tools/taskTools')))).executeTaskTool(name, args, user, isBoss, apiClient);
+        return (await Promise.resolve().then(() => __importStar(require('./mcp/tools/taskTools')))).executeTaskTool(name, args, user, isBoss, apiClient, members);
     }
     if (['submit_leave_request', 'get_leave_allowance', 'get_my_payroll_slip', 'update_personal_info', 'upsert_team_member'].includes(name)) {
-        return (await Promise.resolve().then(() => __importStar(require('./mcp/tools/hrTools')))).executeHrTool(name, args, user, isBoss, apiClient);
+        return (await Promise.resolve().then(() => __importStar(require('./mcp/tools/hrTools')))).executeHrTool(name, args, user, isBoss, apiClient, members);
     }
     if (['check_in_out', 'get_attendance_report'].includes(name)) {
-        return (await Promise.resolve().then(() => __importStar(require('./mcp/tools/attendanceTools')))).executeAttendanceTool(name, args, user, isBoss, apiClient);
+        return (await Promise.resolve().then(() => __importStar(require('./mcp/tools/attendanceTools')))).executeAttendanceTool(name, args, user, isBoss, apiClient, members);
     }
     throw new types_js_1.McpError(types_js_1.ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
 }

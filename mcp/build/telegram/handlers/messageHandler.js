@@ -477,6 +477,82 @@ async function handleTelegramMessage(message) {
         return;
     }
     // D2. Lệnh check trạng thái toàn bộ member, xếp theo deadline hoặc quá hạn lên đầu
+    // F1. Lệnh /team_status
+    if (lowerText === "/team_status" || lowerText === "trạng thái checkin") {
+        await (0, telegram_agent_1.sendMessage)(chatId, "🔍 Đang truy vấn trạng thái check-in hôm nay...");
+        try {
+            const res = await (0, fetchAxios_1.fetchAxios)(CORE_API_URL + "/hr/attendance");
+            const json = await res.json();
+            const allRecords = Array.isArray(json) ? json : (json?.data || []);
+            const today = new Date().toISOString().split('T')[0];
+            const todayRecords = allRecords.filter((r) => (r.date || "").startsWith(today));
+            if (todayRecords.length === 0) {
+                await (0, telegram_agent_1.sendMessage)(chatId, "📊 *Báo cáo Check-in hôm nay*\nChưa có ai check-in hôm nay.");
+                return;
+            }
+            let checkedIn = 0;
+            let late = 0;
+            let reportMsg = `📊 *Báo cáo Check-in hôm nay (${today})*\n`;
+            const lines = [];
+            for (const r of todayRecords) {
+                const memberName = r.member?.fullName || "Unknown";
+                const workType = r.workType === "remote" ? "Remote" : "Office";
+                const ci = r.checkIn ? r.checkIn.substring(11, 16) : "?";
+                const co = r.checkOut ? r.checkOut.substring(11, 16) : "Chưa out";
+                let icon = "✅";
+                if (r.status === "late") {
+                    icon = "⚠️";
+                    late++;
+                }
+                else if (r.status === "leave")
+                    icon = "🏖️";
+                if (r.checkIn)
+                    checkedIn++;
+                lines.push(`• ${icon} *${memberName}* (${workType}): ${ci} - ${co}`);
+            }
+            reportMsg += `👥 Đã check-in: *${checkedIn}* | Đi muộn: *${late}*\n\n` + lines.join("\n");
+            await (0, telegram_agent_1.sendMessage)(chatId, reportMsg);
+        }
+        catch (err) {
+            console.error("Lỗi lấy team status:", err);
+            await (0, telegram_agent_1.sendMessage)(chatId, "❌ Lỗi lấy dữ liệu chấm công.");
+        }
+        return;
+    }
+    // F2. Lệnh /subtask
+    if (lowerText.startsWith("/subtask")) {
+        const query = text.substring(8).trim();
+        if (!query) {
+            await (0, telegram_agent_1.sendMessage)(chatId, "⚠️ Vui lòng cung cấp mã task hoặc tên task. Ví dụ: `/subtask T-104`\n\n💡 Bạn cũng có thể dùng nút trên Web Portal.");
+            return;
+        }
+        await (0, telegram_agent_1.sendMessage)(chatId, `🤖 Đang phân rã task ${query} bằng AI...`);
+        try {
+            // Gọi API phân rã của OmniRouter (Web Portal API)
+            const res = await (0, fetchAxios_1.fetchAxios)(WEB_PORTAL_URL + "/api/ai/breakdown", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ taskId: query })
+            });
+            if (res.ok) {
+                const json = await res.json();
+                if (json.success || json.status === "success") {
+                    await (0, telegram_agent_1.sendMessage)(chatId, "✅ Đã phân rã và tạo subtasks thành công trên hệ thống!");
+                }
+                else {
+                    await (0, telegram_agent_1.sendMessage)(chatId, "🤖 Lỗi kết nối AI hoặc task không tồn tại. Vui lòng thử lại sau.");
+                }
+            }
+            else {
+                await (0, telegram_agent_1.sendMessage)(chatId, "🤖 Lỗi kết nối AI. Vui lòng thử lại sau.");
+            }
+        }
+        catch (err) {
+            console.error("Lỗi phân rã task:", err);
+            await (0, telegram_agent_1.sendMessage)(chatId, "🤖 Lỗi kết nối AI. Vui lòng thử lại sau.");
+        }
+        return;
+    }
     if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.startsWith("/check_team@") || lowerText === "📊 trạng thái thành viên") {
         await (0, telegram_agent_1.sendMessage)(chatId, "🔍 Đang truy vấn cơ sở dữ liệu và tổng hợp báo cáo trạng thái toàn bộ thành viên...");
         let dbTasks = [];

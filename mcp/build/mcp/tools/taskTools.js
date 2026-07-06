@@ -4,15 +4,7 @@ exports.executeTaskTool = executeTaskTool;
 const types_js_1 = require("@modelcontextprotocol/sdk/types.js");
 const api_client_1 = require("@storymee/api-client");
 const fetchAxios_1 = require("../../fetchAxios");
-async function executeTaskTool(name, args, user, isBoss, apiClient) {
-    let data;
-    try {
-        data = (await apiClient.get(api_client_1.API_ROUTES.HR.TEAM_MEMBERS));
-    }
-    catch (err) {
-        throw new types_js_1.McpError(types_js_1.ErrorCode.InternalError, "Không thể kết nối đến Core API Service để lấy danh sách thành viên.");
-    }
-    const members = data.data || [];
+async function executeTaskTool(name, args, user, isBoss, apiClient, members) {
     switch (name) {
         case "get_my_tasks": {
             const targetName = args?.employee_name || user.fullName;

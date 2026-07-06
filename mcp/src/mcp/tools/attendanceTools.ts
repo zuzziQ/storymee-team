@@ -2,14 +2,7 @@ import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
 import { CoreApiClient, API_ROUTES } from "@storymee/api-client";
 import { fetchAxios } from "../../fetchAxios";
 
-export async function executeAttendanceTool(name: string, args: any, user: any, isBoss: boolean, apiClient: CoreApiClient): Promise<{ content: Array<{ type: string; text: string }> }> {
-  let data;
-  try {
-    data = (await apiClient.get(API_ROUTES.HR.TEAM_MEMBERS)) as any;
-  } catch (err: any) {
-    throw new McpError(ErrorCode.InternalError, "Không thể kết nối đến Core API Service để lấy danh sách thành viên.");
-  }
-  const members = data.data || [];
+export async function executeAttendanceTool(name: string, args: any, user: any, isBoss: boolean, apiClient: CoreApiClient, members: any[]): Promise<{ content: Array<{ type: string; text: string }> }> {
 
   switch (name) {
 case "check_in_out": {
@@ -33,12 +26,12 @@ case "check_in_out": {
       let checkinData;
       try {
         if (status === 'checkout') {
-          checkinData = (await apiClient.post("/omnitask/hr/attendance/checkout", {
+          checkinData = (await apiClient.post(API_ROUTES.HR.ATTENDANCE_CHECKOUT, {
             memberId: targetMember.id,
             notes: notes || `Checkout từ Telegram`
           })) as any;
         } else {
-          checkinData = (await apiClient.post("/omnitask/hr/attendance/checkin", {
+          checkinData = (await apiClient.post(API_ROUTES.HR.ATTENDANCE_CHECKIN, {
             memberId: targetMember.id,
             status: status || "present",
             notes: notes || `Checkin từ Telegram`

@@ -3,15 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.executeAttendanceTool = executeAttendanceTool;
 const types_js_1 = require("@modelcontextprotocol/sdk/types.js");
 const api_client_1 = require("@storymee/api-client");
-async function executeAttendanceTool(name, args, user, isBoss, apiClient) {
-    let data;
-    try {
-        data = (await apiClient.get(api_client_1.API_ROUTES.HR.TEAM_MEMBERS));
-    }
-    catch (err) {
-        throw new types_js_1.McpError(types_js_1.ErrorCode.InternalError, "Không thể kết nối đến Core API Service để lấy danh sách thành viên.");
-    }
-    const members = data.data || [];
+async function executeAttendanceTool(name, args, user, isBoss, apiClient, members) {
     switch (name) {
         case "check_in_out": {
             const { status, notes, employee_name } = args;
@@ -29,13 +21,13 @@ async function executeAttendanceTool(name, args, user, isBoss, apiClient) {
             let checkinData;
             try {
                 if (status === 'checkout') {
-                    checkinData = (await apiClient.post("/omnitask/hr/attendance/checkout", {
+                    checkinData = (await apiClient.post(api_client_1.API_ROUTES.HR.ATTENDANCE_CHECKOUT, {
                         memberId: targetMember.id,
                         notes: notes || `Checkout từ Telegram`
                     }));
                 }
                 else {
-                    checkinData = (await apiClient.post("/omnitask/hr/attendance/checkin", {
+                    checkinData = (await apiClient.post(api_client_1.API_ROUTES.HR.ATTENDANCE_CHECKIN, {
                         memberId: targetMember.id,
                         status: status || "present",
                         notes: notes || `Checkin từ Telegram`

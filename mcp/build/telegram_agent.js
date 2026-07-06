@@ -532,7 +532,9 @@ async function setupBotCommands() {
                     { command: "dang_ky", description: "Đăng ký Nghỉ phép / Làm Remote" },
                     { command: "cong_viec", description: "Xem danh sách công việc của tôi" },
                     { command: "check", description: "Quét deadline quá hạn realtime (Admin)" },
-                    { command: "check_all", description: "Báo cáo trạng thái toàn bộ nhân viên" }
+                    { command: "check_all", description: "Báo cáo trạng thái toàn bộ nhân viên" },
+                    { command: "team_status", description: "Báo cáo chấm công hôm nay" },
+                    { command: "subtask", description: "Phân rã task bằng AI" }
                 ]
             })
         });

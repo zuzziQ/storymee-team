@@ -16,6 +16,24 @@ dotenv.config();
 const CORE_API_URL = process.env.CORE_API_URL || "http://localhost:4500";
 let apiClient = new CoreApiClient({ baseURL: CORE_API_URL });
 
+let cachedMembers: any[] | null = null;
+let lastCacheTime = 0;
+
+export async function getTeamMembersCache(): Promise<any[]> {
+  if (cachedMembers && Date.now() - lastCacheTime < 60000) {
+    return cachedMembers;
+  }
+  try {
+    const data = (await apiClient.get(API_ROUTES.HR.TEAM_MEMBERS)) as any;
+    cachedMembers = data.data || [];
+    lastCacheTime = Date.now();
+    return cachedMembers as any[];
+  } catch (err: any) {
+    console.error("[MCP Error] 32603 - Core API connect failed:", err.message);
+    throw new McpError(ErrorCode.InternalError, `Không thể kết nối đến Core API Service (32603): ${err.message}`);
+  }
+}
+
 // Trợ giúp phân quyền & xác thực
 async function authorizeClient() {
   const email = process.env.STORYMEE_USER_EMAIL;
@@ -26,13 +44,7 @@ async function authorizeClient() {
     );
   }
 
-  let data;
-    try {
-      data = (await apiClient.get(API_ROUTES.HR.TEAM_MEMBERS)) as any;
-    } catch (err: any) {
-      throw new McpError(ErrorCode.InternalError, "Không thể kết nối đến Core API Service.");
-    }
-  const members = data.data || [];
+  const members = await getTeamMembersCache();
   
   const user = members.find((m: any) => m.email.toLowerCase() === email.toLowerCase());
   if (!user) {
@@ -298,24 +310,16 @@ export async function executeMcpTool(
   user: any
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
   const isBoss = ["kimngan151091@gmail.com", "lehuyducanh.vn@gmail.com", "zuzzivn@gmail.com"].includes(user.email.toLowerCase());
+  const members = await getTeamMembersCache();
 
-  let data;
-    try {
-      data = (await apiClient.get(API_ROUTES.HR.TEAM_MEMBERS)) as any;
-    } catch (err: any) {
-      throw new McpError(ErrorCode.InternalError, "Không thể kết nối đến Core API Service để lấy danh sách thành viên.");
-    }
-  const members = data.data || [];
-
-  
       if (['get_my_tasks', 'create_task', 'update_task', 'update_task_status', 'assign_task', 'breakdown_task', 'update_subtasks', 'request_task_approval', 'approve_task_request', 'get_task_details'].includes(name)) {
-        return (await import('./mcp/tools/taskTools')).executeTaskTool(name, args, user, isBoss, apiClient);
+        return (await import('./mcp/tools/taskTools')).executeTaskTool(name, args, user, isBoss, apiClient, members);
       }
       if (['submit_leave_request', 'get_leave_allowance', 'get_my_payroll_slip', 'update_personal_info', 'upsert_team_member'].includes(name)) {
-        return (await import('./mcp/tools/hrTools')).executeHrTool(name, args, user, isBoss, apiClient);
+        return (await import('./mcp/tools/hrTools')).executeHrTool(name, args, user, isBoss, apiClient, members);
       }
       if (['check_in_out', 'get_attendance_report'].includes(name)) {
-        return (await import('./mcp/tools/attendanceTools')).executeAttendanceTool(name, args, user, isBoss, apiClient);
+        return (await import('./mcp/tools/attendanceTools')).executeAttendanceTool(name, args, user, isBoss, apiClient, members);
       }
       throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
 
