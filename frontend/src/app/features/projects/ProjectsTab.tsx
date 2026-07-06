@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, Layers, Activity, Users, DollarSign, Calendar, Zap, AlertCircle } from 'lucide-react';
+import { Sparkles, Layers, Activity, Users, DollarSign, Calendar, Zap, AlertCircle, Trash2 } from 'lucide-react';
 import {
   Project, Task, TeamMember,
   renderFormattedText
@@ -15,6 +15,7 @@ interface ProjectsTabProps {
   aiSuccessRate: Record<string, number>;
   aiPredictedDate: Record<string, string>;
   handleAnalyzeProject: (projId: string) => void;
+  handleDeleteProject?: (id: string) => void;
   teamMembers: TeamMember[];
   
   showAddProjectModal: boolean;
@@ -38,6 +39,7 @@ export default function ProjectsTab({
   aiSuccessRate,
   aiPredictedDate,
   handleAnalyzeProject,
+  handleDeleteProject,
   teamMembers,
   showAddProjectModal,
   setShowAddProjectModal,
@@ -127,27 +129,52 @@ export default function ProjectsTab({
                 <span style={{ width: 12, height: 12, borderRadius: '50%', background: proj.color }} />
                 <h2 style={{ fontSize: 18, fontWeight: 700, color: '#fafafa' }}>{proj.name}</h2>
               </div>
-              <button
-                disabled={aiAnalyzing}
-                onClick={() => handleAnalyzeProject(proj.id)}
-                className="btn-primary"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '8px 14px',
-                  borderRadius: 8,
-                  fontSize: 12,
-                  fontWeight: 600,
-                  background: 'linear-gradient(135deg, #a78bfa 0%, #6366f1 100%)',
-                  border: 'none',
-                  color: 'white',
-                  cursor: aiAnalyzing ? 'not-allowed' : 'pointer'
-                }}
-              >
-                <Sparkles size={14} />
-                {aiAnalyzing ? 'Trợ lý AI đang quét...' : 'Quét Tiễn độ bằng AI'}
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {handleDeleteProject && proj.id !== 'default_no_project' && (
+                  <button
+                    onClick={() => {
+                      if (window.confirm('Bạn có chắc chắn muốn xóa dự án này? Các task bên trong sẽ bị chuyển về Không thuộc dự án.')) {
+                        handleDeleteProject(proj.id);
+                      }
+                    }}
+                    style={{
+                      background: 'rgba(239,68,68,0.1)',
+                      border: '1px solid rgba(239,68,68,0.2)',
+                      color: '#ef4444',
+                      padding: '8px',
+                      borderRadius: 8,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                    title="Xóa dự án"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
+                <button
+                  disabled={aiAnalyzing}
+                  onClick={() => handleAnalyzeProject(proj.id)}
+                  className="btn-primary"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '8px 14px',
+                    borderRadius: 8,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    background: 'linear-gradient(135deg, #a78bfa 0%, #6366f1 100%)',
+                    border: 'none',
+                    color: 'white',
+                    cursor: aiAnalyzing ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  <Sparkles size={14} />
+                  {aiAnalyzing ? 'Trợ lý AI đang quét...' : 'Quét Tiến độ bằng AI'}
+                </button>
+              </div>
             </div>
             <p style={{ fontSize: 13, color: '#a1a1aa', lineHeight: 1.4 }}>{proj.description}</p>
 
