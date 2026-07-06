@@ -52,20 +52,6 @@ export class AdminController {
         }
     }
 
-    static async deleteProject(req: Request, res: Response, next: NextFunction) {
-        try {
-            const id = String(req.params.id);
-            if (!id) return res.status(400).json({ status: 'error', message: 'ID is required' });
-
-            const project = await prisma.omniProject.delete({
-                where: { id }
-            });
-            res.status(200).json({ status: 'success', data: project });
-        } catch (error) {
-            next(error);
-        }
-    }
-
     /**
      * POST /omnitask/
      * Tạo Task mẹ (container) + SubTask con thực tế (gắn assignee, deadline, priority).
