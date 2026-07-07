@@ -18,9 +18,26 @@ export class CoreApiClient {
         this.baseURL = url;
     }
 
+    private async resolveBaseUrl() {
+        if (typeof window !== 'undefined') {
+            const match = document.cookie.match(new RegExp('(^| )hub_connection_url=([^;]+)'));
+            if (match) return decodeURIComponent(match[2]) + '/api';
+            return this.baseURL;
+        } else {
+            try {
+                const { cookies } = await import('next/headers');
+                const cookieStore = await cookies();
+                const val = cookieStore.get('hub_connection_url')?.value;
+                if (val) return decodeURIComponent(val) + '/api';
+            } catch (e) {}
+            return this.baseURL;
+        }
+    }
+
     public async get<T = any>(url: string): Promise<T> {
         try {
-            const res = await fetch(`${this.baseURL}${url}`, {
+            const baseUrl = await this.resolveBaseUrl();
+            const res = await fetch(`${baseUrl}${url}`, {
                 method: 'GET',
                 headers: { 'Content-Type': 'application/json' },
                 signal: AbortSignal.timeout(60000)
@@ -35,7 +52,8 @@ export class CoreApiClient {
 
     public async post<T = any>(url: string, body: any): Promise<T> {
         try {
-            const res = await fetch(`${this.baseURL}${url}`, {
+            const baseUrl = await this.resolveBaseUrl();
+            const res = await fetch(`${baseUrl}${url}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),
@@ -51,7 +69,8 @@ export class CoreApiClient {
 
     public async patch<T = any>(url: string, body: any): Promise<T> {
         try {
-            const res = await fetch(`${this.baseURL}${url}`, {
+            const baseUrl = await this.resolveBaseUrl();
+            const res = await fetch(`${baseUrl}${url}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),
@@ -67,7 +86,8 @@ export class CoreApiClient {
 
     public async delete<T = any>(url: string): Promise<T> {
         try {
-            const res = await fetch(`${this.baseURL}${url}`, {
+            const baseUrl = await this.resolveBaseUrl();
+            const res = await fetch(`${baseUrl}${url}`, {
                 method: 'DELETE',
                 headers: { 'Content-Type': 'application/json' },
                 signal: AbortSignal.timeout(60000)

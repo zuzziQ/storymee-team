@@ -532,7 +532,9 @@ async function setupBotCommands() {
                     { command: "dang_ky", description: "Đăng ký Nghỉ phép / Làm Remote" },
                     { command: "cong_viec", description: "Xem danh sách công việc của tôi" },
                     { command: "check", description: "Quét deadline quá hạn realtime (Admin)" },
-                    { command: "check_all", description: "Báo cáo trạng thái toàn bộ nhân viên" }
+                    { command: "check_all", description: "Báo cáo trạng thái toàn bộ nhân viên" },
+                    { command: "team_status", description: "Báo cáo chấm công hôm nay" },
+                    { command: "subtask", description: "Phân rã task bằng AI" }
                 ]
             })
         });
@@ -597,7 +599,7 @@ async function startTelegramPolling() {
     app.listen(WEBHOOK_PORT, async () => {
         console.log(`🚀 Telegram Webhook Server đang chạy tại port ${WEBHOOK_PORT}...`);
         // Đăng ký Webhook URL với Telegram
-        const WEBHOOK_URL = `https://hub.storymee.com/bot-webhook`;
+        const WEBHOOK_URL = `https://api.storymee.com/bot-webhook`;
         try {
             const res = await (0, fetchAxios_1.fetchAxios)(`${TELEGRAM_API}/setWebhook?url=${WEBHOOK_URL}`);
             const data = await res.json();
