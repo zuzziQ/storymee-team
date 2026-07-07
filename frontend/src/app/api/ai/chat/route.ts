@@ -256,7 +256,7 @@ Nhiệm vụ của bạn:
     };
 
     try {
-      fetch(process.env.NEXT_PUBLIC_API_URL ? `${process.env.NEXT_PUBLIC_API_URL}/logs` : 'https://api.storymee.com/logs', {
+      fetch(process.env.NEXT_PUBLIC_API_URL ? `${process.env.NEXT_PUBLIC_API_URL}/logs` : 'https://dev-hub.storymee.com/logs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(log),

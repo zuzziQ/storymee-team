@@ -5,7 +5,7 @@ import path from 'path';
 
 export async function GET() {
   try {
-    const res = await fetchAxios(process.env.NEXT_PUBLIC_API_URL ? `${process.env.NEXT_PUBLIC_API_URL}/logs` : 'https://api.storymee.com/logs', { cache: 'no-store' });
+    const res = await fetchAxios(process.env.NEXT_PUBLIC_API_URL ? `${process.env.NEXT_PUBLIC_API_URL}/logs` : 'https://dev-hub.storymee.com/logs', { cache: 'no-store' });
     if (!res.ok) {
       throw new Error('Failed to fetch logs from Omni LLM Hub');
     }

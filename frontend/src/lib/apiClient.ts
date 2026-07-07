@@ -1,7 +1,7 @@
 const isServer = typeof window === 'undefined';
-// api.storymee.com → Nginx → core-admin-api:4503 (direct, không qua Hub Go Gateway)
-// api.storymee.com → Hub Go Gateway (chỉ dùng cho LLM/AI routes)
-const defaultBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://api.storymee.com';
+// dev-hub.storymee.com → Nginx → core-admin-api:4503 (direct, không qua Hub Go Gateway)
+// dev-hub.storymee.com → Hub Go Gateway (chỉ dùng cho LLM/AI routes)
+const defaultBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://dev-hub.storymee.com';
 
 // Cả server lẫn client đều gọi thẳng vào API backend
 // Không có Next.js proxy, dùng empty string sẽ gọi vào Vercel routes → lỗi ROUTER_EXTERNAL
