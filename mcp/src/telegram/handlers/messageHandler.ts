@@ -44,6 +44,8 @@ export async function handleTelegramMessage(message: {
 
   console.log(`[Telegram Msg from @${username} in ${isGroup ? 'Group' : 'Private'} ${chatId}]: ${text}`);
 
+  const lowerText = (text || "").trim().toLowerCase();
+
   if (!username) {
     if (!isGroup) {
       await sendMessage(chatId, "⚠️ Vui lòng cấu hình Username trên Telegram của bạn để hệ thống định danh quyền hạn.");
@@ -81,90 +83,11 @@ export async function handleTelegramMessage(message: {
   }
 
   // Hỗ trợ đăng ký nhanh cho nhân viên mới
-  const lowerText = (text || "").trim().toLowerCase();
-  if (lowerText === "👤 đăng ký nhân viên mới") {
-    await sendMessage(chatId, "💡 *Cú pháp đăng ký:* `/register [email] [Họ và Tên]`\n\nVí dụ: `/register an.nguyen@storymee.com Nguyễn Văn An` (Hệ thống sẽ tự nhận diện Telegram ID & Username của bạn)");
-    return;
-  }
-
-  if (lowerText.startsWith("/register")) {
-    const parts = text.split(/\s+/);
-    if (parts.length < 3) {
-      await sendMessage(chatId, "💡 *Cú pháp đăng ký:* `/register [email] [Họ và Tên]`\n\nVí dụ: `/register an.nguyen@storymee.com Nguyễn Văn An` (Hệ thống sẽ tự nhận diện Telegram ID & Username của bạn)");
-      return;
-    }
-    const email = parts[1].trim().toLowerCase();
-    const fullName = parts.slice(2).join(" ").trim();
-    
-    // Kiểm tra định dạng email hợp lệ
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      await sendMessage(chatId, "❌ *Lỗi đăng ký:* Email không đúng định dạng. Vui lòng nhập đúng email công ty để liên kết.\n\nVí dụ: `/register an.nguyen@storymee.com Nguyễn Văn An` (Họ tên phải có đầy đủ họ và tên)");
-      return;
-    }
-
-    // Kiểm tra độ dài Họ tên
-    if (fullName.length < 2) {
-      await sendMessage(chatId, "❌ *Lỗi đăng ký:* Họ tên quá ngắn. Vui lòng nhập đầy đủ Họ và Tên của bạn.");
-      return;
-    }
-
-    // 1. Kiểm tra xem Telegram Username này đã được liên kết với ai chưa
-    if (member) {
-      await sendMessage(chatId, `⚠️ *Tài khoản đã liên kết:* Tài khoản Telegram của bạn đã được liên kết với hồ sơ **${member.fullName}** (Email: \`${member.email}\`) trên hệ thống rồi. Không cần đăng ký lại.\n\n💡 Nếu cần thay đổi liên kết, vui lòng liên hệ Admin.`);
-      return;
-    }
-
-    try {
-      // Fetch tất cả members để kiểm tra trùng lặp email
-      const allMems = await getCachedMembers();
-      if (allMems && allMems.length > 0) {
-          // 2. Kiểm tra xem email này đã tồn tại trong hệ thống chưa
-          const existingEmailMember = allMems.find((m: any) => m.email.toLowerCase() === email);
-          
-          if (existingEmailMember) {
-            // Nếu email đã được liên kết với một tài khoản Telegram khác
-            if (existingEmailMember.telegramUsername) {
-              await sendMessage(chatId, `❌ *Email đã có chủ:* Email \`${email}\` đã được liên kết với tài khoản Telegram **@${existingEmailMember.telegramUsername}**. Không thể đăng ký đè.\n\n💡 Vui lòng kiểm tra lại hoặc liên hệ Admin.`);
-              return;
-            }
-            
-            // Nếu email tồn tại nhưng chưa liên kết Telegram -> Thực hiện liên kết hồ sơ sẵn có
-            await sendMessage(chatId, "⏳ Đang liên kết tài khoản Telegram của bạn với hồ sơ sẵn có...");
-            try {
-                const updateRes = await apiClient.post("/hr/team-members", {
-                  ...existingEmailMember,
-                  telegramUsername: username,
-                  telegramChatId: chatId
-                });
-                await sendMessage(chatId, `🎉 **Liên kết tài khoản thành công!**\n\n• Họ tên: **${existingEmailMember.fullName}**\n• Email: **${existingEmailMember.email}**\n• Chức vụ: **${existingEmailMember.role || 'Nhân viên'}**\n• Telegram: **@${username}**\n\nBạn đã có thể sử dụng tất cả các lệnh của bot.`, KEYBOARD_MAIN);
-              } catch (err: any) {
-                await sendMessage(chatId, "❌ Lỗi: Cổng đăng ký từ chối liên kết tài khoản.");
-                throw err;
-              }
-            return;
-          }
-      }
-
-      // 3. Nếu là email hoàn toàn mới -> Tạo mới nhân sự mới
-      await sendMessage(chatId, "⏳ Đang tạo hồ sơ nhân sự mới trên hệ thống...");
-      try {
-          const registerRes = await apiClient.post("/hr/team-members", {
-            email,
-            fullName,
-            telegramUsername: username,
-            telegramChatId: chatId,
-            role: "Developer",
-            skills: []
-          });
-          await sendMessage(chatId, `🎉 **Đăng ký nhân sự mới thành công!**\n\n• Họ tên: **${fullName}**\n• Email: **${email}**\n• Telegram: **@${username}**\n• Chat ID: **${chatId}**\n\nHệ thống đã tự động tạo hồ sơ của bạn. Bạn đã có thể bắt đầu sử dụng bot!`, KEYBOARD_MAIN);
-        } catch (err: any) {
-          await sendMessage(chatId, "❌ Lỗi: Cổng đăng ký từ chối tạo tài khoản mới.");
-          throw err;
-        }
-    } catch (err) {
-      await sendMessage(chatId, "❌ Lỗi kết nối hệ thống khi đăng ký.");
-    }
+  const { registerCommand } = require('../commands/registerCommand');
+  const ctx = {
+    chatId, username, text, lowerText: text.toLowerCase().trim(), isGroup, member, allMembers, apiClient, message
+  };
+  if (await registerCommand.execute(ctx)) {
     return;
   }
 
@@ -224,259 +147,15 @@ export async function handleTelegramMessage(message: {
   // Xử lý các bước nhập Form đăng ký (nghỉ phép/remote)
   const session = userFormSession[chatId];
   if (session) {
-    const cleanText = text.trim();
-    if (session.step === 'awaiting_start_date') {
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(cleanText)) {
-        await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            chat_id: chatId,
-            text: `❌ Định dạng ngày không đúng! Vui lòng nhập lại dạng \`YYYY-MM-DD\` (ví dụ: \`2026-07-01\`):`,
-            reply_markup: { force_reply: true, selective: true }
-          })
-        });
-        return;
-      }
-
-      // Kiểm tra ngày không được ở quá khứ
-      const now = new Date();
-      const vietnamOffset = 7 * 60 * 60 * 1000;
-      const todayVn = new Date(now.getTime() + vietnamOffset);
-      const todayStr = todayVn.toISOString().split('T')[0];
-
-      if (cleanText < todayStr) {
-        await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            chat_id: chatId,
-            text: `❌ Lỗi: Bạn không thể chọn ngày trong quá khứ! Vui lòng nhập lại ngày hiện tại hoặc tương lai (dạng \`YYYY-MM-DD\`, ví dụ: \`${todayStr}\`):`,
-            reply_markup: { force_reply: true, selective: true }
-          })
-        });
-        return;
-      }
-
-      session.startDate = cleanText;
-      
-      if (session.type === 'leave') {
-        session.step = 'awaiting_end_date';
-        await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            chat_id: chatId,
-            text: `📅 *Bước 2/3:* Vui lòng nhập ngày kết thúc nghỉ (định dạng \`YYYY-MM-DD\`, ví dụ: \`2026-07-02\`):`,
-            reply_markup: { force_reply: true, selective: true }
-          })
-        });
-      } else {
-        session.endDate = cleanText;
-        session.step = 'awaiting_reason';
-        await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            chat_id: chatId,
-            text: `💻 *Bước 2/2:* Vui lòng nhập **Lý do làm remote**:`,
-            reply_markup: { force_reply: true, selective: true }
-          })
-        });
-      }
-      return;
-    }
-
-    if (session.step === 'awaiting_end_date') {
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(cleanText)) {
-        await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            chat_id: chatId,
-            text: `❌ Định dạng ngày không đúng! Vui lòng nhập lại dạng \`YYYY-MM-DD\` (ví dụ: \`2026-07-02\`):`,
-            reply_markup: { force_reply: true, selective: true }
-          })
-        });
-        return;
-      }
-
-      // Kiểm tra ngày kết thúc không được nhỏ hơn ngày bắt đầu
-      if (cleanText < session.startDate!) {
-        await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            chat_id: chatId,
-            text: `❌ Lỗi: Ngày kết thúc không thể trước ngày bắt đầu (${session.startDate})! Vui lòng nhập lại ngày kết thúc (dạng \`YYYY-MM-DD\`):`,
-            reply_markup: { force_reply: true, selective: true }
-          })
-        });
-        return;
-      }
-
-      session.endDate = cleanText;
-      session.step = 'awaiting_reason';
-      await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chat_id: chatId,
-          text: `📅 *Bước 3/3:* Vui lòng nhập **Lý do xin nghỉ phép**:`,
-          reply_markup: { force_reply: true, selective: true }
-        })
-      });
-      return;
-    }
-
-    if (session.step === 'awaiting_reason') {
-      session.reason = cleanText;
-      
-      const formType = session.type;
-      let leaveType = session.leaveType || 'annual';
-      const remoteSession = session.remoteSession || '';
-      const startDate = session.startDate || '';
-      const endDate = session.endDate || '';
-      const reason = session.reason || '';
-      
-      delete userFormSession[chatId]; // Xóa session
-
-      const actionId = Math.random().toString(36).substring(2, 10);
-
-      // Tính toán hạn mức dùng phép / remote trong tháng của startDate
-      let quotaStatusMsg = '';
-      try {
-        const targetDate = new Date(startDate);
-        const targetYear = targetDate.getFullYear();
-        const targetMonth = targetDate.getMonth() + 1; // 1-indexed
-
-        try {
-            const hrData = (await apiClient.get("/omnitask/hr/leave-requests")) as any;
-            if (hrData && hrData.status === 'success' && Array.isArray(hrData.data)) {
-              const memberRequests = hrData.data.filter((r: any) => r.memberId === member.id && r.status === 'approved');
-              
-              if (formType === 'leave') {
-                const monthLeaves = memberRequests.filter((r: any) => {
-                  const rDate = new Date(r.startDate);
-                  return r.leaveType !== 'remote' && rDate.getFullYear() === targetYear && (rDate.getMonth() + 1) === targetMonth;
-                });
-                
-                if (monthLeaves.length >= 1) {
-                  leaveType = 'personal'; 
-                  quotaStatusMsg = `⚠️ *Cảnh báo hạn mức:* Trong tháng ${targetMonth}/${targetYear}, bạn đã nghỉ *${monthLeaves.length}* ngày phép. Theo quy định, ngày nghỉ tiếp theo này sẽ được tính là *Nghỉ không phép (Không lương)*.`;
-                } else {
-                  quotaStatusMsg = `✅ *Trong hạn mức:* Bạn chưa nghỉ ngày phép nào trong tháng ${targetMonth}/${targetYear} (Hạn mức: 1 ngày phép/tháng có lương).`;
-                }
-              } else {
-                const monthRemotes = memberRequests.filter((r: any) => {
-                  const rDate = new Date(r.startDate);
-                  return r.leaveType === 'remote' && rDate.getFullYear() === targetYear && (rDate.getMonth() + 1) === targetMonth;
-                });
-                const limit = member.remoteLimit || 4;
-                if (monthRemotes.length >= limit) {
-                  quotaStatusMsg = `⚠️ *Cảnh báo hạn mức:* Trong tháng ${targetMonth}/${targetYear}, bạn đã làm remote *${monthRemotes.length} / ${limit}* ngày. Yêu cầu remote tiếp theo này sẽ vượt quá hạn mức làm việc từ xa của tháng.`;
-                } else {
-                  quotaStatusMsg = `✅ *Trong hạn mức:* Bạn đã làm remote *${monthRemotes.length} / ${limit}* ngày trong tháng ${targetMonth}/${targetYear}.`;
-                }
-              }
-            }
-          } catch (err: any) {
-            throw err;
-          }
-      } catch (err) {
-        console.error("Lỗi truy vấn hạn mức phép/remote:", err);
-      }
-
-      if (formType === 'leave') {
-        actionCache[actionId] = {
-          action: 'leave_request',
-          payload: { leaveType, startDate, endDate, reason: leaveType === 'personal' ? `[Nghỉ không phép] ${reason}` : reason },
-          member
-        };
-        
-        const typeStr = leaveType === 'personal' ? 'Nghỉ không phép (Không lương)' : 'Nghỉ phép năm (Có lương)';
-        const infoMsg = `💡 *ĐỀ XUẤT XIN NGHỈ PHÉP:*\n• Loại phép: *${typeStr}*\n• Thời gian: *${startDate} đến ${endDate}*\n• Lý do: *${reason}*\n\n${quotaStatusMsg}\n\n👉 Vui lòng xác nhận thực thi hành động này dưới đây:`;
-        
-        await sendMessage(chatId, infoMsg, {
-          inline_keyboard: [
-            [
-              { text: "✅ Xác nhận", callback_data: `confirm_action:${actionId}` },
-              { text: "❌ Hủy bỏ", callback_data: `cancel_action:${actionId}` }
-            ]
-          ]
-        });
-      } else {
-        actionCache[actionId] = {
-          action: 'leave_request',
-          payload: { leaveType: 'remote', startDate, endDate, reason: `[Remote ${remoteSession}] ${reason}` },
-          member
-        };
-
-        const sessionStr = remoteSession === 'all' ? 'Cả ngày' : remoteSession === 'am' ? 'Buổi sáng (AM)' : 'Buổi chiều (PM)';
-        const infoMsg = `💡 *ĐỀ XUẤT ĐĂNG KÝ LÀM REMOTE:*\n• Phiên làm: *${sessionStr}*\n• Ngày: *${startDate}*\n• Lý do: *${reason}*\n\n${quotaStatusMsg}\n\n👉 Vui lòng xác nhận thực thi hành động này dưới đây:`;
-        
-        await sendMessage(chatId, infoMsg, {
-          inline_keyboard: [
-            [
-              { text: "✅ Xác nhận", callback_data: `confirm_action:${actionId}` },
-              { text: "❌ Hủy bỏ", callback_data: `cancel_action:${actionId}` }
-            ]
-          ]
-        });
-      }
-      return;
-    }
-    if (session.step === 'create_project_name') {
-      session.name = cleanText;
-      session.step = 'create_project_desc';
-      await sendMessage(chatId, `📝 *Dự án:* ${session.name}\n\nNhập **Mô tả dự án** (hoặc gõ 'bỏ qua' nếu không có):`, { reply_markup: { force_reply: true, selective: true } });
-      return;
-    }
-
-    if (session.step === 'create_project_desc') {
-      const desc = cleanText === 'bỏ qua' ? '' : cleanText;
-      delete userFormSession[chatId];
-      
-      await sendMessage(chatId, "⏳ Đang tạo dự án...");
-      try {
-        await apiClient.post("/admin/projects", { name: session.name, description: desc });
-        await sendMessage(chatId, `✅ **Tạo Dự án thành công!**\n\n• Tên: **${session.name}**\n• Mô tả: ${desc || 'Trống'}`);
-      } catch (err: any) {
-        await sendMessage(chatId, `❌ Lỗi khi tạo dự án: ${err.message}`);
-      }
-      return;
-    }
-
-    if (session.step === 'create_task_title') {
-      session.title = cleanText;
-      session.step = 'create_task_desc';
-      await sendMessage(chatId, `📝 *Task:* ${session.title}\n\nNhập **Mô tả Task** (hoặc gõ 'bỏ qua'):`, { reply_markup: { force_reply: true, selective: true } });
-      return;
-    }
-
-    if (session.step === 'create_task_desc') {
-      session.description = cleanText === 'bỏ qua' ? '' : cleanText;
-      session.step = 'create_task_project';
-      await sendMessage(chatId, `Vui lòng nhập **ID Dự án** mà Task này thuộc về (hoặc gõ 'bỏ qua' để không gắn dự án):`, { reply_markup: { force_reply: true, selective: true } });
-      return;
-    }
-
-    if (session.step === 'create_task_project') {
-      const projectId = cleanText === 'bỏ qua' ? null : cleanText;
-      delete userFormSession[chatId];
-      
-      await sendMessage(chatId, "⏳ Đang tạo Task...");
-      try {
-        await apiClient.post("/admin/tasks", { title: session.title, description: session.description, projectId });
-        await sendMessage(chatId, `✅ **Tạo Task thành công!**\n\n• Tiêu đề: **${session.title}**\n• Dự án: ${projectId || 'Không gắn'}`);
-      } catch (err: any) {
-        await sendMessage(chatId, `❌ Lỗi khi tạo Task: ${err.message}`);
-      }
+    const { formSessionCommand } = require('../commands/formSessionCommand');
+    const ctx = {
+      chatId, username, text, lowerText: text.toLowerCase().trim(), isGroup, member, allMembers, apiClient, message
+    };
+    if (await formSessionCommand.execute(ctx)) {
       return;
     }
   }
 
-  // C. Lệnh /start
   if (text.trim() === "/start") {
     chatHistories[chatId] = []; // Reset context chat
     await sendMessage(
