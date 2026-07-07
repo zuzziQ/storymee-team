@@ -23,7 +23,7 @@ async function startServer() {
   
   await fastify.register(setupCors as any);
 
-  fastify.get('/api/health', async (request, reply) => {
+  fastify.get('/internal/v1/team/health', async (request, reply) => {
       return { status: 'ok', service: 'core-team-api' };
   });
 
