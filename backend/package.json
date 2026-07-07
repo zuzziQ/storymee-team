@@ -19,7 +19,7 @@
     "@storymee/fastify-common": "file:../../0-Shared-Libs/fastify-common",
     "@storymee/prisma-client": "file:../../0-Shared-Libs/prisma-client",
     "dotenv": "^17.4.2",
-    "fastify": "^5.9.0"
+    "fastify": "^5.10.0"
   },
   "devDependencies": {
     "@types/node": "^26.1.0",
