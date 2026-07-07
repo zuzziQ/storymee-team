@@ -194,7 +194,6 @@ export default function TaskDetailModal({
     const isDone = newStatus === 'done' || newStatus === 'completed';
     const newSubtasks = subtasks.map(s => s.id === id ? { ...s, isDone, status: newStatus } : s);
     setSubtasks(newSubtasks);
-    handleTaskUpdate({ subtasks: newSubtasks });
     
     const sub = subtasks.find(s => s.id === id);
     if (sub && sub.dbId) {
@@ -204,6 +203,9 @@ export default function TaskDetailModal({
         console.error("Failed to update subtask status", err);
       }
     }
+    
+    // Call handleTaskUpdate AFTER the API request completes to prevent race conditions with fetchDbData()
+    handleTaskUpdate({ subtasks: newSubtasks });
   };
 
   const addNote = () => {

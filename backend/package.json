@@ -1,0 +1,29 @@
+{
+  "name": "core-team-api",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "tsc",
+    "dev": "ts-node src/index.ts",
+    "start": "node dist/index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@fastify/cors": "^11.2.0",
+    "@storymee/api-client": "file:../../0-Shared-Libs/api-client",
+    "@storymee/fastify-common": "file:../../0-Shared-Libs/fastify-common",
+    "@storymee/prisma-client": "file:../../0-Shared-Libs/prisma-client",
+    "dotenv": "^17.4.2",
+    "fastify": "^5.9.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^6.0.3"
+  }
+}

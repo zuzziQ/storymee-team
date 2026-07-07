@@ -1,34 +1,44 @@
 import * as dotenv from 'dotenv';
 import path from 'path';
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
-import express from 'express';
-import adminRoutes from './routes/admin.routes';
-import hrRoutes from './routes/hr.routes';
-import omnitaskRoutes from './routes/omnitask.routes';
+
+import Fastify from 'fastify';
+import { setupCors, globalErrorHandler } from '@storymee/fastify-common';
+
+import adminRoutes from './modules/tasks/index';
+import hrRoutes from './modules/hr/index';
+import omnitaskRoutes from './modules/omnitask/index';
 
 (BigInt.prototype as any).toJSON = function () {
   return this.toString();
 };
 
-const app = express();
-
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
-  }
-  next();
+const fastify = Fastify({
+  logger: false,
+  bodyLimit: 52428800
 });
 
-app.use(express.json());
+async function startServer() {
+  fastify.setErrorHandler(globalErrorHandler as any);
+  
+  await fastify.register(setupCors as any);
 
-app.use('/api/admin', adminRoutes);
-app.use('/api/hr', hrRoutes);
-app.use('/api/omnitask', omnitaskRoutes);  // Compatibility alias for storymeeteam-mcp client (CoreApiClient prepends /api)
+  fastify.get('/api/health', async (request, reply) => {
+      return { status: 'ok', service: 'core-team-api' };
+  });
 
-const port = parseInt(process.env.PORT || '4506');
-app.listen(port, '0.0.0.0', () => {
-  console.log(`[Core Team API] Server is listening on port ${port}`);
-});
+  await fastify.register(adminRoutes, { prefix: '/internal/v1/team/projects' });
+  await fastify.register(hrRoutes, { prefix: '/internal/v1/team/hr' });
+  await fastify.register(omnitaskRoutes, { prefix: '/internal/v1/team/omnitask' });
+
+  const port = parseInt(process.env.PORT || '4503');
+  fastify.listen({ port, host: '0.0.0.0' }, (err, address) => {
+    if (err) {
+      console.error('[Core Team API] Startup failed:', err);
+      process.exit(1);
+    }
+    console.log(`[Core Team API] Server is listening at ${address}`);
+  });
+}
+
+startServer().catch(console.error);

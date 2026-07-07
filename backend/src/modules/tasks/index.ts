@@ -1,28 +1,28 @@
+import { FastifyPluginAsync } from 'fastify';
+import { prisma } from '../../config/prisma';
 
-import { prisma } from '../config/prisma';
-
-export class AdminController {
-    static async getWorkerRequests(req: any, reply: any) {
+const plugin: FastifyPluginAsync = async (fastify) => {
+    fastify.get('/worker-requests', async (req, reply) => {
         try {
-            reply.code(200).send({ status: 'success', data: [] });
-        } catch (error) {
-            throw error;
+            return reply.code(200).send({ status: 'success', data: [] });
+        } catch (error: any) {
+            return reply.code(500).send({ status: 'error', message: error.message });
         }
-    }
+    });
 
-    static async getProjects(req: any, reply: any) {
+    fastify.get('/projects', async (req, reply) => {
         try {
             const projects = await prisma.omniProject.findMany({
                 orderBy: { createdAt: 'desc' },
                 take: 50
             });
-            reply.code(200).send({ status: 'success', data: projects });
-        } catch (error) {
-            throw error;
+            return reply.code(200).send({ status: 'success', data: projects });
+        } catch (error: any) {
+            return reply.code(500).send({ status: 'error', message: error.message });
         }
-    }
+    });
 
-    static async createProject(req: any, reply: any) {
+    fastify.post('/projects', async (req: any, reply) => {
         try {
             const { name, description } = req.body;
             if (!name) return reply.code(400).send({ status: 'error', message: 'Name is required' });
@@ -32,13 +32,13 @@ export class AdminController {
             const project = await prisma.omniProject.create({
                 data: { name, description, key }
             });
-            reply.code(201).send({ status: 'success', data: project });
+            return reply.code(201).send({ status: 'success', data: project });
         } catch (error: any) {
-            throw error;
+            return reply.code(500).send({ status: 'error', message: error.message });
         }
-    }
+    });
 
-    static async deleteProject(req: any, reply: any) {
+    fastify.delete('/projects/:id', async (req: any, reply) => {
         try {
             const id = req.params.id as string;
             if (!id) return reply.code(400).send({ status: 'error', message: 'Project ID is required' });
@@ -46,36 +46,17 @@ export class AdminController {
             await prisma.omniProject.delete({
                 where: { id }
             });
-            reply.send({ status: 'success', message: 'Project deleted successfully' });
-        } catch (error) {
-            throw error;
+            return reply.send({ status: 'success', message: 'Project deleted successfully' });
+        } catch (error: any) {
+            return reply.code(500).send({ status: 'error', message: error.message });
         }
-    }
+    });
 
-    /**
-     * POST /omnitask/
-     * Tạo Task mẹ (container) + SubTask con thực tế (gắn assignee, deadline, priority).
-     * Body: {
-     *   title: string,
-     *   description?: string,
-     *   projectId?: string,       // optional - nếu không có thì task không thuộc dự án nào
-     *   subtasks?: [{
-     *     title: string,
-     *     suggestedAssigneeName?: string,
-     *     estimatedHours?: number,
-     *     priority?: string,
-     *     deadlineDays?: number,
-     *     deadline?: string,
-     *   }]
-     * }
-     * Nếu không có subtasks thì tự tạo 1 SubTask từ title của task mẹ.
-     */
-    static async createTask(req: any, reply: any) {
+    fastify.post('/tasks', async (req: any, reply) => {
         try {
             const { title, description, projectId, subtasks } = req.body;
             if (!title) return reply.code(400).send({ status: 'error', message: 'Title is required' });
 
-            // 1. Tạo Task mẹ (container) - projectId optional
             const parentTask = await prisma.task.create({
                 data: {
                     title,
@@ -85,20 +66,17 @@ export class AdminController {
                 }
             });
 
-            // 2. Chuẩn bị danh sách subtask
             const subtaskDefs = Array.isArray(subtasks) && subtasks.length > 0
                 ? subtasks
                 : [{ title, description: description || null }];
 
-            // 3. Đếm SubTask hiện có để auto-increment ID
             const currentCount = await prisma.subTask.count();
-
             const createdSubtasks = [];
+
             for (let i = 0; i < subtaskDefs.length; i++) {
                 const sub = subtaskDefs[i];
-
-                // Tìm assignee theo tên (fuzzy, case-insensitive)
                 let assigneeId: string | null = null;
+                
                 if (sub.suggestedAssigneeName) {
                     const found = await prisma.teamMember.findFirst({
                         where: {
@@ -111,7 +89,6 @@ export class AdminController {
                     if (found) assigneeId = found.id;
                 }
 
-                // Tính deadline từ deadlineDays hoặc deadline ISO string
                 let deadlineDate: Date | null = null;
                 if (sub.deadlineDays && sub.deadlineDays > 0) {
                     deadlineDate = new Date();
@@ -141,15 +118,17 @@ export class AdminController {
                 createdSubtasks.push(created);
             }
 
-            reply.code(201).send({
+            return reply.code(201).send({
                 status: 'success',
                 data: {
                     ...parentTask,
                     subTasks: createdSubtasks
                 }
             });
-        } catch (error) {
-            throw error;
+        } catch (error: any) {
+            return reply.code(500).send({ status: 'error', message: error.message });
         }
-    }
-}
+    });
+};
+
+export default plugin;
