@@ -16,7 +16,7 @@ dotenv.config();
 
 import { startTelegramPolling } from './telegram_agent';
 
-const CORE_API_URL = process.env.CORE_API_URL || "http://localhost:5100/internal/v1/team";
+const CORE_API_URL = process.env.CORE_API_URL || "http://localhost:5100";
 let apiClient = new CoreApiClient({ baseURL: CORE_API_URL, enforceApiPrefix: false });
 
 let cachedMembers: any[] | null = null;

@@ -123,7 +123,7 @@ export async function handleTelegramMessage(message: {
     try {
       console.log(`[Postgres API] Đang cập nhật chat_id ${chatId} cho @${username}...`);
       try {
-          await apiClient.post("/hr/team-members", {
+          await apiClient.post("/internal/v1/team/hr/team-members", {
             fullName: member.fullName,
             email: member.email,
             telegramUsername: member.telegramUsername,
