@@ -10,7 +10,7 @@ function startCronJobs(apiClient, sendMessage) {
     node_cron_1.default.schedule('30 8 * * 1-6', async () => {
         try {
             console.log("Chạy Cron buổi sáng: 8:30");
-            const res = await apiClient.get("/internal/v1/team/hr/team-members");
+            const res = await apiClient.get("/hr/team-members");
             const members = res.data || [];
             const todayStr = new Date().toISOString().split('T')[0];
             const tasksRes = await apiClient.get("/omnitask/tasks");
@@ -49,7 +49,7 @@ function startCronJobs(apiClient, sendMessage) {
     node_cron_1.default.schedule('0 18 * * 1-6', async () => {
         try {
             console.log("Chạy Cron buổi chiều: 18:00");
-            const res = await apiClient.get("/internal/v1/team/hr/team-members");
+            const res = await apiClient.get("/hr/team-members");
             const members = res.data || [];
             for (const m of members) {
                 if (!m.telegramChatId)
