@@ -90,7 +90,7 @@ const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const TELEGRAM_API = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
 const WEB_PORTAL_URL = process.env.WEB_PORTAL_URL || "http://localhost:3010";
 const OMNIROUTER_API_URL = process.env.OMNIROUTER_API_URL || `${WEB_PORTAL_URL}/api/ai/chat`;
-const CORE_API_URL = process.env.CORE_API_URL || "http://localhost:4500";
+const CORE_API_URL = process.env.CORE_API_URL || "http://localhost:5100/internal/v1/team";
 let apiClient = new CoreApiClient({ baseURL: CORE_API_URL });
 
 interface ChatMessage {
@@ -606,7 +606,7 @@ export async function startTelegramPolling() {
   app.use(express.json());
 
   // Webhook Route
-  app.post('/bot-webhook', async (req, res) => {
+  app.post('/worker/v1/telegram/webhook', async (req, res) => {
     try {
       const update = req.body;
       if (update.message && update.message.text) {
@@ -622,12 +622,12 @@ export async function startTelegramPolling() {
     }
   });
 
-  const WEBHOOK_PORT = 4501; // Cổng chạy riêng cho Bot Webhook
+  const WEBHOOK_PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 4511; // Cổng chạy riêng cho Bot Webhook
   app.listen(WEBHOOK_PORT, async () => {
     console.log(`🚀 Telegram Webhook Server đang chạy tại port ${WEBHOOK_PORT}...`);
     
     // Đăng ký Webhook URL với Telegram
-    const WEBHOOK_URL = `https://api.storymee.com/bot-webhook`; 
+    const WEBHOOK_URL = `https://api.storymee.com/worker/v1/telegram/webhook`; 
     try {
       const res = await fetchAxios(`${TELEGRAM_API}/setWebhook?url=${WEBHOOK_URL}`);
       const data = await res.json() as any;

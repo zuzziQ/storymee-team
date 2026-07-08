@@ -13,6 +13,9 @@ import { connect } from "nats";
 
 dotenv.config();
 
+
+import { startTelegramPolling } from './telegram_agent';
+
 const CORE_API_URL = process.env.CORE_API_URL || "http://localhost:5100/internal/v1/team";
 let apiClient = new CoreApiClient({ baseURL: CORE_API_URL, enforceApiPrefix: false });
 
@@ -357,6 +360,14 @@ async function main() {
     console.error("[NATS] Heartbeat initialized for storymeeteam-mcp");
   } catch (err: any) {
     console.error("[NATS] Failed to initialize NATS heartbeat:", err.message);
+  }
+
+  // Khởi chạy Telegram Bot Webhook
+  try {
+    await startTelegramPolling();
+    console.error("Telegram Webhook/Polling started successfully.");
+  } catch (err: any) {
+    console.error("Failed to start Telegram Bot:", err.message);
   }
 }
 
