@@ -14,8 +14,8 @@ dotenv.config();
 
 const TELEGRAM_API = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}`;
 const CORE_API_URL = process.env.CORE_API_URL || "http://localhost:4500";
-const WEB_PORTAL_URL = process.env.WEB_PORTAL_URL || "https://api.storymee.com";
-const OMNIROUTER_API_URL = process.env.OMNIROUTER_API_URL || "https://api.storymee.com/api/ai/chat";
+const WEB_PORTAL_URL = process.env.WEB_PORTAL_URL || "https://dev-hub.storymee.com";
+const OMNIROUTER_API_URL = process.env.OMNIROUTER_API_URL || "https://dev-hub.storymee.com/api/ai/chat";
 const apiClient = new CoreApiClient({ baseURL: CORE_API_URL });
 
 async function handleCallbackQuery(callbackQuery: any) {

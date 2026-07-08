@@ -12,8 +12,8 @@ export class CoreApiClient {
 
     constructor(config: { baseURL: string }) {
         let url = config.baseURL;
-        if (!url.endsWith('/api') && !url.endsWith('/api/')) {
-            url = url.replace(/\/+$/, '') + '/api';
+        if (!url.endsWith('/internal/v1/team') && !url.endsWith('/internal/v1/team/')) {
+            url = url.replace(/\/+$/, '') + '/internal/v1/team';
         }
         this.baseURL = url;
     }
@@ -21,14 +21,14 @@ export class CoreApiClient {
     private async resolveBaseUrl() {
         if (typeof window !== 'undefined') {
             const match = document.cookie.match(new RegExp('(^| )hub_connection_url=([^;]+)'));
-            if (match) return decodeURIComponent(match[2]) + '/api';
+            if (match) return decodeURIComponent(match[2]) + '/internal/v1/team';
             return this.baseURL;
         } else {
             try {
                 const { cookies } = await import('next/headers');
                 const cookieStore = await cookies();
                 const val = cookieStore.get('hub_connection_url')?.value;
-                if (val) return decodeURIComponent(val) + '/api';
+                if (val) return decodeURIComponent(val) + '/internal/v1/team';
             } catch (e) {}
             return this.baseURL;
         }

@@ -178,7 +178,7 @@ Nhiệm vụ của bạn:
         throw new Error("Letta Agent returned empty content (possibly only internal monologue).");
       }
     } catch (lettaError: any) {
-      console.warn("Letta Agent failed or rate limited. Falling back to omni-llm-hub...", lettaError.message);
+      console.warn("Letta Agent failed or rate limited. Falling back to core-ai-api...", lettaError.message);
       try {
         const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY || 'AIzaSyC7lBGGw_c2sM6RHif2k32E6mAiZBzCUyY'}`;
         const hubRes = await fetch(geminiUrl, {
@@ -261,7 +261,7 @@ Nhiệm vụ của bạn:
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(log),
         signal: AbortSignal.timeout(10000)
-      }).catch(err => console.error("Lỗi gửi log đến omni-llm-hub:", err));
+      }).catch(err => console.error("Lỗi gửi log đến core-ai-api:", err));
     } catch (err) {
       console.error("Lỗi gửi log:", err);
     }

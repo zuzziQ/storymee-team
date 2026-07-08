@@ -627,7 +627,7 @@ export async function startTelegramPolling() {
     console.log(`🚀 Telegram Webhook Server đang chạy tại port ${WEBHOOK_PORT}...`);
     
     // Đăng ký Webhook URL với Telegram
-    const WEBHOOK_URL = `https://api.storymee.com/worker/v1/telegram/webhook`; 
+    const WEBHOOK_URL = `https://dev-hub.storymee.com/worker/v1/telegram/webhook`; 
     try {
       const res = await fetchAxios(`${TELEGRAM_API}/setWebhook?url=${WEBHOOK_URL}`);
       const data = await res.json() as any;
