@@ -102,7 +102,7 @@ export class CoreApiClient {
 }
 
 export const coreApiClient = new CoreApiClient({
-    baseURL
+    baseURL, enforceApiPrefix: false
 });
 
 export const API_ROUTES = {
