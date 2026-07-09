@@ -569,6 +569,8 @@ async function setupBotCommands() {
 export async function startTelegramPolling() {
   if (!TELEGRAM_BOT_TOKEN) {
     console.log("⚠️ CHƯA CẤU HÌNH TELEGRAM_BOT_TOKEN. Chạy bot ở chế độ MOCK (Giả lập console).");
+    // Keep process alive to prevent docker restart loops
+    setInterval(() => {}, 1000 * 60 * 60);
     return;
   }
   
