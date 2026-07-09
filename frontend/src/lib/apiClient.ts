@@ -1,7 +1,10 @@
 const isServer = typeof window === 'undefined';
 // dev-hub.storymee.com → Nginx → core-admin-api:4503 (direct, không qua Hub Go Gateway)
 // dev-hub.storymee.com → Hub Go Gateway (chỉ dùng cho LLM/AI routes)
-const defaultBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://dev-hub.storymee.com';
+let defaultBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://dev-hub.storymee.com';
+if (defaultBaseUrl === '/api' || defaultBaseUrl === '/') {
+    defaultBaseUrl = 'https://dev-hub.storymee.com';
+}
 
 // Cả server lẫn client đều gọi thẳng vào API backend
 // Không có Next.js proxy, dùng empty string sẽ gọi vào Vercel routes → lỗi ROUTER_EXTERNAL
@@ -19,19 +22,7 @@ export class CoreApiClient {
     }
 
     private async resolveBaseUrl() {
-        if (typeof window !== 'undefined') {
-            const match = document.cookie.match(new RegExp('(^| )hub_connection_url=([^;]+)'));
-            if (match) return decodeURIComponent(match[2]) + '/internal/v1/team';
-            return this.baseURL;
-        } else {
-            try {
-                const { cookies } = await import('next/headers');
-                const cookieStore = await cookies();
-                const val = cookieStore.get('hub_connection_url')?.value;
-                if (val) return decodeURIComponent(val) + '/internal/v1/team';
-            } catch (e) {}
-            return this.baseURL;
-        }
+        return this.baseURL;
     }
 
     public async get<T = any>(url: string): Promise<T> {
