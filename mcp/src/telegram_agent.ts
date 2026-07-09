@@ -319,7 +319,7 @@ export async function sendDailySummaryAndNotify(type: "morning" | "evening") {
   console.log(`⏰ [Cron Summary] Bắt đầu gửi báo cáo tổng hợp: ${type}`);
   try {
     const members = await getCachedMembers();
-    if (!members || members.length === 0) throw new Error("Không thể fetch team members");
+    if (!members || members.length === 0) return;
 
     let dbTasks: any[] = [];
     try {
@@ -436,7 +436,7 @@ export async function checkRealtimeOverdueDeadlines() {
   console.log("⏰ [Cron Overdue] Đang quét deadline quá hạn realtime...");
   try {
     const members = await getCachedMembers();
-    if (!members || members.length === 0) throw new Error("Không thể fetch team members");
+    if (!members || members.length === 0) return;
 
     let dbTasks: any[] = [];
     try {
@@ -588,7 +588,7 @@ export async function startTelegramPolling() {
 
   cron.schedule('*/5 * * * *', async () => {
     try {
-      await checkRealtimeOverdueDeadlines();
+      await checkRealtimeOverdueDeadlines().catch(e => console.error(e));
     } catch (err) {
       console.error("Lỗi cron check deadline:", err);
     }
@@ -597,7 +597,7 @@ export async function startTelegramPolling() {
   
   // Quét ngay lần đầu chạy
   setTimeout(() => {
-    checkRealtimeOverdueDeadlines();
+    checkRealtimeOverdueDeadlines().catch(e => console.error(e));
   }, 5000);
 
   
