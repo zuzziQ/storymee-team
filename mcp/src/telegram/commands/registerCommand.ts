@@ -65,6 +65,7 @@ export const registerCommand: TelegramCommand = {
                 });
                 await sendMessage(chatId, `🎉 **Liên kết tài khoản thành công!**\n\n• Họ tên: **${existingEmailMember.fullName}**\n• Email: **${existingEmailMember.email}**\n• Chức vụ: **${existingEmailMember.role || 'Nhân viên'}**\n• Telegram: **@${username}**\n\nBạn đã có thể sử dụng tất cả các lệnh của bot.`, KEYBOARD_MAIN);
               } catch (err: any) {
+                console.error('[registerCommand] API POST (Link) Error:', err);
                 await sendMessage(chatId, "❌ Lỗi: Cổng đăng ký từ chối liên kết tài khoản.");
                 throw err;
               }
@@ -85,6 +86,7 @@ export const registerCommand: TelegramCommand = {
           });
           await sendMessage(chatId, `🎉 **Đăng ký nhân sự mới thành công!**\n\n• Họ tên: **${fullName}**\n• Email: **${email}**\n• Telegram: **@${username}**\n• Chat ID: **${chatId}**\n\nHệ thống đã tự động tạo hồ sơ của bạn. Bạn đã có thể bắt đầu sử dụng bot!`, KEYBOARD_MAIN);
         } catch (err: any) {
+          console.error('[registerCommand] API POST Error:', err);
           await sendMessage(chatId, "❌ Lỗi: Cổng đăng ký từ chối tạo tài khoản mới.");
           throw err;
         }

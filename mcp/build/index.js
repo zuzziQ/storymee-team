@@ -45,7 +45,8 @@ dotenv.config();
 const telegram_agent_1 = require("./telegram_agent");
 const CORE_API_URL = process.env.CORE_API_URL || "http://localhost:5100";
 let apiClient = new api_client_1.CoreApiClient({
-    baseURL: CORE_API_URL,
+    baseURL: CORE_API_URL + '/internal/v1/team',
+    enforceApiPrefix: false
 });
 let cachedMembers = null;
 let lastCacheTime = 0;

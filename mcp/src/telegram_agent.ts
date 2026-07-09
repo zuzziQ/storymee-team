@@ -91,7 +91,7 @@ const TELEGRAM_API = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
 const WEB_PORTAL_URL = process.env.WEB_PORTAL_URL || "http://localhost:3010";
 const OMNIROUTER_API_URL = process.env.OMNIROUTER_API_URL || `${WEB_PORTAL_URL}/api/ai/chat`;
 const CORE_API_URL = process.env.CORE_API_URL || "http://localhost:5100";
-let apiClient = new CoreApiClient({ baseURL: CORE_API_URL, enforceApiPrefix: false });
+let apiClient = new CoreApiClient({ baseURL: CORE_API_URL + '/internal/v1/team', enforceApiPrefix: false });
 
 interface ChatMessage {
   role: "user" | "model";

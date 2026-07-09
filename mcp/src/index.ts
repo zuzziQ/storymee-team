@@ -18,7 +18,8 @@ import { startTelegramPolling } from './telegram_agent';
 
 const CORE_API_URL = process.env.CORE_API_URL || "http://localhost:5100";
 let apiClient = new CoreApiClient({ 
-    baseURL: CORE_API_URL, enforceApiPrefix: false
+    baseURL: CORE_API_URL + '/internal/v1/team', 
+    enforceApiPrefix: false
 });
 
 let cachedMembers: any[] | null = null;
