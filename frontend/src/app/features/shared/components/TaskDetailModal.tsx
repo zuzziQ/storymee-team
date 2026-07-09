@@ -8,7 +8,7 @@ import {
 import { coreApiClient } from '../../../../lib/apiClient';
 import { API_ROUTES } from '@/lib/apiClient';
 
-const API_BASE = (process.env.NEXT_PUBLIC_API_URL === '/api' || process.env.NEXT_PUBLIC_API_URL === '/' || process.env.NEXT_PUBLIC_API_URL === 'https://hub.storymee.com' || !process.env.NEXT_PUBLIC_API_URL ? 'https://dev-hub.storymee.com' : process.env.NEXT_PUBLIC_API_URL) || 'http://localhost:4500';
+const API_BASE = (process.env.NEXT_PUBLIC_API_URL === '/api' || process.env.NEXT_PUBLIC_API_URL === '/' || (process.env.NEXT_PUBLIC_API_URL || '').includes('//hub.storymee.com') || !process.env.NEXT_PUBLIC_API_URL ? 'https://dev-hub.storymee.com' : process.env.NEXT_PUBLIC_API_URL) || 'http://localhost:4500';
 
 interface Note { id: string; text: string; author: string; time: string; }
 interface Attachment { id: string; type: 'link' | 'file'; label: string; url: string; }
