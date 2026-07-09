@@ -87,8 +87,10 @@ export async function handleTelegramMessage(message: {
   const ctx = {
     chatId, username, text, lowerText: text.toLowerCase().trim(), isGroup, member, allMembers, apiClient, message
   };
-  if (await registerCommand.execute(ctx)) {
-    return;
+  if (registerCommand.match(text, ctx.lowerText)) {
+    if (await registerCommand.execute(ctx)) {
+      return;
+    }
   }
 
   if (!member) {
