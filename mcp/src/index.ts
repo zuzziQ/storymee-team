@@ -350,6 +350,14 @@ async function main() {
           name: "storymeeteam-mcp"
         });
         await kv.put("storymeeteam-mcp", new TextEncoder().encode(payload));
+
+        const botPayload = JSON.stringify({
+          status: "online",
+          lastSeen: Date.now(),
+          type: "bot",
+          name: "Telegram Bot"
+        });
+        await kv.put("telegram-bot-agent", new TextEncoder().encode(botPayload));
       } catch (err: any) {
         console.error("[NATS] Heartbeat error:", err.message);
       }
