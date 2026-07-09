@@ -1,6 +1,6 @@
 import { fetchAxios } from './fetchAxios';
 import * as dotenv from "dotenv";
-import express from "express";
+import Fastify from 'fastify';
 import * as fs from "fs";
 import * as path from "path";
 import cron from "node-cron";
@@ -601,29 +601,29 @@ export async function startTelegramPolling() {
   }, 5000);
 
   
-  // SETUP EXPRESS WEBHOOK SERVER
-  const app = express();
-  app.use(express.json());
+  // SETUP FASTIFY WEBHOOK SERVER
+  const app = Fastify({ logger: false });
 
   // Webhook Route
-  app.post('/worker/v1/telegram/webhook', async (req, res) => {
+  app.post('/worker/v1/telegram/webhook', async (req, reply) => {
     try {
-      const update = req.body;
+      const update = req.body as any;
       if (update.message && update.message.text) {
         await handleTelegramMessage(update.message);
       } else if (update.callback_query) {
         await handleCallbackQuery(update.callback_query);
       }
-      res.sendStatus(200);
+      return reply.code(200).send({ status: 'ok' });
     } catch (err) {
       console.error("Lỗi xử lý webhook:", err);
       // TRẢ VỀ 200 OK NGAY LẬP TỨC để Telegram không gửi lại (retry) tin nhắn
-      res.sendStatus(200);
+      return reply.code(200).send({ status: 'error' });
     }
   });
 
   const WEBHOOK_PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 4511; // Cổng chạy riêng cho Bot Webhook
-  app.listen(WEBHOOK_PORT, async () => {
+  try {
+    await app.listen({ port: WEBHOOK_PORT, host: '0.0.0.0' });
     console.log(`🚀 Telegram Webhook Server đang chạy tại port ${WEBHOOK_PORT}...`);
     
     // Đăng ký Webhook URL với Telegram
@@ -639,11 +639,14 @@ export async function startTelegramPolling() {
     } catch (e) {
       console.error("❌ Lỗi kết nối đăng ký Webhook:", e);
     }
-  });
+  } catch (err) {
+    console.error("Fastify Listen Error:", err);
+    process.exit(1);
+  }
 
 }
 
 // Khởi chạy
 // import { startCronJobs } from "./cronJobs.js";
 // startCronJobs(apiClient, sendMessage); // Đã gộp vào vòng lặp cron bên trong
-startTelegramPolling();
+// startTelegramPolling() has been moved to index.ts

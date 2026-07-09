@@ -17,7 +17,11 @@ dotenv.config();
 import { startTelegramPolling } from './telegram_agent';
 
 const CORE_API_URL = process.env.CORE_API_URL || "http://localhost:5100";
-let apiClient = new CoreApiClient({ baseURL: CORE_API_URL, enforceApiPrefix: false });
+let apiClient = new CoreApiClient({ 
+    baseURL: CORE_API_URL, 
+    servicePrefix: 'worker',
+    apiVersion: 'v1/team'
+});
 
 let cachedMembers: any[] | null = null;
 let lastCacheTime = 0;
@@ -355,9 +359,9 @@ async function main() {
           status: "online",
           lastSeen: Date.now(),
           type: "bot",
-          name: "Telegram Bot"
+          name: "StorymeeTeam Bot"
         });
-        await kv.put("telegram-bot-agent", new TextEncoder().encode(botPayload));
+        await kv.put("storymeeteam-bot-agent", new TextEncoder().encode(botPayload));
       } catch (err: any) {
         console.error("[NATS] Heartbeat error:", err.message);
       }
