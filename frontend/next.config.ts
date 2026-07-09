@@ -7,7 +7,7 @@ const nextConfig: any = {
     return [
       {
         source: '/api/:path*',
-        destination: `${process.env.NEXT_PUBLIC_API_URL || 'https://dev-hub.storymee.com'}/api/:path*`,
+        destination: `${process.env.NEXT_PUBLIC_API_URL || 'https://dev-hub.storymee.com'}/:path*`,
       },
     ];
   },

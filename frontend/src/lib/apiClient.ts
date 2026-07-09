@@ -37,7 +37,10 @@ export class CoreApiClient {
     public async get<T = any>(url: string): Promise<T> {
         try {
             const baseUrl = await this.resolveBaseUrl();
-            const res = await fetch(`${baseUrl}${url}`, {
+            const cleanUrl = url.startsWith('/') ? url.substring(1) : url;
+            const fullUrl = baseUrl.endsWith('/') ? `${baseUrl}${cleanUrl}` : `${baseUrl}/${cleanUrl}`;
+            console.log('[CoreApiClient] GET Fetching:', fullUrl);
+            const res = await fetch(fullUrl, {
                 method: 'GET',
                 headers: { 'Content-Type': 'application/json' },
                 signal: AbortSignal.timeout(60000)
@@ -46,14 +49,18 @@ export class CoreApiClient {
             if (!res.ok) throw { status: res.status, data };
             return data;
         } catch (error: any) {
+            console.error('[CoreApiClient] GET Error:', error);
             throw { message: error.message || 'fetch failed', status: error.status || 500, data: error.data };
         }
     }
 
-    public async post<T = any>(url: string, body: any): Promise<T> {
+    public async post<T = any>(url: string, body?: any): Promise<T> {
         try {
             const baseUrl = await this.resolveBaseUrl();
-            const res = await fetch(`${baseUrl}${url}`, {
+            const cleanUrl = url.startsWith('/') ? url.substring(1) : url;
+            const fullUrl = baseUrl.endsWith('/') ? `${baseUrl}${cleanUrl}` : `${baseUrl}/${cleanUrl}`;
+            console.log('[CoreApiClient] POST Fetching:', fullUrl);
+            const res = await fetch(fullUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),
@@ -70,7 +77,10 @@ export class CoreApiClient {
     public async patch<T = any>(url: string, body: any): Promise<T> {
         try {
             const baseUrl = await this.resolveBaseUrl();
-            const res = await fetch(`${baseUrl}${url}`, {
+            const cleanUrl = url.startsWith('/') ? url.substring(1) : url;
+            const fullUrl = baseUrl.endsWith('/') ? `${baseUrl}${cleanUrl}` : `${baseUrl}/${cleanUrl}`;
+            console.log('[CoreApiClient] PATCH Fetching:', fullUrl);
+            const res = await fetch(fullUrl, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),
@@ -80,6 +90,7 @@ export class CoreApiClient {
             if (!res.ok) throw { status: res.status, data };
             return data;
         } catch (error: any) {
+            console.error('[CoreApiClient] PATCH Error:', error);
             throw { message: error.message || 'fetch failed', status: error.status || 500, data: error.data };
         }
     }
@@ -87,7 +98,10 @@ export class CoreApiClient {
     public async delete<T = any>(url: string): Promise<T> {
         try {
             const baseUrl = await this.resolveBaseUrl();
-            const res = await fetch(`${baseUrl}${url}`, {
+            const cleanUrl = url.startsWith('/') ? url.substring(1) : url;
+            const fullUrl = baseUrl.endsWith('/') ? `${baseUrl}${cleanUrl}` : `${baseUrl}/${cleanUrl}`;
+            console.log('[CoreApiClient] DELETE Fetching:', fullUrl);
+            const res = await fetch(fullUrl, {
                 method: 'DELETE',
                 headers: { 'Content-Type': 'application/json' },
                 signal: AbortSignal.timeout(60000)
@@ -96,6 +110,7 @@ export class CoreApiClient {
             if (!res.ok) throw { status: res.status, data };
             return data;
         } catch (error: any) {
+            console.error('[CoreApiClient] DELETE Error:', error);
             throw { message: error.message || 'fetch failed', status: error.status || 500, data: error.data };
         }
     }
