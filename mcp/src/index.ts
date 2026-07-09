@@ -19,7 +19,7 @@ import { startTelegramPolling } from './telegram_agent';
 const CORE_API_URL = process.env.CORE_API_URL || "http://localhost:5100";
 let apiClient = new CoreApiClient({ 
     baseURL: CORE_API_URL, 
-    servicePrefix: 'worker',
+    servicePrefix: 'internal',
     apiVersion: 'v1/team'
 });
 

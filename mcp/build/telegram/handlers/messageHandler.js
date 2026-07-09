@@ -44,7 +44,7 @@ const TELEGRAM_API = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOK
 const CORE_API_URL = process.env.CORE_API_URL || "http://localhost:4500";
 const WEB_PORTAL_URL = process.env.WEB_PORTAL_URL || "https://dev-hub.storymee.com";
 const OMNIROUTER_API_URL = process.env.OMNIROUTER_API_URL || "https://dev-hub.storymee.com/api/ai/chat";
-const apiClient = new api_client_1.CoreApiClient({ baseURL: CORE_API_URL });
+const apiClient = new api_client_1.CoreApiClient({ baseURL: CORE_API_URL, servicePrefix: "internal", apiVersion: "v1/team" });
 async function handleTelegramMessage(message) {
     const chatId = message.chat.id;
     const username = message.from.username;
@@ -133,7 +133,7 @@ async function handleTelegramMessage(message) {
         try {
             console.log(`[Postgres API] Đang cập nhật chat_id ${chatId} cho @${username}...`);
             try {
-                await apiClient.post("/internal/v1/team/hr/team-members", {
+                await apiClient.post("/hr/team-members", {
                     fullName: member.fullName,
                     email: member.email,
                     telegramUsername: member.telegramUsername,

@@ -66,7 +66,7 @@ async function getCachedMembers() {
         return membersCache.data;
     }
     try {
-        const json = await apiClient.get("/internal/v1/team/hr/team-members");
+        const json = await apiClient.get("/hr/team-members");
         const dataArr = Array.isArray(json) ? json : (json?.data || []);
         if (Array.isArray(dataArr)) {
             const now = Date.now();
@@ -124,7 +124,7 @@ const TELEGRAM_API = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
 const WEB_PORTAL_URL = process.env.WEB_PORTAL_URL || "http://localhost:3010";
 const OMNIROUTER_API_URL = process.env.OMNIROUTER_API_URL || `${WEB_PORTAL_URL}/api/ai/chat`;
 const CORE_API_URL = process.env.CORE_API_URL || "http://localhost:5100";
-let apiClient = new api_client_1.CoreApiClient({ baseURL: CORE_API_URL, enforceApiPrefix: false });
+let apiClient = new api_client_1.CoreApiClient({ baseURL: CORE_API_URL, servicePrefix: "internal", apiVersion: "v1/team" });
 exports.chatHistories = {};
 exports.actionCache = {};
 exports.userFormSession = {};
@@ -321,7 +321,7 @@ async function sendDailySummaryAndNotify(type) {
     try {
         const members = await getCachedMembers();
         if (!members || members.length === 0)
-            throw new Error("Không thể fetch team members");
+            return;
         let dbTasks = [];
         try {
             const tasksData = (await apiClient.get("/omnitask/"));
@@ -434,7 +434,7 @@ async function checkRealtimeOverdueDeadlines() {
     try {
         const members = await getCachedMembers();
         if (!members || members.length === 0)
-            throw new Error("Không thể fetch team members");
+            return;
         let dbTasks = [];
         try {
             const tasksData = (await apiClient.get("/omnitask/"));
@@ -564,7 +564,7 @@ async function startTelegramPolling() {
     }, { timezone: "Asia/Ho_Chi_Minh" });
     node_cron_1.default.schedule('*/5 * * * *', async () => {
         try {
-            await checkRealtimeOverdueDeadlines();
+            await checkRealtimeOverdueDeadlines().catch(e => console.error(e));
         }
         catch (err) {
             console.error("Lỗi cron check deadline:", err);
@@ -572,7 +572,7 @@ async function startTelegramPolling() {
     }, { timezone: "Asia/Ho_Chi_Minh" });
     // Quét ngay lần đầu chạy
     setTimeout(() => {
-        checkRealtimeOverdueDeadlines();
+        checkRealtimeOverdueDeadlines().catch(e => console.error(e));
     }, 5000);
     // SETUP FASTIFY WEBHOOK SERVER
     const app = (0, fastify_1.default)({ logger: false });

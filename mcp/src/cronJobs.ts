@@ -7,7 +7,7 @@ export function startCronJobs(apiClient: CoreApiClient, sendMessage: (chatId: nu
   cron.schedule('30 8 * * 1-6', async () => {
     try {
       console.log("Chạy Cron buổi sáng: 8:30");
-      const res = await apiClient.get("/internal/v1/team/hr/team-members") as any;
+      const res = await apiClient.get("/hr/team-members") as any;
       const members = res.data || [];
       const todayStr = new Date().toISOString().split('T')[0];
       
@@ -48,7 +48,7 @@ export function startCronJobs(apiClient: CoreApiClient, sendMessage: (chatId: nu
   cron.schedule('0 18 * * 1-6', async () => {
     try {
       console.log("Chạy Cron buổi chiều: 18:00");
-      const res = await apiClient.get("/internal/v1/team/hr/team-members") as any;
+      const res = await apiClient.get("/hr/team-members") as any;
       const members = res.data || [];
       
       for (const m of members) {

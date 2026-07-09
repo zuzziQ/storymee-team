@@ -6,4 +6,4 @@ COPY 2-MCP-Core/storymeeteam-mcp ./2-MCP-Core/storymeeteam-mcp
 WORKDIR /app/2-MCP-Core/storymeeteam-mcp
 RUN npm install
 RUN npm run build
-CMD ["node", "build/telegram_agent.js"]
+CMD ["node", "build/index.js"]

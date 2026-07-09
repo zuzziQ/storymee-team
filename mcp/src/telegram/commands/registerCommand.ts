@@ -58,7 +58,7 @@ export const registerCommand: TelegramCommand = {
             // Nếu email tồn tại nhưng chưa liên kết Telegram -> Thực hiện liên kết hồ sơ sẵn có
             await sendMessage(chatId, "⏳ Đang liên kết tài khoản Telegram của bạn với hồ sơ sẵn có...");
             try {
-                await apiClient.post("/internal/v1/team/hr/team-members", {
+                await apiClient.post("/hr/team-members", {
                   ...existingEmailMember,
                   telegramUsername: username,
                   telegramChatId: chatId
@@ -75,7 +75,7 @@ export const registerCommand: TelegramCommand = {
       // 3. Nếu là email hoàn toàn mới -> Tạo mới nhân sự mới
       await sendMessage(chatId, "⏳ Đang tạo hồ sơ nhân sự mới trên hệ thống...");
       try {
-          await apiClient.post("/internal/v1/team/hr/team-members", {
+          await apiClient.post("/hr/team-members", {
             email,
             fullName,
             telegramUsername: username,
