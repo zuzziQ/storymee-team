@@ -648,11 +648,11 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
               ? aiResponse.leavePayload
               : aiResponse.action === 'check_in_out'
                 ? aiResponse.checkInOutPayload
-                : aiResponse.action === 'breakdown_task'
+                : aiResponse.action === 'breakdown_issue'
                   ? aiResponse.breakdownPayload
-                  : aiResponse.action === 'update_subtasks'
+                  : aiResponse.action === 'update_sub_issues'
                     ? aiResponse.updateSubtasksPayload
-                    : aiResponse.action === 'request_task_approval'
+                    : aiResponse.action === 'request_issue_approval'
                       ? aiResponse.approvalPayload
                       : aiResponse.action === 'create_project'
                         ? aiResponse.projectPayload
