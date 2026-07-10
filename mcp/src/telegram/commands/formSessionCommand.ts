@@ -332,13 +332,17 @@ export const formSessionCommand: TelegramCommand = {
       });
       
       try {
-        await apiClient.post(API_ROUTES.PLANE.ISSUES, {
+        const resJson = await apiClient.post(API_ROUTES.PLANE.ISSUES, {
           title: session.taskTitle,
           description: description,
           projectId: session.projectId,
           assigneeId: ctx.member.id,
           priority: 'medium'
-        });
+        }) as any;
+        
+        if (resJson.success === false) {
+          throw new Error(resJson.message || "Lỗi tạo issue tại Core API Service.");
+        }
         
         await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
           method: "POST",

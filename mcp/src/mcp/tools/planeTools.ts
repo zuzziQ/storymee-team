@@ -97,8 +97,12 @@ case "create_issue": {
                     priority: priority ? priority.toLowerCase() : "medium",
                     targetDate: target_date || undefined
                   })) as any;
+            
+            if (resJson.success === false) {
+              throw new Error(resJson.message || "Lỗi tạo issue tại Core API Service.");
+            }
           } catch (err: any) {
-            throw new McpError(ErrorCode.InternalError, "Lỗi tạo issue tại Core API Service.");
+            throw new McpError(ErrorCode.InternalError, err.message || "Lỗi tạo issue tại Core API Service.");
           }
       
       const newIssue = resJson.data;
