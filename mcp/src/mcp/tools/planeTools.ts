@@ -225,12 +225,8 @@ case "update_issue": {
       
       let foundSubtask: any = null;
       dbTasks.forEach((t: any) => {
-        if (Array.isArray(t.subTasks)) {
-          t.subTasks.forEach((sub: any) => {
-            if (sub.id.toLowerCase() === task_id.toLowerCase() || (sub.planeTaskId && sub.planeTaskId.toLowerCase() === task_id.toLowerCase())) {
-              foundSubtask = sub;
-            }
-          });
+        if (t.id.toLowerCase() === task_id.toLowerCase() || (t.planeTaskId && t.planeTaskId.toLowerCase() === task_id.toLowerCase())) {
+          foundSubtask = t;
         }
       });
 
@@ -246,11 +242,6 @@ case "update_issue": {
         );
       }
 
-      let apiStatus = undefined;
-      if (status) {
-        apiStatus = (status === 'Todo' || status === 'pending') ? 'pending' : (status === 'In Progress' || status === 'in_progress' || status === 'working') ? 'in_progress' : 'done';
-      }
-
       let assigneeId = undefined;
       if (assignee) {
         const targetMem = members.find((m: any) => m.fullName.toLowerCase().includes(assignee.toLowerCase()));
@@ -258,12 +249,12 @@ case "update_issue": {
       }
 
       try {
-            await apiClient.patch(`${API_ROUTES.HR.SUBTASKS}/${foundSubtask.id}`, {
-                    status: apiStatus,
+            await apiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${foundSubtask.id}`, {
+                    status: status ? status : undefined,
                     assigneeId: assigneeId,
                     priority: priority ? priority.toLowerCase() : undefined,
-                    deadline: deadline || undefined,
-                    estimatedHours: estimate || undefined
+                    targetDate: deadline || undefined,
+                    estimateHours: estimate || undefined
                   });
           } catch (err: any) {
             throw new McpError(ErrorCode.InternalError, "Lỗi cập nhật task tại Core API.");

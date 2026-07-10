@@ -143,6 +143,7 @@ export class PlaneController {
                     assigneeId: data.assigneeId,
                     parentId: data.parentId,
                     priority: data.priority || 'medium',
+                    estimateHours: data.estimateHours ? parseFloat(data.estimateHours) : null,
                     startDate: data.startDate ? new Date(data.startDate) : null,
                     targetDate: data.targetDate ? new Date(data.targetDate) : null,
                 }
@@ -158,14 +159,32 @@ export class PlaneController {
             const { id } = req.params as { id: string };
             const data = req.body as any;
 
+            let finalStateId = data.stateId;
+            if (data.status && !finalStateId) {
+                const issue = await prisma.plIssue.findUnique({ where: { id }, include: { Project: { include: { states: true } } } });
+                if (issue && issue.Project.states) {
+                    const statusLower = data.status.toLowerCase();
+                    const stateObj = issue.Project.states.find((s: any) => 
+                        s.name.toLowerCase() === statusLower || 
+                        (statusLower === 'todo' && s.group === 'unstarted') ||
+                        (statusLower === 'pending' && s.group === 'unstarted') ||
+                        ((statusLower === 'in progress' || statusLower === 'in_progress') && s.group === 'started') ||
+                        (statusLower === 'done' && s.group === 'completed')
+                    );
+                    if (stateObj) finalStateId = stateObj.id;
+                }
+            }
+
             const updated = await prisma.plIssue.update({
                 where: { id },
                 data: {
                     title: data.title,
                     description: data.description,
-                    stateId: data.stateId,
+                    stateId: finalStateId,
                     assigneeId: data.assigneeId,
+                    parentId: data.parentId,
                     priority: data.priority,
+                    estimateHours: data.estimateHours !== undefined ? parseFloat(data.estimateHours) : undefined,
                     targetDate: data.targetDate ? new Date(data.targetDate) : undefined,
                     startDate: data.startDate ? new Date(data.startDate) : undefined
                 }

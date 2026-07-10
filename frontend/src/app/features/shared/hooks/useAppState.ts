@@ -459,8 +459,11 @@ export function useAppState() {
       const subtaskId = task.dbId || task.id;
       
       await coreApiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${subtaskId}`, {
-        stateId: undefined, // We'll need a way to map to actual stateIds if needed, but for now Plane backend will use status mapping internally or we rely on the backend patch
-        priority: task.priority.toLowerCase()
+        status: task.status,
+        assigneeId: matchedMember ? matchedMember.id : undefined,
+        priority: task.priority ? task.priority.toLowerCase() : undefined,
+        targetDate: task.deadline ? new Date(task.deadline).toISOString() : undefined,
+        estimateHours: task.estimate ? task.estimate : undefined
       });
 
       await fetchDbData();
@@ -528,7 +531,8 @@ export function useAppState() {
         title,
         priority: priority.toLowerCase(),
         assigneeId: matchedMember ? matchedMember.id : null,
-        projectId: targetProjectId
+        projectId: targetProjectId,
+        estimateHours: estimate || undefined
       });
       await fetchDbData();
     } catch (err) {
