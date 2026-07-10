@@ -59,6 +59,10 @@ export async function handleTelegramMessage(message: {
     console.error("Lỗi prefetch tasks:", err);
     return null;
   });
+  const prefetchProjectsPromise = apiClient.get("/internal/v1/team/plane/projects").catch(err => {
+    console.error("Lỗi prefetch projects:", err);
+    return null;
+  });
 
   // A. Định danh người dùng qua Postgres API
   let member: any = null;
@@ -582,10 +586,18 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
       console.error("Lỗi fetch tasks/projects cho AI context:", err);
     }
   
-    projects = dbTasks.map((t: any) => ({
-      id: t.id,
-      title: t.title
-    }));
+    try {
+      const projData = await prefetchProjectsPromise;
+      if (projData && projData.data) {
+        projects = projData.data.map((p: any) => ({
+          id: p.id,
+          title: p.name,
+          identifier: p.identifier
+        }));
+      }
+    } catch (err) {
+      console.error("Lỗi parse projects cho AI context:", err);
+    }
   }
 
   // F. Định tuyến cuộc gọi đến OmniRouter AI
