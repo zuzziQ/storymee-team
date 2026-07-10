@@ -353,6 +353,7 @@ async function handleCallbackQuery(callbackQuery) {
                     startDate: payload.startDate,
                     endDate: payload.endDate,
                     leaveType: payload.leaveType,
+                    session: payload.session,
                     reason: payload.reason || "Xin nghỉ phép qua Bot Telegram"
                 }, actionMember);
                 const requestId = result.requestId;
@@ -663,74 +664,66 @@ async function handleCallbackQuery(callbackQuery) {
         catch (e) { }
         return;
     }
-    if (data.startsWith("submit_leave:")) {
+    if (data.startsWith("submit_leave:") || data.startsWith("submit_remote:")) {
         const parts = data.split(":");
         const leaveType = parts[1];
         const startDate = parts[2];
         const endDate = parts[3];
         const reason = parts.slice(4).join(":"); // Hỗ trợ lý do có dấu hai chấm
         try {
+            const result = await (0, index_1.executeMcpTool)("submit_leave_request", {
+                startDate: startDate,
+                endDate: endDate,
+                leaveType: leaveType,
+                reason: reason || "Xin nghỉ phép qua Bot Telegram"
+            }, member);
+            const requestId = result.requestId;
             try {
-                const resJson = await apiClient.post("/internal/v1/team/hr/leave-requests", {
-                    telegramUsername: member.telegramUsername,
-                    leaveType,
-                    startDate: startDate + "T00:00:00.000Z",
-                    endDate: endDate + "T23:59:59.000Z",
-                    reason: reason || "Xin nghỉ phép qua Bot Telegram"
+                await (0, fetchAxios_1.fetchAxios)(`${TELEGRAM_API}/editMessageText`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        chat_id: chatId,
+                        message_id: messageId,
+                        text: `🚀 *Hệ thống:* ${result.content[0].text}`,
+                        parse_mode: "Markdown"
+                    })
                 });
-                if (resJson && resJson.data && resJson.data.id) {
-                    const requestId = resJson.data.id;
+            }
+            catch (e) { }
+            const adminEmails = ['kimngan151091@gmail.com', 'lehuyducanh.vn@gmail.com', 'zuzzivn@gmail.com'];
+            for (const targetMem of allMembers) {
+                if ((adminEmails.includes((targetMem.email || "").toLowerCase()) || targetMem.telegramUsername?.toLowerCase() === 'mlq007') && targetMem.telegramChatId) {
+                    const adminChatId = Number(targetMem.telegramChatId);
+                    const leaveTypeStr = leaveType === 'sick' ? 'Nghỉ ốm' : leaveType === 'annual' ? 'Nghỉ phép năm' : leaveType === 'remote' ? 'Đăng ký Remote' : 'Việc riêng';
                     try {
-                        await (0, fetchAxios_1.fetchAxios)(`${TELEGRAM_API}/editMessageText`, {
+                        await (0, fetchAxios_1.fetchAxios)(`${TELEGRAM_API}/sendMessage`, {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({
-                                chat_id: chatId,
-                                message_id: messageId,
-                                text: `🚀 *Hệ thống:* Đã gửi yêu cầu nghỉ phép của bạn thành công! Phiếu đang ở trạng thái *Chờ duyệt*.`,
-                                parse_mode: "Markdown"
+                                chat_id: adminChatId,
+                                text: `🔔 *YÊU CẦU DUYỆT PHÉP MỚI*\n\n• Nhân viên: *${member.fullName}*\n• Loại nghỉ: *${leaveTypeStr}*\n• Thời gian: *${startDate} đến ${endDate}*\n• Lý do: *${reason || 'Không có'}*\n\n👉 Vui lòng duyệt hoặc từ chối yêu cầu này dưới đây:`,
+                                parse_mode: "Markdown",
+                                reply_markup: {
+                                    inline_keyboard: [
+                                        [
+                                            { text: "✅ Duyệt nghỉ", callback_data: `approve_leave:${requestId}` },
+                                            { text: "❌ Từ chối", callback_data: `reject_leave:${requestId}` }
+                                        ]
+                                    ]
+                                }
                             })
                         });
                     }
-                    catch (e) { }
-                    const adminEmails = ['kimngan151091@gmail.com', 'lehuyducanh.vn@gmail.com', 'zuzzivn@gmail.com'];
-                    for (const targetMem of allMembers) {
-                        if ((adminEmails.includes((targetMem.email || "").toLowerCase()) || targetMem.telegramUsername?.toLowerCase() === 'mlq007') && targetMem.telegramChatId) {
-                            const adminChatId = Number(targetMem.telegramChatId);
-                            const leaveTypeStr = leaveType === 'sick' ? 'Nghỉ ốm' : leaveType === 'annual' ? 'Nghỉ phép năm' : leaveType === 'remote' ? 'Đăng ký Remote' : 'Việc riêng';
-                            try {
-                                await (0, fetchAxios_1.fetchAxios)(`${TELEGRAM_API}/sendMessage`, {
-                                    method: "POST",
-                                    headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({
-                                        chat_id: adminChatId,
-                                        text: `🔔 *YÊU CẦU DUYỆT PHÉP MỚI*\n\n• Nhân viên: *${member.fullName}*\n• Loại nghỉ: *${leaveTypeStr}*\n• Thời gian: *${startDate} đến ${endDate}*\n• Lý do: *${reason || 'Không có'}*\n\n👉 Vui lòng duyệt hoặc từ chối yêu cầu này dưới đây:`,
-                                        parse_mode: "Markdown",
-                                        reply_markup: {
-                                            inline_keyboard: [
-                                                [
-                                                    { text: "✅ Duyệt nghỉ", callback_data: `approve_leave:${requestId}` },
-                                                    { text: "❌ Từ chối", callback_data: `reject_leave:${requestId}` }
-                                                ]
-                                            ]
-                                        }
-                                    })
-                                });
-                            }
-                            catch (err) {
-                                console.error("Lỗi gửi tin nhắn duyệt cho admin:", err);
-                            }
-                        }
+                    catch (err) {
+                        console.error("Lỗi gửi tin nhắn duyệt cho admin:", err);
                     }
                 }
-            }
-            catch (err) {
-                await (0, telegram_agent_1.sendMessage)(chatId, "❌ Lỗi: Cổng HR Service không thể khởi tạo phiếu nghỉ phép.");
-                throw err;
             }
         }
         catch (err) {
             console.error("Lỗi gọi API leave-request:", err);
+            await (0, telegram_agent_1.sendMessage)(chatId, `❌ Lỗi: ${err.message || "Không thể khởi tạo phiếu nghỉ phép."}`);
         }
     }
     else if (data.startsWith("approve_issue:") || data.startsWith("reject_issue:")) {
@@ -740,7 +733,11 @@ async function handleCallbackQuery(callbackQuery) {
         const reqType = parts[2] || 'archive'; // fallback if undefined
         try {
             try {
-                await apiClient.post(`/internal/v1/team/hr/tasks/${taskId}/approve`, { type: reqType, decision: action });
+                await (0, index_1.executeMcpTool)("approve_issue_request", {
+                    task_id: taskId,
+                    type: reqType,
+                    decision: action
+                }, member);
                 const actionStr = action === "approve" ? "Đã Phê duyệt" : "Đã Từ chối";
                 const emoji = action === "approve" ? "✅" : "❌";
                 await (0, fetchAxios_1.fetchAxios)(`${TELEGRAM_API}/editMessageText`, {
@@ -808,17 +805,6 @@ async function handleCallbackQuery(callbackQuery) {
                     });
                 }
                 catch (e) { }
-                const leaveReq = resJson?.data?.leaveRequest;
-                if (resJson?.status === 'success' && leaveReq && leaveReq.memberId) {
-                    const emp = allMembers.find((m) => m.id === leaveReq.memberId);
-                    if (emp && emp.telegramChatId) {
-                        const empChatId = Number(emp.telegramChatId);
-                        const startD = leaveReq.startDate.split('T')[0];
-                        const endD = leaveReq.endDate.split('T')[0];
-                        const typeStr = leaveReq.leaveType === 'sick' ? 'Nghỉ ốm' : leaveReq.leaveType === 'annual' ? 'Nghỉ phép năm' : leaveReq.leaveType === 'remote' ? 'Làm Remote' : 'Việc riêng';
-                        await (0, telegram_agent_1.sendMessage)(empChatId, `🔔 *CẬP NHẬT TRẠNG THÁI PHÉP PHÉP*\n\nYêu cầu ${typeStr} từ ngày *${startD} đến ${endD}* của bạn đã được Admin *${member.fullName}* xử lý: *${actionStr}* ${emoji}`);
-                    }
-                }
             }
             catch (err) {
                 await (0, telegram_agent_1.sendMessage)(chatId, "❌ Lỗi: Cổng HR Service phản hồi thất bại khi thực thi duyệt phép.");

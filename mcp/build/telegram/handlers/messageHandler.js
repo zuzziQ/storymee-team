@@ -77,6 +77,10 @@ async function handleTelegramMessage(message) {
         console.error("Lỗi prefetch tasks:", err);
         return null;
     });
+    const prefetchProjectsPromise = apiClient.get("/internal/v1/team/plane/projects").catch(err => {
+        console.error("Lỗi prefetch projects:", err);
+        return null;
+    });
     // A. Định danh người dùng qua Postgres API
     let member = null;
     let allMembers = [];
@@ -212,9 +216,8 @@ async function handleTelegramMessage(message) {
     if (lowerText === "/team_status" || lowerText === "trạng thái checkin") {
         await (0, telegram_agent_1.sendMessage)(chatId, "🔍 Đang truy vấn trạng thái check-in hôm nay...");
         try {
-            const res = await (0, fetchAxios_1.fetchAxios)(CORE_API_URL + "/hr/attendance");
-            const json = await res.json();
-            const allRecords = Array.isArray(json) ? json : (json?.data || []);
+            const resJson = await apiClient.get(api_client_1.API_ROUTES.HR.ATTENDANCE);
+            const allRecords = Array.isArray(resJson) ? resJson : (resJson?.data || []);
             const today = new Date().toISOString().split('T')[0];
             const todayRecords = allRecords.filter((r) => (r.date || "").startsWith(today));
             if (todayRecords.length === 0) {
@@ -561,10 +564,19 @@ async function handleTelegramMessage(message) {
         catch (err) {
             console.error("Lỗi fetch tasks/projects cho AI context:", err);
         }
-        projects = dbTasks.map((t) => ({
-            id: t.id,
-            title: t.title
-        }));
+        try {
+            const projData = await prefetchProjectsPromise;
+            if (projData && projData.data) {
+                projects = projData.data.map((p) => ({
+                    id: p.id,
+                    title: p.name,
+                    identifier: p.identifier
+                }));
+            }
+        }
+        catch (err) {
+            console.error("Lỗi parse projects cho AI context:", err);
+        }
     }
     // F. Định tuyến cuộc gọi đến OmniRouter AI
     try {
@@ -613,11 +625,11 @@ async function handleTelegramMessage(message) {
                             ? aiResponse.leavePayload
                             : aiResponse.action === 'check_in_out'
                                 ? aiResponse.checkInOutPayload
-                                : aiResponse.action === 'breakdown_task'
+                                : aiResponse.action === 'breakdown_issue'
                                     ? aiResponse.breakdownPayload
-                                    : aiResponse.action === 'update_subtasks'
+                                    : aiResponse.action === 'update_sub_issues'
                                         ? aiResponse.updateSubtasksPayload
-                                        : aiResponse.action === 'request_task_approval'
+                                        : aiResponse.action === 'request_issue_approval'
                                             ? aiResponse.approvalPayload
                                             : aiResponse.action === 'create_project'
                                                 ? aiResponse.projectPayload

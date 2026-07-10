@@ -799,20 +799,6 @@ async function handleCallbackQuery(callbackQuery: any) {
             });
           } catch (e) {}
 
-          const leaveReq = resJson?.data?.leaveRequest;
-          if (resJson?.status === 'success' && leaveReq && leaveReq.memberId) {
-            const emp = allMembers.find((m: any) => m.id === leaveReq.memberId);
-            if (emp && emp.telegramChatId) {
-              const empChatId = Number(emp.telegramChatId);
-              const startD = leaveReq.startDate.split('T')[0];
-              const endD = leaveReq.endDate.split('T')[0];
-              const typeStr = leaveReq.leaveType === 'sick' ? 'Nghỉ ốm' : leaveReq.leaveType === 'annual' ? 'Nghỉ phép năm' : leaveReq.leaveType === 'remote' ? 'Làm Remote' : 'Việc riêng';
-              await sendMessage(
-                empChatId,
-                `🔔 *CẬP NHẬT TRẠNG THÁI PHÉP PHÉP*\n\nYêu cầu ${typeStr} từ ngày *${startD} đến ${endD}* của bạn đã được Admin *${member.fullName}* xử lý: *${actionStr}* ${emoji}`
-              );
-            }
-          }
         } catch (err: any) {
           await sendMessage(chatId, "❌ Lỗi: Cổng HR Service phản hồi thất bại khi thực thi duyệt phép.");
           throw err;

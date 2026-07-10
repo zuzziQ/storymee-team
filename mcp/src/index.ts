@@ -7,6 +7,7 @@ import {
   ErrorCode,
   McpError
 } from "@modelcontextprotocol/sdk/types.js";
+import { sendMessage, getCachedMembers } from "./telegram_agent";
 import * as dotenv from "dotenv";
 import { CoreApiClient, API_ROUTES } from "@storymee/api-client";
 import { connect } from "nats";
@@ -167,6 +168,139 @@ async function main() {
     console.error("[NATS] Heartbeat initialized for storymeeteam-mcp");
   } catch (err: any) {
     console.error("[NATS] Failed to initialize NATS heartbeat:", err.message);
+  }
+
+  // Subscribe to Notifications
+  try {
+    const nc = await connect({ servers: process.env.NATS_URL || "nats://localhost:4222" });
+    nc.subscribe('core.team.leave.request', {
+      callback: async (err, msg) => {
+        if (!err) {
+          try {
+            const data = JSON.parse(msg.data.toString());
+            const leave = data.leaveRequest;
+            const members = await getCachedMembers();
+            const admins = members.filter((m: any) => m.role === 'admin' || m.role === 'hr' || m.role === 'manager' || m.role === 'director' || m.role === 'boss');
+            const startD = leave.startDate.split('T')[0];
+            const endD = leave.endDate.split('T')[0];
+            const typeStr = leave.leaveType === 'sick' ? 'Nghỉ ốm' : leave.leaveType === 'annual' ? 'Nghỉ phép năm' : leave.leaveType === 'remote' ? 'Làm Remote' : 'Việc riêng';
+            
+            const txt = `🔔 *YÊU CẦU XIN NGHỈ PHÉP* 🔔\n\n` +
+                        `👤 Nhân sự: *${leave.member.fullName}*\n` +
+                        `Loại: ${typeStr}\n` +
+                        `Từ ngày: ${startD}\n` +
+                        `Đến ngày: ${endD}\n` +
+                        `Lý do: ${leave.reason}\n\n` +
+                        `Vui lòng duyệt qua Dashboard.`;
+            
+            for (const admin of admins) {
+              if (admin.telegramChatId) {
+                await sendMessage(Number(admin.telegramChatId), txt, {
+                  inline_keyboard: [[
+                    { text: "✅ Duyệt nghỉ", callback_data: `approve_leave:${leave.id}` },
+                    { text: "❌ Từ chối", callback_data: `reject_leave:${leave.id}` }
+                  ]]
+                });
+              }
+            }
+          } catch (e) {
+            console.error('[NATS] Error processing leave request', e);
+          }
+        }
+      }
+    });
+
+    nc.subscribe('core.team.leave.resolved', {
+      callback: async (err, msg) => {
+        if (!err) {
+          try {
+            const data = JSON.parse(msg.data.toString());
+            const leave = data.leaveRequest;
+            if (leave.member && leave.member.telegramChatId) {
+              const startD = leave.startDate.split('T')[0];
+              const endD = leave.endDate.split('T')[0];
+              const typeStr = leave.leaveType === 'sick' ? 'Nghỉ ốm' : leave.leaveType === 'annual' ? 'Nghỉ phép năm' : leave.leaveType === 'remote' ? 'Làm Remote' : 'Việc riêng';
+              let txt = `🔔 *CẬP NHẬT TRẠNG THÁI PHÉP* 🔔\n\n` +
+                        `👤 Nhân sự: *${leave.member.fullName}*\n` +
+                        `Loại: ${typeStr}\n` +
+                        `Từ ngày: ${startD}\nĐến ngày: ${endD}\n\n` +
+                        `Trạng thái: *${leave.status === 'approved' ? 'ĐÃ ĐƯỢC DUYỆT ✅' : 'BỊ TỪ CHỐI ❌'}*`;
+              if (data.handover && data.handover.handoverMember) {
+                 txt += `\n• Chuyển giao việc cho: *${data.handover.handoverMember.fullName}*`;
+              }
+              await sendMessage(Number(leave.member.telegramChatId), txt);
+            }
+          } catch (e) {
+            console.error('[NATS] Error processing leave resolved', e);
+          }
+        }
+      }
+    });
+    
+    nc.subscribe('core.team.task.request_approval', {
+      callback: async (err, msg) => {
+        if (!err) {
+          try {
+            const data = JSON.parse(msg.data.toString());
+            const task = data.task;
+            const members = await getCachedMembers();
+            const admins = members.filter((m: any) => m.role === 'admin' || m.role === 'hr' || m.role === 'manager' || m.role === 'director' || m.role === 'boss');
+            
+            let txt = `🔔 *YÊU CẦU PHÊ DUYỆT TASK* 🔔\n\n` +
+                      `📌 Task: *${task.title}* (${task.planeTaskId || task.id})\n` +
+                      `👤 Loại yêu cầu: ${data.type === 'archive' ? 'Lưu trữ (Archive)' : 'Gia hạn Deadline'}\n` +
+                      `💬 Lý do: ${data.reason || 'Không có lý do'}\n`;
+            if (data.type === 'extend') txt += `⏰ Deadline mới: ${data.newDeadline}\n`;
+            txt += `\nVui lòng duyệt qua Dashboard.`;
+            
+            for (const admin of admins) {
+              if (admin.telegramChatId) {
+                await sendMessage(Number(admin.telegramChatId), txt, {
+                  inline_keyboard: [[
+                    { text: "✅ Duyệt", callback_data: `approve_issue_request:${task.id}:${data.type}:${data.newDeadline || ''}` },
+                    { text: "❌ Từ chối", callback_data: `reject_issue_request:${task.id}:${data.type}` }
+                  ]]
+                });
+              }
+            }
+          } catch (e) {
+            console.error('[NATS] Error processing task approval', e);
+          }
+        }
+      }
+    });
+
+    nc.subscribe('core.team.task.approved', {
+      callback: async (err, msg) => {
+        if (!err) {
+          try {
+            const data = JSON.parse(msg.data.toString());
+            const members = await getCachedMembers();
+            const assignee = members.find((m: any) => m.id === data.task.assigneeId);
+            if (assignee && assignee.telegramChatId) {
+              await sendMessage(Number(assignee.telegramChatId), `✅ *YÊU CẦU ĐƯỢC PHÊ DUYỆT*\n\nAdmin đã duyệt yêu cầu cho Task: *${data.task.title}*`);
+            }
+          } catch (e) {}
+        }
+      }
+    });
+    
+    nc.subscribe('core.team.task.rejected', {
+      callback: async (err, msg) => {
+        if (!err) {
+          try {
+            const data = JSON.parse(msg.data.toString());
+            const members = await getCachedMembers();
+            const assignee = members.find((m: any) => m.id === data.task.assigneeId);
+            if (assignee && assignee.telegramChatId) {
+              await sendMessage(Number(assignee.telegramChatId), `❌ *YÊU CẦU BỊ TỪ CHỐI*\n\nAdmin đã từ chối yêu cầu cho Task: *${data.task.title}*`);
+            }
+          } catch (e) {}
+        }
+      }
+    });
+  } catch (err: any) {
+    console.error("[NATS] Failed to initialize NATS subscribers:", err.message);
   }
 
   // Khởi chạy Telegram Bot Webhook
