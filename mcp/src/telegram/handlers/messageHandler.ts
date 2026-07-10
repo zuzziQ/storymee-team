@@ -146,19 +146,43 @@ export async function handleTelegramMessage(message: {
     }
   }
 
-  // Xử lý các bước nhập Form đăng ký (nghỉ phép/remote)
+  // C. Intercept Global Commands & Buttons để Hủy Session (Tránh kẹt Form)
+  const GLOBAL_COMMANDS = [
+    "/start", "/check", "/team_status", "trạng thái checkin", 
+    "/check_all", "/check_team", "📊 trạng thái thành viên",
+    "👤 hồ sơ của tôi", "/ho_so",
+    "/portal", "🌐 mở web portal",
+    "📁 quản lý dự án & task",
+    "🌅 điểm danh (check-in/out)", "/checkin", "/checkout",
+    "📝 đăng ký nghỉ phép / remote", "/dang_ky", "/nghi_phep", "/remote",
+    "📝 công việc của tôi", "/cong_viec",
+    "📊 hỏi quy chế đãi ngộ", "/quy_che",
+    "/cancel", "hủy", "cancel", "huy"
+  ];
+  if (GLOBAL_COMMANDS.includes(lowerText) || lowerText.startsWith("/subtask")) {
+    if (userFormSession[chatId]) {
+      delete userFormSession[chatId];
+    }
+  }
+
+  if (lowerText === "/cancel" || lowerText === "hủy" || lowerText === "cancel" || lowerText === "huy") {
+    await sendMessage(chatId, "✅ Đã hủy thao tác hiện tại.", KEYBOARD_MAIN);
+    return;
+  }
+
+  // Xử lý các bước nhập Form đăng ký (nghỉ phép/remote/tạo task/dự án)
   const session = userFormSession[chatId];
   if (session) {
     const { formSessionCommand } = require('../commands/formSessionCommand');
     const ctx = {
-      chatId, username, text, lowerText: text.toLowerCase().trim(), isGroup, member, allMembers, apiClient, message
+      chatId, username, text, lowerText, isGroup, member, allMembers, apiClient, message
     };
     if (await formSessionCommand.execute(ctx)) {
       return;
     }
   }
 
-  if (text.trim() === "/start") {
+  if (lowerText === "/start") {
     chatHistories[chatId] = []; // Reset context chat
     await sendMessage(
       chatId,
