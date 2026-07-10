@@ -219,10 +219,151 @@ export const formSessionCommand: TelegramCommand = {
     }
 
     if (session.step === 'create_project_name') {
-      //...
+      if (!cleanText) {
+        await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chat_id: chatId,
+            text: `❌ Tên Dự án không được để trống! Vui lòng nhập lại **Tên Dự án**:`,
+            reply_markup: { force_reply: true, selective: true }
+          })
+        });
+        return true;
+      }
+      
+      session.projectName = cleanText;
+      session.step = 'create_project_desc';
+      
+      await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: `📝 *TẠO DỰ ÁN MỚI*\n\nVui lòng nhập **Mô tả Dự án** (hoặc gõ "Bỏ qua" nếu không có):`,
+          reply_markup: { force_reply: true, selective: true }
+        })
+      });
+      return true;
     }
+    
     if (session.step === 'create_project_desc') {
-      //...
+      const description = cleanText.toLowerCase() === "bỏ qua" ? "" : cleanText;
+      
+      await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: `⏳ Đang khởi tạo Dự án **${session.projectName}**...`
+        })
+      });
+      
+      try {
+        await apiClient.post("/hr/projects", {
+          name: session.projectName,
+          description: description
+        });
+        
+        await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chat_id: chatId,
+            text: `🎉 **TẠO DỰ ÁN THÀNH CÔNG!**\n\n• Tên Dự án: **${session.projectName}**\n• Mô tả: ${description || "Không có"}\n\nBạn có thể bắt đầu tạo Task và gán cho dự án này!`,
+            reply_markup: KEYBOARD_MAIN
+          })
+        });
+      } catch (err: any) {
+        console.error("Lỗi tạo dự án:", err);
+        await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chat_id: chatId,
+            text: `❌ Lỗi khi tạo dự án: ${err.message || "Lỗi hệ thống"}`
+          })
+        });
+      }
+      
+      delete userFormSession[chatId];
+      return true;
+    }
+    
+    if (session.step === 'create_task_title') {
+      if (!cleanText) {
+        await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chat_id: chatId,
+            text: `❌ Tiêu đề Task không được để trống! Vui lòng nhập lại **Tiêu đề Task**:`,
+            reply_markup: { force_reply: true, selective: true }
+          })
+        });
+        return true;
+      }
+      
+      session.taskTitle = cleanText;
+      session.step = 'create_task_desc';
+      
+      await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: `📝 *TẠO TASK MỚI*\n\nVui lòng nhập **Mô tả chi tiết** cho Task (hoặc gõ "Bỏ qua"):`,
+          reply_markup: { force_reply: true, selective: true }
+        })
+      });
+      return true;
+    }
+    
+    if (session.step === 'create_task_desc') {
+      const description = cleanText.toLowerCase() === "bỏ qua" ? "" : cleanText;
+      
+      await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: `⏳ Đang tạo Task **${session.taskTitle}** và gán cho bạn...`
+        })
+      });
+      
+      try {
+        await apiClient.post("/omnitask/", {
+          title: session.taskTitle,
+          description: description,
+          subtasks: [{ 
+            assigneeId: ctx.member.id,
+            priority: 'medium'
+          }]
+        });
+        
+        await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chat_id: chatId,
+            text: `🎉 **TẠO TASK THÀNH CÔNG!**\n\n• Tiêu đề: **${session.taskTitle}**\n• Người nhận: **${ctx.member.fullName}**\n\nTask đã được thêm vào danh sách công việc của bạn.`,
+            reply_markup: KEYBOARD_MAIN
+          })
+        });
+      } catch (err: any) {
+        console.error("Lỗi tạo task:", err);
+        await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chat_id: chatId,
+            text: `❌ Lỗi khi tạo Task: ${err.message || "Lỗi hệ thống"}`
+          })
+        });
+      }
+      
+      delete userFormSession[chatId];
+      return true;
     }
     
     // Nếu có session nhưng chưa cover hết các step, mặc định return true để chặn chat tự do
