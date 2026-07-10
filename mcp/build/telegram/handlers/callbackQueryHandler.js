@@ -405,14 +405,14 @@ async function handleCallbackQuery(callbackQuery) {
                     }
                 }
             }
-            else if (action === 'update_task') {
+            else if (action === 'update_issue') {
                 let estimateVal = payload.estimate;
                 if (payload.deadline && (!estimateVal || estimateVal === 0)) {
                     const dDate = new Date(payload.deadline);
                     const now = new Date();
                     estimateVal = (0, telegram_agent_1.calculateWorkingHours)(now, dDate);
                 }
-                await (0, index_1.executeMcpTool)("update_task", {
+                await (0, index_1.executeMcpTool)("update_issue", {
                     task_id: payload.id,
                     status: payload.status || undefined,
                     assignee: payload.assignee || undefined,
@@ -434,14 +434,14 @@ async function handleCallbackQuery(callbackQuery) {
                 }
                 catch (e) { }
             }
-            else if (action === 'create_task') {
+            else if (action === 'create_issue') {
                 let estimateVal = payload.estimate;
                 if (payload.deadline && (!estimateVal || estimateVal === 0)) {
                     const dDate = new Date(payload.deadline);
                     const now = new Date();
                     estimateVal = (0, telegram_agent_1.calculateWorkingHours)(now, dDate);
                 }
-                const result = await (0, index_1.executeMcpTool)("create_task", {
+                const result = await (0, index_1.executeMcpTool)("create_issue", {
                     title: payload.title || "Nhiệm vụ mới từ Telegram",
                     project_id: payload.project_id || payload.projectId || payload.project,
                     assignee: payload.assignee || actionMember.fullName,
@@ -502,8 +502,8 @@ async function handleCallbackQuery(callbackQuery) {
                 }
                 catch (e) { }
             }
-            else if (action === 'breakdown_task') {
-                const result = await (0, index_1.executeMcpTool)("breakdown_task", {
+            else if (action === 'breakdown_issue') {
+                const result = await (0, index_1.executeMcpTool)("breakdown_issue", {
                     task_id: payload.task_id
                 }, actionMember);
                 try {
@@ -520,8 +520,8 @@ async function handleCallbackQuery(callbackQuery) {
                 }
                 catch (e) { }
             }
-            else if (action === 'update_subtasks') {
-                const result = await (0, index_1.executeMcpTool)("update_subtasks", {
+            else if (action === 'update_sub_issues') {
+                const result = await (0, index_1.executeMcpTool)("update_sub_issues", {
                     task_id: payload.task_id,
                     titles: payload.titles
                 }, actionMember);
@@ -539,8 +539,8 @@ async function handleCallbackQuery(callbackQuery) {
                 }
                 catch (e) { }
             }
-            else if (action === 'request_task_approval') {
-                const result = await (0, index_1.executeMcpTool)("request_task_approval", {
+            else if (action === 'request_issue_approval') {
+                const result = await (0, index_1.executeMcpTool)("request_issue_approval", {
                     task_id: payload.task_id,
                     type: payload.type,
                     reason: payload.reason || "Không có lý do",
@@ -579,8 +579,8 @@ async function handleCallbackQuery(callbackQuery) {
                                         parse_mode: "Markdown",
                                         reply_markup: {
                                             inline_keyboard: [
-                                                [{ text: "✅ Phê duyệt", callback_data: `approve_task:${payload.task_id}:${payload.type}` }],
-                                                [{ text: "❌ Từ chối", callback_data: `reject_task:${payload.task_id}:${payload.type}` }]
+                                                [{ text: "✅ Phê duyệt", callback_data: `approve_issue:${payload.task_id}:${payload.type}` }],
+                                                [{ text: "❌ Từ chối", callback_data: `reject_issue:${payload.task_id}:${payload.type}` }]
                                             ]
                                         }
                                     })
@@ -593,8 +593,8 @@ async function handleCallbackQuery(callbackQuery) {
                     console.error("Lỗi gửi tin nhắn duyệt task cho admin:", err);
                 }
             }
-            else if (action === 'approve_task_request') {
-                const result = await (0, index_1.executeMcpTool)("approve_task_request", {
+            else if (action === 'approve_issue_request') {
+                const result = await (0, index_1.executeMcpTool)("approve_issue_request", {
                     task_id: payload.task_id,
                     type: payload.type,
                     decision: payload.decision,
@@ -733,9 +733,9 @@ async function handleCallbackQuery(callbackQuery) {
             console.error("Lỗi gọi API leave-request:", err);
         }
     }
-    else if (data.startsWith("approve_task:") || data.startsWith("reject_task:")) {
+    else if (data.startsWith("approve_issue:") || data.startsWith("reject_issue:")) {
         const parts = data.split(":");
-        const action = parts[0] === "approve_task" ? "approve" : "reject";
+        const action = parts[0] === "approve_issue" ? "approve" : "reject";
         const taskId = parts[1];
         const reqType = parts[2] || 'archive'; // fallback if undefined
         try {

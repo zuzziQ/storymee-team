@@ -293,15 +293,19 @@ async function handleTelegramMessage(message) {
             dbTasks = Array.isArray(json) ? json : (json?.data || []);
             const allMembers = await (0, telegram_agent_1.getCachedMembers)();
             dbTasks.forEach((sub) => {
-                const memberName = (allMembers || []).find((m) => m.id === sub.assigneeId)?.fullName || sub.Assignee?.fullName || 'Không rõ';
+                const memberName = (allMembers || []).find((m) => m.id === sub.assigneeId)?.fullName || sub.Assignee?.fullName || 'Chưa phân công';
                 let st = sub.State?.name || 'Todo';
                 mappedTasks.push({
                     title: sub.title,
                     status: st,
-                    deadline: sub.targetDate ? sub.targetDate.split('T')[0] : 'Chưa có',
+                    deadline: sub.targetDate ? sub.targetDate.split('T')[0] : 'Chưa đặt',
                     rawDeadline: sub.targetDate ? new Date(sub.targetDate) : null,
                     assignee: memberName,
-                    planeTaskId: sub.id
+                    planeTaskId: sub.id,
+                    parentId: sub.parentId,
+                    sequenceId: sub.sequenceId,
+                    projectIdentifier: sub.Project?.identifier || 'ID',
+                    subIssues: sub.subIssues || []
                 });
             });
         }
@@ -310,20 +314,21 @@ async function handleTelegramMessage(message) {
             await (0, telegram_agent_1.sendMessage)(chatId, "❌ Lỗi kết nối cổng dữ liệu để tải danh sách công việc.");
             return;
         }
-        if (mappedTasks.length === 0) {
+        // Chỉ hiển thị các task cha
+        const parentTasks = mappedTasks.filter(t => t.parentId === null);
+        if (parentTasks.length === 0) {
             await (0, telegram_agent_1.sendMessage)(chatId, "📭 Hiện không có công việc nào trên hệ thống.");
             return;
         }
-        // Sắp xếp: In Review → Quá hạn → theo deadline tăng dần. Ẩn Done.
         const now = new Date();
         now.setHours(0, 0, 0, 0);
         // Lọc bỏ Done
-        const activeTasks = mappedTasks.filter(t => t.status !== 'Done');
+        const activeTasks = parentTasks.filter(t => t.status !== 'Done');
         activeTasks.sort((a, b) => {
             const aReview = a.status === 'In Review';
             const bReview = b.status === 'In Review';
             if (aReview !== bReview)
-                return aReview ? -1 : 1; // In Review lên đầu
+                return aReview ? -1 : 1;
             const aOverdue = a.rawDeadline && a.rawDeadline < now;
             const bOverdue = b.rawDeadline && b.rawDeadline < now;
             if (aOverdue && !bOverdue)
@@ -338,12 +343,11 @@ async function handleTelegramMessage(message) {
                 return 0;
             return a.rawDeadline.getTime() - b.rawDeadline.getTime();
         });
-        const doneCount = mappedTasks.filter(t => t.status === 'Done').length;
+        const doneCount = parentTasks.filter(t => t.status === 'Done').length;
         const overdueCount = activeTasks.filter(t => t.rawDeadline && t.rawDeadline < now).length;
         const reviewCount = activeTasks.filter(t => t.status === 'In Review').length;
         let reportMsg = `📊 *BÁO CÁO TIẾN ĐỘ ĐỘI NGŨ*\n`
-            + `🔵 Review: *${reviewCount}* | 🔴 Quá hạn: *${overdueCount}* | 🟢 Done: *${doneCount}* | 📋 Tổng đang mở: *${activeTasks.length}*\n`
-            + `${'─'.repeat(30)}\n`;
+            + `🔵 Review: ${reviewCount} | 🔴 Quá hạn: ${overdueCount} | 🟢 Done: ${doneCount} | 📋 Đang mở: ${activeTasks.length}\n`;
         for (const task of activeTasks) {
             const isOverdue = task.rawDeadline && task.rawDeadline < now;
             let emoji = '⚪';
@@ -353,13 +357,19 @@ async function handleTelegramMessage(message) {
                 emoji = '🔵';
             else if (task.status === 'In Progress')
                 emoji = '🟡';
-            else if (task.status === 'Todo')
-                emoji = '⚪';
-            const dlText = task.deadline
-                ? (isOverdue ? `📅 ${task.deadline} ⚠️ QUÁ HẠN` : `📅 ${task.deadline}`)
+            else if (task.status === 'Done')
+                emoji = '🟢';
+            const dlText = task.deadline !== 'Chưa đặt'
+                ? (isOverdue ? `📅 ${task.deadline} ⚠️ *QUÁ HẠN*` : `📅 ${task.deadline}`)
                 : '📅 Chưa đặt';
-            reportMsg += `\n${emoji} *${task.planeTaskId}*: ${task.title}\n`;
-            reportMsg += `   👤 ${task.assignee}  |  \`${task.status}\`  ${dlText}\n`;
+            const shortId = `*${task.projectIdentifier}-${task.sequenceId}*`;
+            reportMsg += `\n${emoji} ${shortId}: ${task.title}\n`;
+            reportMsg += `   👤 *${task.assignee}*  |  \`${task.status}\`  |  ${dlText}\n`;
+            if (task.subIssues && task.subIssues.length > 0) {
+                const totalSubs = task.subIssues.length;
+                const doneSubs = task.subIssues.filter((s) => s.State?.name === 'Done').length;
+                reportMsg += `   ↳ Tiến độ subtask: ${doneSubs}/${totalSubs} hoàn thành\n`;
+            }
             if (reportMsg.length > 3500) {
                 await (0, telegram_agent_1.sendMessage)(chatId, reportMsg);
                 reportMsg = '';
@@ -534,7 +544,7 @@ async function handleTelegramMessage(message) {
                 dbTasks = tasksData.data || [];
                 dbTasks.forEach((sub) => {
                     mappedTasks.push({
-                        id: sub.id,
+                        id: sub.Project && sub.sequenceId ? `${sub.Project.identifier}-${sub.sequenceId}` : sub.id,
                         title: sub.title,
                         description: sub.description || '',
                         assignee: sub.Assignee ? sub.Assignee.fullName : 'Chưa phân công',
@@ -595,7 +605,7 @@ async function handleTelegramMessage(message) {
                     const result = await (0, index_1.executeMcpTool)("get_team_leaves", aiResponse.teamLeavesPayload || {}, member);
                     await (0, telegram_agent_1.sendMessage)(chatId, result.content[0].text);
                 }
-                else if (['create_project', 'update_task', 'create_task', 'leave_request', 'check_in_out', 'breakdown_task', 'update_subtasks', 'request_task_approval'].includes(aiResponse.action)) {
+                else if (['create_project', 'update_issue', 'create_issue', 'leave_request', 'check_in_out', 'breakdown_issue', 'update_sub_issues', 'request_issue_approval'].includes(aiResponse.action)) {
                     const actionId = Math.random().toString(36).substring(2, 10);
                     telegram_agent_1.actionCache[actionId] = {
                         action: aiResponse.action,
@@ -623,16 +633,16 @@ async function handleTelegramMessage(message) {
                         const cp = aiResponse.checkInOutPayload;
                         confirmMsg = `💡 *ĐỀ XUẤT ĐIỂM DANH:*\n• Trạng thái: *${cp.status === 'present' ? 'Đi làm' : cp.status === 'late' ? 'Đi muộn' : 'Vắng'}*\n• Ghi chú: *${cp.notes || 'Không có'}*${cp.employee_name ? `\n• Nhân sự: *${cp.employee_name}*` : ''}`;
                     }
-                    else if (aiResponse.action === 'breakdown_task') {
+                    else if (aiResponse.action === 'breakdown_issue') {
                         const bp = aiResponse.breakdownPayload;
                         confirmMsg = `💡 *ĐỀ XUẤT PHÂN RÃ CÔNG VIỆC ${bp.task_id}:*\n• Hệ thống AI sẽ tự động sinh danh sách việc con và lưu vào DB.`;
                     }
-                    else if (aiResponse.action === 'update_subtasks') {
+                    else if (aiResponse.action === 'update_sub_issues') {
                         const up = aiResponse.updateSubtasksPayload;
                         const listStr = up.titles ? up.titles.map((t) => `  • ${t}`).join('\n') : '';
                         confirmMsg = `💡 *ĐỀ XUẤT CẬP NHẬT CÁC CÔNG VIỆC CON CHO ${up.task_id}:*\n${listStr}\n\n👉 Bấm Xác nhận sẽ xóa toàn bộ việc con cũ của task này và thay bằng danh sách trên.`;
                     }
-                    else if (aiResponse.action === 'update_task') {
+                    else if (aiResponse.action === 'update_issue') {
                         const tp = aiResponse.taskPayload;
                         const statusText = tp.status ? `\n• Trạng thái mới: *${tp.status}*` : '';
                         const assigneeText = tp.assignee ? `\n• Người phụ trách: *${tp.assignee}*` : '';
@@ -641,7 +651,7 @@ async function handleTelegramMessage(message) {
                         const priorityText = tp.priority ? `\n• Độ ưu tiên: *${tp.priority}*` : '';
                         confirmMsg = `💡 *ĐỀ XUẤT CẬP NHẬT CÔNG VIỆC ${tp.id}:*${statusText}${assigneeText}${deadlineText}${estimateText}${priorityText}`;
                     }
-                    else if (aiResponse.action === 'request_task_approval') {
+                    else if (aiResponse.action === 'request_issue_approval') {
                         const ap = aiResponse.approvalPayload;
                         confirmMsg = `💡 *ĐỀ XUẤT XIN DUYỆT CÔNG VIỆC ${ap.task_id}:*\n• Yêu cầu: *${ap.type}*\n• Hạn chót xin dời (nếu có): *${ap.new_deadline || 'Không'}*\n• Ghi chú: *${ap.reason || 'Không'}*`;
                     }

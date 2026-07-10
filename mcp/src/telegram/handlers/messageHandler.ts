@@ -565,7 +565,7 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
         
         dbTasks.forEach((sub: any) => {
           mappedTasks.push({
-            id: sub.id,
+            id: sub.Project && sub.sequenceId ? `${sub.Project.identifier}-${sub.sequenceId}` : sub.id,
             title: sub.title,
             description: sub.description || '',
             assignee: sub.Assignee ? sub.Assignee.fullName : 'Chưa phân công',
@@ -628,7 +628,7 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
         } else if (aiResponse.action === 'get_team_leaves') {
           const result = await executeMcpTool("get_team_leaves", aiResponse.teamLeavesPayload || {}, member);
           await sendMessage(chatId, result.content[0].text);
-        } else if (['create_project', 'update_task', 'create_task', 'leave_request', 'check_in_out', 'breakdown_task', 'update_subtasks', 'request_task_approval'].includes(aiResponse.action)) {
+        } else if (['create_project', 'update_issue', 'create_issue', 'leave_request', 'check_in_out', 'breakdown_issue', 'update_sub_issues', 'request_issue_approval'].includes(aiResponse.action)) {
           const actionId = Math.random().toString(36).substring(2, 10);
           actionCache[actionId] = {
             action: aiResponse.action,
@@ -655,14 +655,14 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
           } else if (aiResponse.action === 'check_in_out') {
             const cp = aiResponse.checkInOutPayload;
             confirmMsg = `💡 *ĐỀ XUẤT ĐIỂM DANH:*\n• Trạng thái: *${cp.status === 'present' ? 'Đi làm' : cp.status === 'late' ? 'Đi muộn' : 'Vắng'}*\n• Ghi chú: *${cp.notes || 'Không có'}*${cp.employee_name ? `\n• Nhân sự: *${cp.employee_name}*` : ''}`;
-          } else if (aiResponse.action === 'breakdown_task') {
+          } else if (aiResponse.action === 'breakdown_issue') {
             const bp = aiResponse.breakdownPayload;
             confirmMsg = `💡 *ĐỀ XUẤT PHÂN RÃ CÔNG VIỆC ${bp.task_id}:*\n• Hệ thống AI sẽ tự động sinh danh sách việc con và lưu vào DB.`;
-          } else if (aiResponse.action === 'update_subtasks') {
+          } else if (aiResponse.action === 'update_sub_issues') {
             const up = aiResponse.updateSubtasksPayload;
             const listStr = up.titles ? up.titles.map((t: string) => `  • ${t}`).join('\n') : '';
             confirmMsg = `💡 *ĐỀ XUẤT CẬP NHẬT CÁC CÔNG VIỆC CON CHO ${up.task_id}:*\n${listStr}\n\n👉 Bấm Xác nhận sẽ xóa toàn bộ việc con cũ của task này và thay bằng danh sách trên.`;
-          } else if (aiResponse.action === 'update_task') {
+          } else if (aiResponse.action === 'update_issue') {
             const tp = aiResponse.taskPayload;
             const statusText = tp.status ? `\n• Trạng thái mới: *${tp.status}*` : '';
             const assigneeText = tp.assignee ? `\n• Người phụ trách: *${tp.assignee}*` : '';
@@ -670,7 +670,7 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
             const estimateText = tp.estimate ? `\n• Ước tính mới: *${tp.estimate}h*` : '';
             const priorityText = tp.priority ? `\n• Độ ưu tiên: *${tp.priority}*` : '';
             confirmMsg = `💡 *ĐỀ XUẤT CẬP NHẬT CÔNG VIỆC ${tp.id}:*${statusText}${assigneeText}${deadlineText}${estimateText}${priorityText}`;
-          } else if (aiResponse.action === 'request_task_approval') {
+          } else if (aiResponse.action === 'request_issue_approval') {
             const ap = aiResponse.approvalPayload;
             confirmMsg = `💡 *ĐỀ XUẤT XIN DUYỆT CÔNG VIỆC ${ap.task_id}:*\n• Yêu cầu: *${ap.type}*\n• Hạn chót xin dời (nếu có): *${ap.new_deadline || 'Không'}*\n• Ghi chú: *${ap.reason || 'Không'}*`;
           } else if (aiResponse.action === 'create_project') {

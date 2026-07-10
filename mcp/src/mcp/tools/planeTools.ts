@@ -67,7 +67,7 @@ export const PLANE_TOOLS_SCHEMA = [
     }
   },
   {
-    name: "update_task",
+    name: "update_issue",
     description: "Cập nhật các thông tin của một task trên Kanban (trạng thái, người gán, ước lượng, độ ưu tiên, hạn chót).",
     inputSchema: {
       type: "object",
@@ -83,7 +83,7 @@ export const PLANE_TOOLS_SCHEMA = [
     }
   },
   {
-    name: "get_task_details",
+    name: "get_issue_details",
     description: "Truy vấn thông tin chi tiết của một công việc (task/subtask) cụ thể theo mã ID (ví dụ: T-102).",
     inputSchema: {
       type: "object",
@@ -94,7 +94,7 @@ export const PLANE_TOOLS_SCHEMA = [
     }
   },
   {
-    name: "breakdown_task",
+    name: "breakdown_issue",
     description: "Phân rã một công việc lớn (ví dụ: T-103) thành các công việc con (subtasks) nhỏ hơn bằng AI và tự động lưu vào database, gán cho cùng một nhân sự.",
     inputSchema: {
       type: "object",
@@ -105,7 +105,7 @@ export const PLANE_TOOLS_SCHEMA = [
     }
   },
   {
-    name: "update_subtasks",
+    name: "update_sub_issues",
     description: "Cập nhật hoặc thay thế toàn bộ danh sách công việc con (subtasks) của một công việc lớn (ví dụ: T-103) bằng danh sách tiêu đề mới, tự động xóa các việc con cũ của task này và gán các việc con mới cho cùng một nhân sự.",
     inputSchema: {
       type: "object",
@@ -117,7 +117,7 @@ export const PLANE_TOOLS_SCHEMA = [
     }
   },
   {
-    name: "request_task_approval",
+    name: "request_issue_approval",
     description: "Gửi yêu cầu xin duyệt liên quan đến task (ví dụ: xin dời deadline, xin xoá/lưu trữ task).",
     inputSchema: {
       type: "object",
@@ -131,7 +131,7 @@ export const PLANE_TOOLS_SCHEMA = [
     }
   },
   {
-    name: "approve_task_request",
+    name: "approve_issue_request",
     description: "Duyệt hoặc từ chối yêu cầu của nhân viên (ví dụ: đồng ý dời deadline, đồng ý lưu trữ task). CHỈ DÀNH CHO ADMIN/BOSS.",
     inputSchema: {
       type: "object",
@@ -145,6 +145,35 @@ export const PLANE_TOOLS_SCHEMA = [
     }
   }
 ];
+
+function findIssueHelper(dbTasks: any[], taskIdStr: string): any {
+    if (!taskIdStr) return null;
+    const str = taskIdStr.toLowerCase();
+    
+    // 1. Direct match by UUID or planeTaskId
+    let found = dbTasks.find((t: any) => 
+        (t.id && t.id.toLowerCase() === str) || 
+        (t.planeTaskId && t.planeTaskId.toLowerCase() === str)
+    );
+    if (found) return found;
+
+    // 2. Match Short ID (e.g. STO34-3)
+    if (taskIdStr.includes('-')) {
+        const parts = taskIdStr.split('-');
+        if (parts.length >= 2) {
+            const ident = parts[0].toUpperCase();
+            const seqId = parseInt(parts[1], 10);
+            if (!isNaN(seqId)) {
+                const parentFound = dbTasks.find((t: any) => t.sequenceId === seqId && (t.Project?.identifier || '').toUpperCase() === ident);
+                if (parentFound) {
+                    if (parts.length === 2) return parentFound;
+                }
+            }
+        }
+    }
+    
+    return null;
+}
 
 export async function executePlaneTool(name: string, args: any, user: any, isBoss: boolean, apiClient: CoreApiClient, members: any[]): Promise<{ content: Array<{ type: string; text: string }> }> {
 
@@ -303,11 +332,48 @@ case "create_issue": {
           }
       }
 
+      let finalProjectId = project_id;
+      if (finalProjectId && finalProjectId.length !== 36) {
+          try {
+              const projRes = (await apiClient.get(API_ROUTES.PLANE.PROJECTS)) as any;
+              const allProjects = projRes.data || [];
+              const foundProj = allProjects.find((p: any) => p.name.toLowerCase() === finalProjectId.toLowerCase() || p.identifier.toLowerCase() === finalProjectId.toLowerCase());
+              
+              if (foundProj) {
+                  finalProjectId = foundProj.id;
+              } else {
+                  // Tạo mới project nếu không tồn tại
+                  let ident = finalProjectId.replace(/[^A-Za-z0-9]/g, '').substring(0, 3).toUpperCase();
+                  if (ident.length < 3) ident = "PRJ";
+                  const newProj = (await apiClient.post(API_ROUTES.PLANE.PROJECTS, {
+                      name: finalProjectId,
+                      description: "Tạo tự động qua MCP",
+                      identifier: ident
+                  })) as any;
+                  if (newProj.success !== false && newProj.data) {
+                      finalProjectId = newProj.data.id;
+                  }
+              }
+          } catch (e) {
+              console.error("Lỗi tự động tạo project:", e);
+          }
+      }
+      
+      // Fallback nếu vẫn không có dự án
+      if (!finalProjectId) {
+          try {
+              const projRes = (await apiClient.get(API_ROUTES.PLANE.PROJECTS)) as any;
+              if (projRes.data && projRes.data.length > 0) {
+                  finalProjectId = projRes.data[0].id;
+              }
+          } catch (e) {}
+      }
+
       let resJson;
           try {
             resJson = (await apiClient.post(API_ROUTES.PLANE.ISSUES, {
                     title,
-                    projectId: project_id,
+                    projectId: finalProjectId,
                     description: "Tạo tự động qua Model Context Protocol (MCP)",
                     assigneeId: targetUser.id,
                     priority: priority ? priority.toLowerCase() : "medium",
@@ -440,12 +506,8 @@ case "update_issue": {
           }
       const dbTasks = tasksData.data || [];
       
-      let foundSubtask: any = null;
-      dbTasks.forEach((t: any) => {
-        if (t.id.toLowerCase() === task_id.toLowerCase() || (t.planeTaskId && t.planeTaskId.toLowerCase() === task_id.toLowerCase())) {
-          foundSubtask = t;
-        }
-      });
+      let foundSubtask: any = findIssueHelper(dbTasks, task_id);
+
 
       if (!foundSubtask) {
         throw new McpError(ErrorCode.InvalidParams, `Không tìm thấy công việc mã ID ${task_id}.`);
@@ -494,18 +556,9 @@ case "get_issue_details": {
           }
       const dbTasks = tasksData.data || [];
       
-      let foundSubtask: any = null;
-      let parentTask: any = null;
-      dbTasks.forEach((t: any) => {
-        if (Array.isArray(t.subTasks)) {
-          t.subTasks.forEach((sub: any) => {
-            if (sub.id.toLowerCase() === task_id.toLowerCase() || (sub.planeTaskId && sub.planeTaskId.toLowerCase() === task_id.toLowerCase())) {
-              foundSubtask = sub;
-              parentTask = t;
-            }
-          });
-        }
-      });
+      let foundSubtask: any = findIssueHelper(dbTasks, task_id);
+      let parentTask: any = foundSubtask && foundSubtask.parentId ? dbTasks.find((t: any) => t.id === foundSubtask.parentId) : null;
+
 
       if (!foundSubtask) {
         throw new McpError(ErrorCode.InvalidParams, `Không tìm thấy công việc mã ID ${task_id}.`);
@@ -542,16 +595,8 @@ case "breakdown_issue": {
           }
       const dbTasks = tasksData.data || [];
       
-      let matchedSubtask: any = null;
-      dbTasks.forEach((t: any) => {
-        if (Array.isArray(t.subTasks)) {
-          t.subTasks.forEach((sub: any) => {
-            if (sub.planeTaskId === task_id || sub.id === task_id) {
-              matchedSubtask = { ...sub, projectId: t.id };
-            }
-          });
-        }
-      });
+      let matchedSubtask: any = findIssueHelper(dbTasks, task_id);
+
 
       if (!matchedSubtask) {
         throw new McpError(ErrorCode.InvalidParams, `Không tìm thấy công việc với mã ID ${task_id}.`);
@@ -635,16 +680,8 @@ case "update_sub_issues": {
           }
       const dbTasks = tasksData.data || [];
 
-      let matchedSubtask: any = null;
-      dbTasks.forEach((t: any) => {
-        if (Array.isArray(t.subTasks)) {
-          t.subTasks.forEach((sub: any) => {
-            if (sub.planeTaskId === task_id || sub.id === task_id) {
-              matchedSubtask = { ...sub, projectId: t.id };
-            }
-          });
-        }
-      });
+      let matchedSubtask: any = findIssueHelper(dbTasks, task_id);
+
 
       if (!matchedSubtask) {
         throw new McpError(ErrorCode.InvalidParams, `Không tìm thấy công việc với mã ID ${task_id}.`);
@@ -660,22 +697,16 @@ case "update_sub_issues": {
       }
 
       // 2. Xóa các subtask cũ có tiêu đề bắt đầu bằng [task_id] trong cùng dự án mẹ
-      const deletePromises: Promise<any>[] = [];
-      dbTasks.forEach((t: any) => {
-        if (t.id === matchedSubtask.projectId && Array.isArray(t.subTasks)) {
-          t.subTasks.forEach((sub: any) => {
-            if (sub.title && sub.title.startsWith(`[${task_id}]`)) {
-              deletePromises.push(
+      for (const sub of dbTasks) {
+        if (sub.parentId === matchedSubtask.id) {
+          if (sub.title && sub.title.startsWith(`[${task_id}]`)) {
+            try {
                 apiClient.delete(`${API_ROUTES.HR.SUBTASKS}/${sub.id}`)
-              );
-            }
-          });
+            } catch(e) {}
+          }
         }
-      });
-
-      if (deletePromises.length > 0) {
-        await Promise.all(deletePromises);
       }
+
 
       // 3. Tạo các subtask mới do người dùng tùy chỉnh
       const createdSubtasks: string[] = [];
@@ -726,16 +757,8 @@ case "request_issue_approval": {
           }
       const dbTasks = tasksData.data || [];
       
-      let foundSubtask: any = null;
-      dbTasks.forEach((t: any) => {
-        if (Array.isArray(t.subTasks)) {
-          t.subTasks.forEach((sub: any) => {
-            if (sub.id.toLowerCase() === task_id.toLowerCase() || (sub.planeTaskId && sub.planeTaskId.toLowerCase() === task_id.toLowerCase())) {
-              foundSubtask = sub;
-            }
-          });
-        }
-      });
+      let foundSubtask: any = findIssueHelper(dbTasks, task_id);
+
 
       if (!foundSubtask) {
         throw new McpError(ErrorCode.InvalidParams, `Không tìm thấy công việc mã ID ${task_id}.`);
@@ -769,16 +792,8 @@ case "approve_issue_request": {
           }
       const dbTasks = tasksData.data || [];
       
-      let foundSubtask: any = null;
-      dbTasks.forEach((t: any) => {
-        if (Array.isArray(t.subTasks)) {
-          t.subTasks.forEach((sub: any) => {
-            if (sub.id.toLowerCase() === task_id.toLowerCase() || (sub.planeTaskId && sub.planeTaskId.toLowerCase() === task_id.toLowerCase())) {
-              foundSubtask = sub;
-            }
-          });
-        }
-      });
+      let foundSubtask: any = findIssueHelper(dbTasks, task_id);
+
 
       if (!foundSubtask) {
         throw new McpError(ErrorCode.InvalidParams, `Không tìm thấy công việc mã ID ${task_id}.`);

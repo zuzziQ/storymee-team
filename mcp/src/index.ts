@@ -109,27 +109,18 @@ export async function executeMcpTool(
   const isBoss = ["kimngan151091@gmail.com", "lehuyducanh.vn@gmail.com", "zuzzivn@gmail.com"].includes(user.email.toLowerCase());
   const members = await getTeamMembersCache();
 
-  // ALIAS mapping for LLM compatibility
   let toolName = name;
-  if (toolName === 'create_task') toolName = 'create_issue';
-  if (toolName === 'update_task') toolName = 'update_issue';
-  if (toolName === 'breakdown_task') toolName = 'breakdown_issue';
-  if (toolName === 'update_subtasks') toolName = 'update_sub_issues';
-  if (toolName === 'request_task_approval') toolName = 'request_issue_approval';
-  if (toolName === 'approve_task_request') toolName = 'approve_issue_request';
-  if (toolName === 'get_task_details') toolName = 'get_issue_details';
-
       const planeNames = PLANE_TOOLS_SCHEMA.map(t => t.name);
       const hrNames = HR_TOOLS_SCHEMA.map(t => t.name);
       const attendanceNames = ATTENDANCE_TOOLS_SCHEMA.map(t => t.name);
 
-      if (planeNames.includes(toolName)) {
+      if (planeNames.includes(name)) {
         return executePlaneTool(toolName, args, user, isBoss, apiClient, members);
       }
-      if (hrNames.includes(toolName)) {
+      if (hrNames.includes(name)) {
         return executeHrTool(toolName, args, user, isBoss, apiClient, members);
       }
-      if (attendanceNames.includes(toolName)) {
+      if (attendanceNames.includes(name)) {
         return executeAttendanceTool(toolName, args, user, isBoss, apiClient, members);
       }
       throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${toolName} (original: ${name})`);

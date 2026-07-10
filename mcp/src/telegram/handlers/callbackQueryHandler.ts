@@ -397,7 +397,7 @@ async function handleCallbackQuery(callbackQuery: any) {
             }
           }
         }
-      } else if (action === 'update_task') {
+      } else if (action === 'update_issue') {
         let estimateVal = payload.estimate;
         if (payload.deadline && (!estimateVal || estimateVal === 0)) {
           const dDate = new Date(payload.deadline);
@@ -405,7 +405,7 @@ async function handleCallbackQuery(callbackQuery: any) {
           estimateVal = calculateWorkingHours(now, dDate);
         }
 
-        await executeMcpTool("update_task", {
+        await executeMcpTool("update_issue", {
           task_id: payload.id,
           status: payload.status || undefined,
           assignee: payload.assignee || undefined,
@@ -426,7 +426,7 @@ async function handleCallbackQuery(callbackQuery: any) {
             })
           });
         } catch (e) {}
-      } else if (action === 'create_task') {
+      } else if (action === 'create_issue') {
         let estimateVal = payload.estimate;
         if (payload.deadline && (!estimateVal || estimateVal === 0)) {
           const dDate = new Date(payload.deadline);
@@ -434,7 +434,7 @@ async function handleCallbackQuery(callbackQuery: any) {
           estimateVal = calculateWorkingHours(now, dDate);
         }
 
-        const result = await executeMcpTool("create_task", {
+        const result = await executeMcpTool("create_issue", {
           title: payload.title || "Nhiệm vụ mới từ Telegram",
           project_id: payload.project_id || payload.projectId || payload.project,
           assignee: payload.assignee || actionMember.fullName,
@@ -492,8 +492,8 @@ async function handleCallbackQuery(callbackQuery: any) {
             })
           });
         } catch (e) {}
-      } else if (action === 'breakdown_task') {
-        const result = await executeMcpTool("breakdown_task", {
+      } else if (action === 'breakdown_issue') {
+        const result = await executeMcpTool("breakdown_issue", {
           task_id: payload.task_id
         }, actionMember);
 
@@ -509,8 +509,8 @@ async function handleCallbackQuery(callbackQuery: any) {
             })
           });
         } catch (e) {}
-      } else if (action === 'update_subtasks') {
-        const result = await executeMcpTool("update_subtasks", {
+      } else if (action === 'update_sub_issues') {
+        const result = await executeMcpTool("update_sub_issues", {
           task_id: payload.task_id,
           titles: payload.titles
         }, actionMember);
@@ -527,8 +527,8 @@ async function handleCallbackQuery(callbackQuery: any) {
             })
           });
         } catch (e) {}
-      } else if (action === 'request_task_approval') {
-        const result = await executeMcpTool("request_task_approval", {
+      } else if (action === 'request_issue_approval') {
+        const result = await executeMcpTool("request_issue_approval", {
           task_id: payload.task_id,
           type: payload.type,
           reason: payload.reason || "Không có lý do",
@@ -568,8 +568,8 @@ async function handleCallbackQuery(callbackQuery: any) {
                     parse_mode: "Markdown",
                     reply_markup: {
                       inline_keyboard: [
-                        [{ text: "✅ Phê duyệt", callback_data: `approve_task:${payload.task_id}:${payload.type}` }],
-                        [{ text: "❌ Từ chối", callback_data: `reject_task:${payload.task_id}:${payload.type}` }]
+                        [{ text: "✅ Phê duyệt", callback_data: `approve_issue:${payload.task_id}:${payload.type}` }],
+                        [{ text: "❌ Từ chối", callback_data: `reject_issue:${payload.task_id}:${payload.type}` }]
                       ]
                     }
                   })
@@ -581,8 +581,8 @@ async function handleCallbackQuery(callbackQuery: any) {
           console.error("Lỗi gửi tin nhắn duyệt task cho admin:", err);
         }
 
-      } else if (action === 'approve_task_request') {
-        const result = await executeMcpTool("approve_task_request", {
+      } else if (action === 'approve_issue_request') {
+        const result = await executeMcpTool("approve_issue_request", {
           task_id: payload.task_id,
           type: payload.type,
           decision: payload.decision,
@@ -722,9 +722,9 @@ async function handleCallbackQuery(callbackQuery: any) {
     }
 
   } else 
-  if (data.startsWith("approve_task:") || data.startsWith("reject_task:")) {
+  if (data.startsWith("approve_issue:") || data.startsWith("reject_issue:")) {
     const parts = data.split(":");
-    const action = parts[0] === "approve_task" ? "approve" : "reject";
+    const action = parts[0] === "approve_issue" ? "approve" : "reject";
     const taskId = parts[1];
     const reqType = parts[2] || 'archive'; // fallback if undefined
 
