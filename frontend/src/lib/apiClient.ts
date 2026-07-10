@@ -1,9 +1,9 @@
 const isServer = typeof window === 'undefined';
 // dev-hub.storymee.com → Nginx → core-admin-api:4503 (direct, không qua Hub Go Gateway)
 // dev-hub.storymee.com → Hub Go Gateway (chỉ dùng cho LLM/AI routes)
-let defaultBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://dev-hub.storymee.com';
-if (defaultBaseUrl === '/api' || defaultBaseUrl === '/' || defaultBaseUrl.includes('//hub.storymee.com')) {
-    defaultBaseUrl = 'https://dev-hub.storymee.com';
+let defaultBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://core-api.storymee.com';
+if (defaultBaseUrl === '/api' || defaultBaseUrl === '/' || defaultBaseUrl.includes('//hub.storymee.com') || defaultBaseUrl.includes('//dev-hub.storymee.com')) {
+    defaultBaseUrl = 'https://core-api.storymee.com';
 }
 
 // Cả server lẫn client đều gọi thẳng vào API backend
