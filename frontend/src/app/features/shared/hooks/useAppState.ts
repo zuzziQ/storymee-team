@@ -285,21 +285,32 @@ export function useAppState() {
           const dbIssues = issuesData.data;
 
           const mappedTasks: any[] = dbIssues.filter((issue: any) => !issue.parentId).map((issue: any) => {
-            const statusName = issue.State?.name || 'Todo';
-            const mappedStatus = statusName === 'Backlog' ? 'Backlog'
-                               : statusName === 'Todo' ? 'Todo'
-                               : statusName === 'In Progress' ? 'In Progress'
-                               : statusName === 'In Review' ? 'In Review'
-                               : statusName === 'Done' ? 'Done'
-                               : 'Todo';
+            const group = issue.State?.group || 'unstarted';
+            const nameLower = (issue.State?.name || '').toLowerCase();
+            
+            let mappedStatus = 'Todo';
+            if (nameLower === 'backlog' || group === 'backlog') mappedStatus = 'Backlog';
+            else if (nameLower === 'todo' || nameLower === 'pending' || group === 'unstarted') mappedStatus = 'Todo';
+            else if (nameLower === 'in review' || nameLower === 'in_review') mappedStatus = 'In Review';
+            else if (nameLower === 'in progress' || nameLower === 'working' || group === 'started') mappedStatus = 'In Progress';
+            else if (nameLower === 'done' || nameLower === 'completed' || group === 'completed' || group === 'cancelled') mappedStatus = 'Done';
 
-            const subtasks = (issue.subIssues || []).map((c: any) => ({
-              id: c.id,
-              dbId: c.id,
-              title: c.title,
-              isDone: c.State?.group === 'completed' || c.State?.name === 'Done',
-              status: c.State?.name || 'Todo'
-            }));
+            const subtasks = (issue.subIssues || []).map((c: any) => {
+              const cGroup = c.State?.group || 'unstarted';
+              const cName = (c.State?.name || '').toLowerCase();
+              let cStatus = 'pending';
+              if (cName === 'in review' || cName === 'in_review') cStatus = 'in_review';
+              else if (cName === 'working' || cName === 'in progress' || cGroup === 'started') cStatus = 'working';
+              else if (cGroup === 'completed' || cGroup === 'cancelled') cStatus = 'done';
+              
+              return {
+                id: c.id,
+                dbId: c.id,
+                title: c.title,
+                isDone: cGroup === 'completed' || cName === 'done',
+                status: cStatus
+              };
+            });
 
             return {
               id: issue.id,
