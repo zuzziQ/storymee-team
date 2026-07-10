@@ -174,17 +174,67 @@ case "get_my_issues": {
         }
       });
 
-      let outputText = `Danh sách issue của ${targetName}:\n\n`;
-      myIssues.forEach(pt => {
+      // Lọc task cha và subtask
+      const parentTasks = myIssues.filter(i => i.parentId === null);
+      const subTasks = myIssues.filter(i => i.parentId !== null);
+
+      let outputText = `📝 CÔNG VIỆC CỦA BẠN (*${targetName}*)\n──────────────────────────────\n\n`;
+      
+      const formatIssue = (pt: any, isSub: boolean = false) => {
           const statusStr = pt.State ? pt.State.name : 'Unknown';
-          const dlStr = pt.targetDate ? pt.targetDate.split('T')[0] : 'None';
-          outputText += `🎯 *${pt.id}*: ${pt.title}  |  \`${statusStr}\`  📅 ${dlStr}\n`;
+          const dlStr = pt.targetDate ? pt.targetDate.split('T')[0] : 'Chưa đặt';
+          
+          let emoji = '⚪';
+          const isOverdue = pt.targetDate && new Date(pt.targetDate) < new Date(new Date().setHours(0,0,0,0));
+          if (isOverdue) emoji = '🔴';
+          else if (statusStr === 'In Review') emoji = '🔵';
+          else if (statusStr === 'In Progress') emoji = '🟡';
+          else if (statusStr === 'Done') emoji = '🟢';
+
+          const ident = pt.Project ? pt.Project.identifier : 'ID';
+          const shortId = `*${ident}-${pt.sequenceId}*`;
+          
+          if (isSub) {
+              return `   ┣ ${emoji} ${shortId}: ${pt.title} (${statusStr})\n`;
+          } else {
+              const dlText = isOverdue ? `📅 ${dlStr} ⚠️ *QUÁ HẠN*` : `📅 ${dlStr}`;
+              return `${emoji} ${shortId}: ${pt.title}\n   Trạng thái: \`${statusStr}\`  |  ${dlText}\n`;
+          }
+      };
+
+      if (parentTasks.length === 0 && subTasks.length === 0) {
+        return {
+          content: [{
+            type: "text",
+            text: `Nhân sự ${targetName} hiện không có công việc nào đang mở.`
+          }]
+        };
+      }
+
+      parentTasks.forEach(pt => {
+          outputText += formatIssue(pt);
+          const subs = subTasks.filter(sub => sub.parentId === pt.id);
+          subs.forEach((sub, idx) => {
+              const isLast = idx === subs.length - 1;
+              const formattedSub = formatIssue(sub, true);
+              outputText += isLast ? formattedSub.replace('┣', '┗') : formattedSub;
+          });
+          outputText += '\n';
       });
+
+      // Nếu có subtask bị mồ côi (Task mẹ do người khác cầm)
+      const orphanSubs = subTasks.filter(sub => !parentTasks.find(p => p.id === sub.parentId));
+      if (orphanSubs.length > 0) {
+          orphanSubs.forEach(pt => {
+              outputText += formatIssue(pt);
+              outputText += '\n';
+          });
+      }
 
       return {
         content: [{
           type: "text",
-          text: myIssues.length > 0 ? outputText.trim() : `Nhân sự ${targetName} hiện không có công việc nào đang mở.`
+          text: outputText.trim()
         }]
       };
     }

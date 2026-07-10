@@ -105,7 +105,7 @@ export class PlaneController {
             
             const issues = await prisma.plIssue.findMany({
                 where: whereClause,
-                include: { State: true, Assignee: true, Project: true, subIssues: true, Parent: true }
+                include: { State: true, Assignee: true, Project: true, subIssues: { include: { State: true } }, Parent: true }
             });
             return reply.send({ success: true, data: issues });
         } catch (error: any) {

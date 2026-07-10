@@ -290,15 +290,19 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
       const allMembers = await getCachedMembers();
       
       dbTasks.forEach((sub: any) => {
-        const memberName = (allMembers || []).find((m:any) => m.id === sub.assigneeId)?.fullName || sub.Assignee?.fullName || 'Không rõ';
+        const memberName = (allMembers || []).find((m:any) => m.id === sub.assigneeId)?.fullName || sub.Assignee?.fullName || 'Chưa phân công';
         let st = sub.State?.name || 'Todo';
         mappedTasks.push({
           title: sub.title,
           status: st,
-          deadline: sub.targetDate ? sub.targetDate.split('T')[0] : 'Chưa có',
+          deadline: sub.targetDate ? sub.targetDate.split('T')[0] : 'Chưa đặt',
           rawDeadline: sub.targetDate ? new Date(sub.targetDate) : null,
           assignee: memberName,
-          planeTaskId: sub.id
+          planeTaskId: sub.id,
+          parentId: sub.parentId,
+          sequenceId: sub.sequenceId,
+          projectIdentifier: sub.Project?.identifier || 'ID',
+          subIssues: sub.subIssues || []
         });
       });
     } catch (err) {
@@ -307,22 +311,23 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
       return;
     }
 
-    if (mappedTasks.length === 0) {
+    // Chỉ hiển thị các task cha
+    const parentTasks = mappedTasks.filter(t => t.parentId === null);
+    if (parentTasks.length === 0) {
       await sendMessage(chatId, "📭 Hiện không có công việc nào trên hệ thống.");
       return;
     }
 
-    // Sắp xếp: In Review → Quá hạn → theo deadline tăng dần. Ẩn Done.
     const now = new Date();
     now.setHours(0, 0, 0, 0);
 
     // Lọc bỏ Done
-    const activeTasks = mappedTasks.filter(t => t.status !== 'Done');
+    const activeTasks = parentTasks.filter(t => t.status !== 'Done');
 
     activeTasks.sort((a, b) => {
       const aReview = a.status === 'In Review';
       const bReview = b.status === 'In Review';
-      if (aReview !== bReview) return aReview ? -1 : 1; // In Review lên đầu
+      if (aReview !== bReview) return aReview ? -1 : 1;
 
       const aOverdue = a.rawDeadline && a.rawDeadline < now;
       const bOverdue = b.rawDeadline && b.rawDeadline < now;
@@ -336,13 +341,13 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
       return a.rawDeadline!.getTime() - b.rawDeadline!.getTime();
     });
 
-    const doneCount = mappedTasks.filter(t => t.status === 'Done').length;
+    const doneCount = parentTasks.filter(t => t.status === 'Done').length;
     const overdueCount = activeTasks.filter(t => t.rawDeadline && t.rawDeadline < now).length;
     const reviewCount = activeTasks.filter(t => t.status === 'In Review').length;
 
     let reportMsg = `📊 *BÁO CÁO TIẾN ĐỘ ĐỘI NGŨ*\n`
-      + `🔵 Review: *${reviewCount}* | 🔴 Quá hạn: *${overdueCount}* | 🟢 Done: *${doneCount}* | 📋 Tổng đang mở: *${activeTasks.length}*\n`
-      + `${'─'.repeat(30)}\n`;
+      + `🔵 Review: ${reviewCount} | 🔴 Quá hạn: ${overdueCount} | 🟢 Done: ${doneCount} | 📋 Đang mở: ${activeTasks.length}\n`
+      + `──────────────────────────────\n`;
 
     for (const task of activeTasks) {
       const isOverdue = task.rawDeadline && task.rawDeadline < now;
@@ -351,14 +356,21 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
       if (isOverdue) emoji = '🔴';
       else if (task.status === 'In Review') emoji = '🔵';
       else if (task.status === 'In Progress') emoji = '🟡';
-      else if (task.status === 'Todo') emoji = '⚪';
+      else if (task.status === 'Done') emoji = '🟢';
 
-      const dlText = task.deadline
-        ? (isOverdue ? `📅 ${task.deadline} ⚠️ QUÁ HẠN` : `📅 ${task.deadline}`)
+      const dlText = task.deadline !== 'Chưa đặt'
+        ? (isOverdue ? `📅 ${task.deadline} ⚠️ *QUÁ HẠN*` : `📅 ${task.deadline}`)
         : '📅 Chưa đặt';
 
-      reportMsg += `\n${emoji} *${task.planeTaskId}*: ${task.title}\n`;
-      reportMsg += `   👤 ${task.assignee}  |  \`${task.status}\`  ${dlText}\n`;
+      const shortId = `*${task.projectIdentifier}-${task.sequenceId}*`;
+      reportMsg += `\n${emoji} ${shortId}: ${task.title}\n`;
+      reportMsg += `   👤 *${task.assignee}*  |  \`${task.status}\`  |  ${dlText}\n`;
+
+      if (task.subIssues && task.subIssues.length > 0) {
+        const totalSubs = task.subIssues.length;
+        const doneSubs = task.subIssues.filter((s: any) => s.State?.name === 'Done').length;
+        reportMsg += `   ↳ Tiến độ subtask: ${doneSubs}/${totalSubs} hoàn thành\n`;
+      }
 
       if (reportMsg.length > 3500) {
         await sendMessage(chatId, reportMsg);
