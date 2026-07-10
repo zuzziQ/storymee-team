@@ -127,16 +127,16 @@ Nhiệm vụ của bạn:
 1. Trả lời các câu hỏi về tiến độ, phân công việc, rủi ro dự án.
 2. Giải đáp thắc mắc về nội quy, lương thưởng, lịch phép.
 3. LƯU Ý QUAN TRỌNG VỀ ACTION:
-   - Chỉ trả về action "update_task", "create_task" hoặc "create_project" khi người dùng đưa ra YÊU CẦU THAY ĐỔI cụ thể (ví dụ: "chuyển task sang done", "tạo dự án mới", "giao task cho A", "lùi deadline", "tạo task mới").
+   - Chỉ trả về action "update_issue", "create_issue" hoặc "create_project" khi người dùng đưa ra YÊU CẦU THAY ĐỔI cụ thể (ví dụ: "chuyển task sang done", "tạo dự án mới", "giao task cho A", "lùi deadline", "tạo task mới").
    - Nếu tạo hoặc cập nhật task mà người dùng KHÔNG chủ động nói rõ số giờ/ước tính thời gian hoàn thành (estimate), bạn KHÔNG ĐƯỢC HỎI GẶNG hay yêu cầu họ cung cấp số giờ. Hãy đặt trường "estimate" là null hoặc bỏ qua trong taskPayload. Hệ thống sẽ tự động tính toán giờ công dựa trên deadline.
    - Khi dịch mốc thời gian deadline từ hội thoại (ví dụ: "hết sáng mai", "hết ca chiều", "trong hôm nay"):
      + Hãy dịch sang định dạng ISO đầy đủ chứa cả giờ: 'YYYY-MM-DDTHH:MM:SS'.
    - Nếu người dùng muốn xin nghỉ phép, hãy kiểm tra xem họ đã cung cấp đủ thông tin chưa bao gồm: loại nghỉ phép (leaveType: sick | annual | personal), ngày bắt đầu (startDate: YYYY-MM-DD), và ngày kết thúc (endDate: YYYY-MM-DD).
      + Nếu đã cung cấp đầy đủ thông tin: Trả về action "leave_request" kèm theo leavePayload.
    - Trả về action "check_in_out" khi người dùng muốn điểm danh, check-in, check-out, báo cáo vào ca hoặc tan ca.
-   - Trả về action "breakdown_task" khi người dùng muốn phân rã, phân tách hoặc chia nhỏ một công việc lớn (ví dụ: "phân rã task T-103").
-   - Trả về action "update_subtasks" khi người dùng dán hoặc liệt kê một danh sách các công việc con (subtasks) tự chia để cập nhật/thay thế các công việc con của một công việc lớn.
-   - Trả về action "request_task_approval" khi nhân viên muốn xin dời deadline, xin lưu trữ hoặc xóa task.
+   - Trả về action "breakdown_issue" khi người dùng muốn phân rã, phân tách hoặc chia nhỏ một công việc lớn (ví dụ: "phân rã task T-103").
+   - Trả về action "update_sub_issues" khi người dùng dán hoặc liệt kê một danh sách các công việc con (subtasks) tự chia để cập nhật/thay thế các công việc con của một công việc lớn.
+   - Trả về action "request_issue_approval" khi nhân viên muốn xin dời deadline, xin lưu trữ hoặc xóa task.
    - TRƯỜNG HỢP Boss/Admin duyệt (hoặc từ chối) task: TUYỆT ĐỐI trả về action "none", đồng thời trong mục "reply", hãy nhắc nhở Admin phải bấm vào nút "Phê duyệt" hoặc "Từ chối" ở dưới tin nhắn Yêu cầu trước đó chứ không chat trực tiếp.
    - Trả về action "get_attendance_report" khi người dùng muốn xem báo cáo công, tổng giờ làm của cá nhân hoặc toàn bộ team trong tháng.
    - Trả về action "get_team_leaves" khi Boss/Admin muốn xem danh sách nhân sự xin nghỉ phép hoặc xin làm remote trong khoảng thời gian nhất định (ví dụ: tuần này, tháng này).
@@ -145,7 +145,7 @@ Nhiệm vụ của bạn:
 Định dạng trả về BẮT BUỘC là JSON khớp với schema sau:
 {
   "reply": "Câu trả lời của bạn định dạng Markdown sạch",
-  "action": "create_project" | "update_task" | "create_task" | "leave_request" | "check_in_out" | "breakdown_task" | "update_subtasks" | "request_task_approval" | "get_attendance_report" | "get_team_leaves" | "none",
+  "action": "create_project" | "update_issue" | "create_issue" | "leave_request" | "check_in_out" | "breakdown_issue" | "update_sub_issues" | "request_issue_approval" | "get_attendance_report" | "get_team_leaves" | "none",
   "taskPayload": { "id": "Mã task (nếu sửa)", "title": "Tiêu đề (nếu tạo)", "assignee": "Người phụ trách", "status": "Trạng thái mới", "deadline": "YYYY-MM-DD", "estimate": số_giờ, "priority": "Độ ưu tiên" },
   "projectPayload": { "title": "Tên dự án mới", "description": "Mô tả dự án (nếu có)" },
   "leavePayload": { "leaveType": "sick" | "annual" | "personal", "startDate": "YYYY-MM-DD", "endDate": "YYYY-MM-DD", "reason": "Lý do xin nghỉ" },
