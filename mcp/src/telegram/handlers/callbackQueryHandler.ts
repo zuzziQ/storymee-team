@@ -457,7 +457,7 @@ async function handleCallbackQuery(callbackQuery: any) {
         } catch (e) {}
       } else if (action === 'create_project') {
         const result = await executeMcpTool("create_project", {
-          name: payload.title,
+          title: payload.title,
           description: payload.description
         }, actionMember);
 
