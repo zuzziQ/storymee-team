@@ -345,6 +345,7 @@ async function handleCallbackQuery(callbackQuery: any) {
           startDate: payload.startDate,
           endDate: payload.endDate,
           leaveType: payload.leaveType,
+          session: payload.session,
           reason: payload.reason || "Xin nghỉ phép qua Bot Telegram"
         }, actionMember);
 

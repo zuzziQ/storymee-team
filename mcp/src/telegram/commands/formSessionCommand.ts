@@ -180,16 +180,15 @@ export const formSessionCommand: TelegramCommand = {
 
       const summaryText = formType === 'leave' 
         ? `📝 **TÓM TẮT ĐƠN XIN NGHỈ PHÉP**\n\n• Loại nghỉ: **${leaveType === 'annual' ? 'Phép năm' : leaveType === 'unpaid' ? 'Không lương' : 'Nghỉ ốm'}**\n• Từ ngày: **${startDate}**\n• Đến ngày: **${endDate}**\n• Lý do: **${reason}**${quotaStatusMsg}\n\n👉 Nhấn Submit để gửi đơn cho Quản lý duyệt.`
-        : `💻 **TÓM TẮT ĐĂNG KÝ REMOTE**\n\n• Ngày remote: **${startDate}**\n• Buổi: **${remoteSession === 'morning' ? 'Sáng' : remoteSession === 'afternoon' ? 'Chiều' : 'Cả ngày'}**\n• Lý do: **${reason}**${quotaStatusMsg}\n\n👉 Nhấn Submit để đăng ký.`;
+        : `💻 **TÓM TẮT ĐĂNG KÝ REMOTE**\n\n• Ngày remote: **${startDate}**\n• Buổi: **${remoteSession === 'am' ? 'Sáng' : remoteSession === 'pm' ? 'Chiều' : 'Cả ngày'}**\n• Lý do: **${reason}**${quotaStatusMsg}\n\n👉 Nhấn Submit để đăng ký.`;
       
-      const actionData = JSON.stringify({
-        action: formType === 'leave' ? 'submit_leave' : 'submit_remote',
-        type: leaveType,
-        start: startDate,
-        end: endDate || startDate,
+      const payloadObj = {
+        leaveType: leaveType,
+        startDate: startDate,
+        endDate: endDate || startDate,
         session: remoteSession,
         reason: reason
-      });
+      };
 
       await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
         method: "POST",
@@ -211,9 +210,11 @@ export const formSessionCommand: TelegramCommand = {
 
       // Lưu payload vào Redis/Cache để callback xử lý
       const { actionCache } = require('../../telegram_agent');
-      actionCache.set(actionId, {
-        payload: JSON.parse(actionData)
-      });
+      actionCache[actionId] = {
+        action: 'leave_request',
+        payload: payloadObj,
+        member: ctx.member
+      };
       
       return true;
     }
