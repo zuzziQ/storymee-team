@@ -240,12 +240,12 @@ export function useAppState() {
       }
 
       try {
-        const projectsData = await coreApiClient.get(API_ROUTES.HR.PROJECTS);
+        const projectsData = await coreApiClient.get(API_ROUTES.PLANE.PROJECTS);
         if (projectsData.status === 'success' && Array.isArray(projectsData.data)) {
           const mappedProjects = projectsData.data.map((p: any) => ({
             id: p.id,
             name: p.name,
-            key: p.key || 'OMNI',
+            key: p.identifier || 'PROJ',
             description: p.description || '',
             color: p.color || '#6366f1',
             progress: 0,
@@ -471,7 +471,7 @@ export function useAppState() {
 
   const handleDeleteProject = async (id: string) => {
     try {
-      await coreApiClient.delete(`${API_ROUTES.HR.PROJECTS}/${id}`);
+      await coreApiClient.delete(`${API_ROUTES.PLANE.PROJECTS}/${id}`);
       setProjects(prev => prev.filter(p => p.id !== id));
       if (activeProjectId === id) {
         setActiveProjectId(projects.find(p => p.id !== id)?.id || '');
@@ -485,7 +485,7 @@ export function useAppState() {
   const handleCreateTask = async (title: string, assignee: string, estimate: number, priority: Priority) => {
     try {
       const matchedMember = teamMembers.find(m => m.name === assignee);
-      const targetProjectId = projects.length > 1 && projects[1]?.id !== 'default_no_project' ? projects[1].id : null;
+      const targetProjectId = activeProjectId !== 'default_no_project' ? activeProjectId : (projects.length > 1 ? projects[1].id : null);
       if (!targetProjectId) {
         alert('Không tìm thấy dự án nào hợp lệ để tạo Issue.');
         return;

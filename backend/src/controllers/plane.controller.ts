@@ -79,6 +79,23 @@ export class PlaneController {
             return reply.status(500).send({ success: false, message: error.message });
         }
     }
+    static async deleteProject(req: FastifyRequest, reply: FastifyReply) {
+        try {
+            const { id } = req.params as { id: string };
+            
+            // Delete related records (states, issues, etc) depending on Prisma schema cascades.
+            // If cascade is enabled, deleting the project deletes states and issues.
+            // Let's manually delete the project.
+            await prisma.plProject.delete({
+                where: { id }
+            });
+            
+            return reply.send({ success: true, message: "Deleted project successfully" });
+        } catch (error: any) {
+            console.error("Lỗi deleteProject:", error);
+            return reply.status(500).send({ success: false, message: error.message });
+        }
+    }
 
     // ISSUES
     static async getIssues(req: FastifyRequest, reply: FastifyReply) {
