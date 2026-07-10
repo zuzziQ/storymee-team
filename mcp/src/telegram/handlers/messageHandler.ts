@@ -518,7 +518,7 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
       })
     });
     if (flashRes.ok) {
-      const flashJson = await flashRes.json();
+      const flashJson = (await flashRes.json()) as any;
       const rawOutput = flashJson.candidates?.[0]?.content?.parts?.[0]?.text || "TASK";
       userIntent = rawOutput.trim().toUpperCase().replace(/[^A-Z_]/g, '');
     }
