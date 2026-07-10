@@ -2,6 +2,33 @@ import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
 import { CoreApiClient, API_ROUTES } from "@storymee/api-client";
 import { fetchAxios } from "../../fetchAxios";
 
+export const ATTENDANCE_TOOLS_SCHEMA = [
+  {
+    name: "check_in_out",
+    description: "Điểm danh hàng ngày: thực hiện check-in hoặc check-out cho nhân sự. Lần check đầu tiên trong ngày là check-in, lần thứ hai là check-out.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        status: { type: "string", enum: ["present", "late", "absent"], description: "Trạng thái đi làm (mặc định present)" },
+        notes: { type: "string", description: "Ghi chú điểm danh" },
+        employee_name: { type: "string", description: "Tên nhân sự điểm danh hộ (chỉ Admin/Boss có quyền này)" }
+      }
+    }
+  },
+  {
+    name: "get_attendance_report",
+    description: "Lấy báo cáo chấm công của bản thân hoặc toàn team trong tháng. (totalHours, số ngày đi làm, số ngày đi muộn, vv)",
+    inputSchema: {
+      type: "object",
+      properties: {
+        employee_name: { type: "string", description: "Tên nhân sự cần tra cứu. Để trống nếu muốn xem của toàn team hoặc cá nhân (tuỳ quyền)." },
+        month: { type: "number", description: "Tháng (1-12). Để trống là tháng hiện tại." },
+        year: { type: "number", description: "Năm (ví dụ: 2026). Để trống là năm hiện tại." }
+      }
+    }
+  }
+];
+
 export async function executeAttendanceTool(name: string, args: any, user: any, isBoss: boolean, apiClient: CoreApiClient, members: any[]): Promise<{ content: Array<{ type: string; text: string }> }> {
 
   switch (name) {

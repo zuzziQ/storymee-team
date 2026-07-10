@@ -310,7 +310,7 @@ export function useAppState() {
               priority: (issue.priority.charAt(0).toUpperCase() + issue.priority.slice(1)),
               status: mappedStatus,
               deadline: issue.targetDate ? issue.targetDate.split('T')[0] : '',
-              estimate: 0,
+              estimate: issue.estimateHours ? parseFloat(issue.estimateHours) : 0,
               parentTaskId: null,
               projectId: issue.projectId || 'default_no_project',
               outputSuggested: '',
@@ -458,11 +458,21 @@ export function useAppState() {
       const matchedMember = teamMembers.find(m => m.name === task.assignee);
       const subtaskId = task.dbId || task.id;
       
+      let isoTargetDate = undefined;
+      if (task.deadline && task.deadline !== 'None') {
+        try {
+          const d = new Date(task.deadline);
+          if (!isNaN(d.getTime())) {
+            isoTargetDate = d.toISOString();
+          }
+        } catch(e) {}
+      }
+
       await coreApiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${subtaskId}`, {
         status: task.status,
         assigneeId: matchedMember ? matchedMember.id : undefined,
         priority: task.priority ? task.priority.toLowerCase() : undefined,
-        targetDate: task.deadline ? new Date(task.deadline).toISOString() : undefined,
+        targetDate: isoTargetDate,
         estimateHours: task.estimate ? task.estimate : undefined
       });
 

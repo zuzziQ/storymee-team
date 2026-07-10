@@ -463,6 +463,25 @@ async function handleCallbackQuery(callbackQuery) {
                 }
                 catch (e) { }
             }
+            else if (action === 'create_project') {
+                const result = await (0, index_1.executeMcpTool)("create_project", {
+                    title: payload.title,
+                    description: payload.description
+                }, actionMember);
+                try {
+                    await (0, fetchAxios_1.fetchAxios)(`${TELEGRAM_API}/editMessageText`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            chat_id: chatId,
+                            message_id: messageId,
+                            text: `✅ *Hệ thống:* Đã tạo mới dự án qua MCP thành công!\n${result.content[0].text}`,
+                            parse_mode: "Markdown"
+                        })
+                    });
+                }
+                catch (e) { }
+            }
             else if (action === 'check_in_out') {
                 const result = await (0, index_1.executeMcpTool)("check_in_out", {
                     status: payload.status,

@@ -1,8 +1,35 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.ATTENDANCE_TOOLS_SCHEMA = void 0;
 exports.executeAttendanceTool = executeAttendanceTool;
 const types_js_1 = require("@modelcontextprotocol/sdk/types.js");
 const api_client_1 = require("@storymee/api-client");
+exports.ATTENDANCE_TOOLS_SCHEMA = [
+    {
+        name: "check_in_out",
+        description: "Điểm danh hàng ngày: thực hiện check-in hoặc check-out cho nhân sự. Lần check đầu tiên trong ngày là check-in, lần thứ hai là check-out.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                status: { type: "string", enum: ["present", "late", "absent"], description: "Trạng thái đi làm (mặc định present)" },
+                notes: { type: "string", description: "Ghi chú điểm danh" },
+                employee_name: { type: "string", description: "Tên nhân sự điểm danh hộ (chỉ Admin/Boss có quyền này)" }
+            }
+        }
+    },
+    {
+        name: "get_attendance_report",
+        description: "Lấy báo cáo chấm công của bản thân hoặc toàn team trong tháng. (totalHours, số ngày đi làm, số ngày đi muộn, vv)",
+        inputSchema: {
+            type: "object",
+            properties: {
+                employee_name: { type: "string", description: "Tên nhân sự cần tra cứu. Để trống nếu muốn xem của toàn team hoặc cá nhân (tuỳ quyền)." },
+                month: { type: "number", description: "Tháng (1-12). Để trống là tháng hiện tại." },
+                year: { type: "number", description: "Năm (ví dụ: 2026). Để trống là năm hiện tại." }
+            }
+        }
+    }
+];
 async function executeAttendanceTool(name, args, user, isBoss, apiClient, members) {
     switch (name) {
         case "check_in_out": {

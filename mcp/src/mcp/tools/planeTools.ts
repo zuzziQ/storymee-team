@@ -2,6 +2,149 @@ import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
 import { CoreApiClient, API_ROUTES } from "@storymee/api-client";
 import { fetchAxios } from "../../fetchAxios";
 
+export const PLANE_TOOLS_SCHEMA = [
+  {
+    name: "get_my_issues",
+    description: "Truy vấn danh sách công việc (issues) trên bảng Kanban chuẩn Plane. Nhân viên chỉ xem được issue của mình. Admin/Boss xem được của tất cả.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        employee_name: { type: "string", description: "Tên nhân sự cần lọc. Để trống nếu tự xem của mình." },
+        project_id: { type: "string", description: "Lọc theo dự án (tuỳ chọn)" }
+      }
+    }
+  },
+  {
+    name: "create_project",
+    description: "Tạo một Dự án (Project) lớn mới trong cấu trúc Plane.io.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Tên của dự án mới" },
+        description: { type: "string", description: "Mô tả chi tiết dự án (tuỳ chọn)" }
+      },
+      required: ["title"]
+    }
+  },
+  {
+    name: "create_issue",
+    description: "Tạo một issue mới. Yêu cầu tiêu đề và người gán. Plane structure hỗ trợ project_id, state, priority.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Tiêu đề công việc" },
+        project_id: { type: "string", description: "ID của dự án (Plane Project ID)" },
+        assignee: { type: "string", description: "Tên nhân sự thực hiện (ví dụ: Trung Dũng)" },
+        priority: { type: "string", enum: ["none", "low", "medium", "high", "urgent"], description: "Độ ưu tiên (mặc định medium)" },
+        target_date: { type: "string", description: "Hạn chót hoàn thành định dạng YYYY-MM-DD" }
+      },
+      required: ["title", "project_id"]
+    }
+  },
+  {
+    name: "update_issue_state",
+    description: "Cập nhật trạng thái (State) của issue (Todo, In Progress, Done).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        issue_id: { type: "string", description: "Mã ID công việc (ví dụ: UUID)" },
+        state: { type: "string", enum: ["Todo", "In Progress", "Done"], description: "Trạng thái mới" }
+      },
+      required: ["issue_id", "state"]
+    }
+  },
+  {
+    name: "assign_issue",
+    description: "Bàn giao công việc (issue) cho nhân sự khác.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        issue_id: { type: "string", description: "Mã ID công việc" },
+        assignee: { type: "string", description: "Tên nhân sự mới nhận công việc" }
+      },
+      required: ["issue_id", "assignee"]
+    }
+  },
+  {
+    name: "update_task",
+    description: "Cập nhật các thông tin của một task trên Kanban (trạng thái, người gán, ước lượng, độ ưu tiên, hạn chót).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        task_id: { type: "string", description: "Mã ID công việc (ví dụ: T-103)" },
+        status: { type: "string", enum: ["Todo", "In Progress", "Done"], description: "Trạng thái mới (tùy chọn)" },
+        assignee: { type: "string", description: "Tên người phụ trách mới (tùy chọn)" },
+        estimate: { type: "number", description: "Ước tính thời gian mới (giờ, tùy chọn)" },
+        priority: { type: "string", enum: ["Low", "Medium", "High"], description: "Độ ưu tiên mới (tùy chọn)" },
+        deadline: { type: "string", description: "Hạn chót mới định dạng YYYY-MM-DD hoặc ISO string (tùy chọn)" }
+      },
+      required: ["task_id"]
+    }
+  },
+  {
+    name: "get_task_details",
+    description: "Truy vấn thông tin chi tiết của một công việc (task/subtask) cụ thể theo mã ID (ví dụ: T-102).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        task_id: { type: "string", description: "Mã ID công việc (ví dụ: T-102)" }
+      },
+      required: ["task_id"]
+    }
+  },
+  {
+    name: "breakdown_task",
+    description: "Phân rã một công việc lớn (ví dụ: T-103) thành các công việc con (subtasks) nhỏ hơn bằng AI và tự động lưu vào database, gán cho cùng một nhân sự.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        task_id: { type: "string", description: "Mã ID công việc lớn (ví dụ: T-103, T-004)" }
+      },
+      required: ["task_id"]
+    }
+  },
+  {
+    name: "update_subtasks",
+    description: "Cập nhật hoặc thay thế toàn bộ danh sách công việc con (subtasks) của một công việc lớn (ví dụ: T-103) bằng danh sách tiêu đề mới, tự động xóa các việc con cũ của task này và gán các việc con mới cho cùng một nhân sự.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        task_id: { type: "string", description: "Mã ID công việc lớn (ví dụ: T-103, T-004)" },
+        titles: { type: "array", items: { type: "string" }, description: "Mảng chứa danh sách các tiêu đề việc con mới" }
+      },
+      required: ["task_id", "titles"]
+    }
+  },
+  {
+    name: "request_task_approval",
+    description: "Gửi yêu cầu xin duyệt liên quan đến task (ví dụ: xin dời deadline, xin xoá/lưu trữ task).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        task_id: { type: "string", description: "Mã ID công việc (ví dụ: T-103)" },
+        type: { type: "string", enum: ["archive", "extend"], description: "Loại yêu cầu: archive (xoá/lưu trữ) hoặc extend (dời deadline)" },
+        reason: { type: "string", description: "Lý do xin duyệt" },
+        new_deadline: { type: "string", description: "Hạn chót mới (chỉ dùng cho type extend), định dạng YYYY-MM-DD" }
+      },
+      required: ["task_id", "type", "reason"]
+    }
+  },
+  {
+    name: "approve_task_request",
+    description: "Duyệt hoặc từ chối yêu cầu của nhân viên (ví dụ: đồng ý dời deadline, đồng ý lưu trữ task). CHỈ DÀNH CHO ADMIN/BOSS.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        task_id: { type: "string", description: "Mã ID công việc (ví dụ: T-103)" },
+        type: { type: "string", enum: ["archive", "extend"], description: "Loại yêu cầu đang duyệt" },
+        decision: { type: "string", enum: ["approve", "reject"], description: "Quyết định: duyệt hay từ chối" },
+        new_deadline: { type: "string", description: "Hạn chót mới được duyệt (dành cho type extend, nếu có)" }
+      },
+      required: ["task_id", "type", "decision"]
+    }
+  }
+];
+
 export async function executePlaneTool(name: string, args: any, user: any, isBoss: boolean, apiClient: CoreApiClient, members: any[]): Promise<{ content: Array<{ type: string; text: string }> }> {
 
   switch (name) {

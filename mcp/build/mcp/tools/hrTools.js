@@ -1,8 +1,78 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.HR_TOOLS_SCHEMA = void 0;
 exports.executeHrTool = executeHrTool;
 const types_js_1 = require("@modelcontextprotocol/sdk/types.js");
 const api_client_1 = require("@storymee/api-client");
+exports.HR_TOOLS_SCHEMA = [
+    {
+        name: "submit_leave_request",
+        description: "Đăng ký đơn xin nghỉ phép thường niên hoặc làm việc từ xa (remote). Bắt buộc phải có ngày nghỉ, buổi nghỉ, loại đơn và lý do.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                date: { type: "string", description: "Ngày xin nghỉ định dạng YYYY-MM-DD" },
+                session: { type: "string", enum: ["all", "am", "pm"], description: "Cả ngày (all), sáng (am), hoặc chiều (pm)" },
+                type: { type: "string", enum: ["leave", "remote"], description: "Nghỉ phép (leave) hoặc làm remote (remote)" },
+                reason: { type: "string", description: "Lý do xin phép cụ thể" }
+            },
+            required: ["date", "session", "type", "reason"]
+        }
+    },
+    {
+        name: "get_leave_allowance",
+        description: "Xem hạn mức ngày nghỉ phép/remote còn lại của nhân sự.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                employee_name: { type: "string", description: "Tên nhân sự tra cứu. Để trống nếu tự xem của mình." }
+            }
+        }
+    },
+    {
+        name: "get_my_payroll_slip",
+        description: "Tra cứu chi tiết phiếu lương cá nhân (Gross, Net, BHXH, Thuế TNCN). Nhân viên chỉ xem được của chính mình. Admin/Boss xem được của tất cả.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                employee_name: { type: "string", description: "Tên nhân sự cần xem. Để trống nếu tự xem của mình." },
+                month: { type: "string", description: "Tháng tra cứu định dạng YYYY-MM (Ví dụ: 2026-06)" }
+            },
+            required: ["month"]
+        }
+    },
+    {
+        name: "update_personal_info",
+        description: "Cập nhật số tài khoản ngân hàng và tên ngân hàng nhận lương của cá nhân.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                bank_account: { type: "string", description: "Số tài khoản ngân hàng mới" },
+                bank_name: { type: "string", description: "Tên ngân hàng (ví dụ: Techcombank, Vietcombank)" }
+            },
+            required: ["bank_account", "bank_name"]
+        }
+    },
+    {
+        name: "upsert_team_member",
+        description: "Tạo mới hoặc cập nhật thông tin chi tiết của một nhân sự (Họ tên, email, vai trò, kỹ năng, số điện thoại, ngân hàng, Telegram ID...).",
+        inputSchema: {
+            type: "object",
+            properties: {
+                email: { type: "string", description: "Email của nhân viên (khóa định danh chính)" },
+                fullName: { type: "string", description: "Họ và tên đầy đủ" },
+                role: { type: "string", description: "Vai trò/Chức danh (ví dụ: Developer, Designer)" },
+                skills: { type: "array", items: { type: "string" }, description: "Danh sách kỹ năng" },
+                phone: { type: "string", description: "Số điện thoại liên hệ" },
+                telegramUsername: { type: "string", description: "Username Telegram (không chứa ký tự @)" },
+                telegramChatId: { type: "number", description: "ID Chat Telegram (số nguyên)" },
+                bankName: { type: "string", description: "Tên ngân hàng" },
+                bankAccount: { type: "string", description: "Số tài khoản ngân hàng" }
+            },
+            required: ["email", "fullName"]
+        }
+    }
+];
 async function executeHrTool(name, args, user, isBoss, apiClient, members) {
     switch (name) {
         case "submit_leave_request": {

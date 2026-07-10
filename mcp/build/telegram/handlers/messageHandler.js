@@ -292,32 +292,17 @@ async function handleTelegramMessage(message) {
             const json = await apiClient.get("/internal/v1/team/plane/issues");
             dbTasks = Array.isArray(json) ? json : (json?.data || []);
             const allMembers = await (0, telegram_agent_1.getCachedMembers)();
-            dbTasks.forEach((t) => {
-                if (Array.isArray(t.subTasks)) {
-                    t.subTasks.forEach((sub) => {
-                        const memberName = (allMembers || []).find((m) => m.id === sub.assigneeId)?.fullName || 'Không rõ';
-                        // Map status text (e.g. pending, in_progress, in_review, done)
-                        let st = 'Pending';
-                        if (sub.status === 'in_progress')
-                            st = 'In Progress';
-                        else if (sub.status === 'in_review')
-                            st = 'In Review';
-                        else if (sub.status === 'done')
-                            st = 'Done';
-                        else if (sub.status === 'pending')
-                            st = 'Pending';
-                        else
-                            st = sub.status;
-                        mappedTasks.push({
-                            title: sub.title,
-                            status: st,
-                            deadline: sub.deadline ? sub.deadline.split('T')[0] : 'Chưa có',
-                            rawDeadline: sub.deadline ? new Date(sub.deadline) : null,
-                            assignee: memberName,
-                            planeTaskId: sub.planeTaskId || 'Task'
-                        });
-                    });
-                }
+            dbTasks.forEach((sub) => {
+                const memberName = (allMembers || []).find((m) => m.id === sub.assigneeId)?.fullName || sub.Assignee?.fullName || 'Không rõ';
+                let st = sub.State?.name || 'Todo';
+                mappedTasks.push({
+                    title: sub.title,
+                    status: st,
+                    deadline: sub.targetDate ? sub.targetDate.split('T')[0] : 'Chưa có',
+                    rawDeadline: sub.targetDate ? new Date(sub.targetDate) : null,
+                    assignee: memberName,
+                    planeTaskId: sub.id
+                });
             });
         }
         catch (err) {
@@ -479,7 +464,7 @@ async function handleTelegramMessage(message) {
     if (cleanText === "📝 công việc của tôi" || cleanText === "/cong_viec") {
         await (0, telegram_agent_1.sendMessage)(chatId, "🔍 Đang truy vấn danh sách công việc của bạn...");
         try {
-            const result = await (0, index_1.executeMcpTool)("get_my_tasks", { employee_name: member.fullName }, member);
+            const result = await (0, index_1.executeMcpTool)("get_my_issues", { employee_name: member.fullName }, member);
             const text = result.content[0].text;
             // Chỉ thay tiêu đề, giữ nguyên format compact từ MCP tool
             const formattedText = text.replace(/Danh sách task của [^:]+:/i, `📋 *CÔNG VIỆC CỦA BẠN:*`);
@@ -547,23 +532,19 @@ async function handleTelegramMessage(message) {
             const tasksData = await prefetchTasksPromise;
             if (tasksData) {
                 dbTasks = tasksData.data || [];
-                dbTasks.forEach((t) => {
-                    if (Array.isArray(t.subTasks)) {
-                        t.subTasks.forEach((sub) => {
-                            mappedTasks.push({
-                                id: sub.planeTaskId || sub.id,
-                                title: sub.title,
-                                description: sub.description || '',
-                                assignee: sub.Assignee ? sub.Assignee.fullName : 'Chưa phân công',
-                                priority: sub.priority.charAt(0).toUpperCase() + sub.priority.slice(1),
-                                status: sub.status === 'pending' ? 'Todo' : sub.status === 'in_progress' ? 'In Progress' : sub.status === 'done' ? 'Done' : sub.status,
-                                deadline: sub.deadline ? sub.deadline.split('T')[0] : '',
-                                estimate: sub.estimatedHours || 0,
-                                projectId: t.id,
-                                uuid: sub.id // Lưu ID UUID thật của subtask để thao tác update sau này
-                            });
-                        });
-                    }
+                dbTasks.forEach((sub) => {
+                    mappedTasks.push({
+                        id: sub.id,
+                        title: sub.title,
+                        description: sub.description || '',
+                        assignee: sub.Assignee ? sub.Assignee.fullName : 'Chưa phân công',
+                        priority: sub.priority ? sub.priority.charAt(0).toUpperCase() + sub.priority.slice(1) : 'None',
+                        status: sub.State?.name || 'Todo',
+                        deadline: sub.targetDate ? sub.targetDate.split('T')[0] : '',
+                        estimate: 0,
+                        projectId: sub.projectId,
+                        uuid: sub.id // Lưu ID UUID thật của subtask để thao tác update sau này
+                    });
                 });
             }
         }
@@ -614,7 +595,7 @@ async function handleTelegramMessage(message) {
                     const result = await (0, index_1.executeMcpTool)("get_team_leaves", aiResponse.teamLeavesPayload || {}, member);
                     await (0, telegram_agent_1.sendMessage)(chatId, result.content[0].text);
                 }
-                else if (['update_task', 'create_task', 'leave_request', 'check_in_out', 'breakdown_task', 'update_subtasks', 'request_task_approval'].includes(aiResponse.action)) {
+                else if (['create_project', 'update_task', 'create_task', 'leave_request', 'check_in_out', 'breakdown_task', 'update_subtasks', 'request_task_approval'].includes(aiResponse.action)) {
                     const actionId = Math.random().toString(36).substring(2, 10);
                     telegram_agent_1.actionCache[actionId] = {
                         action: aiResponse.action,
@@ -628,7 +609,9 @@ async function handleTelegramMessage(message) {
                                         ? aiResponse.updateSubtasksPayload
                                         : aiResponse.action === 'request_task_approval'
                                             ? aiResponse.approvalPayload
-                                            : aiResponse.taskPayload,
+                                            : aiResponse.action === 'create_project'
+                                                ? aiResponse.projectPayload
+                                                : aiResponse.taskPayload,
                         member: member
                     };
                     let confirmMsg = '';
@@ -661,6 +644,10 @@ async function handleTelegramMessage(message) {
                     else if (aiResponse.action === 'request_task_approval') {
                         const ap = aiResponse.approvalPayload;
                         confirmMsg = `💡 *ĐỀ XUẤT XIN DUYỆT CÔNG VIỆC ${ap.task_id}:*\n• Yêu cầu: *${ap.type}*\n• Hạn chót xin dời (nếu có): *${ap.new_deadline || 'Không'}*\n• Ghi chú: *${ap.reason || 'Không'}*`;
+                    }
+                    else if (aiResponse.action === 'create_project') {
+                        const pp = aiResponse.projectPayload;
+                        confirmMsg = `💡 *ĐỀ XUẤT TẠO DỰ ÁN MỚI:*\n• Tên dự án: *${pp.title}*\n• Mô tả: *${pp.description || 'Không'}*`;
                     }
                     else {
                         const tp = aiResponse.taskPayload;
