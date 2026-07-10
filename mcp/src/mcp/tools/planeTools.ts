@@ -45,6 +45,33 @@ case "get_my_issues": {
         }]
       };
     }
+case "create_project": {
+      const { title, description } = args as any;
+      
+      if (!isBoss) {
+        throw new McpError(
+          ErrorCode.InvalidRequest,
+          "TỪ CHỐI TRUY CẬP: Bạn không có quyền tạo Dự án. Hãy nhờ Quản lý hoặc Giám đốc."
+        );
+      }
+
+      try {
+        const res = await apiClient.post(API_ROUTES.PLANE.PROJECTS, {
+          name: title,
+          description: description || ''
+        });
+
+        const newProject = (res as any).data;
+        return {
+          content: [{
+            type: "text",
+            text: `🎉 Khởi tạo Dự án thành công!\n\n- ID Dự án: ${newProject.id}\n- Tên Dự án: ${newProject.name}\n\nBạn có thể tiếp tục tạo Issue cho dự án này.`
+          }]
+        };
+      } catch (err: any) {
+        throw new McpError(ErrorCode.InternalError, `Lỗi khởi tạo dự án: ${err.message}`);
+      }
+    }
 case "create_issue": {
       const { title, project_id, assignee, priority, target_date } = args as any;
       

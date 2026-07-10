@@ -260,7 +260,7 @@ export const formSessionCommand: TelegramCommand = {
       });
       
       try {
-        await apiClient.post("/hr/projects", {
+        await apiClient.post(API_ROUTES.PLANE.PROJECTS, {
           name: session.projectName,
           description: description
         });

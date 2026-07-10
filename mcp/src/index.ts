@@ -93,6 +93,18 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         }
       },
       {
+        name: "create_project",
+        description: "Tạo một Dự án (Project) lớn mới trong cấu trúc Plane.io.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            title: { type: "string", description: "Tên của dự án mới" },
+            description: { type: "string", description: "Mô tả chi tiết dự án (tuỳ chọn)" }
+          },
+          required: ["title"]
+        }
+      },
+      {
         name: "create_issue",
         description: "Tạo một issue mới. Yêu cầu tiêu đề và người gán. Plane structure hỗ trợ project_id, state, priority.",
         inputSchema: {

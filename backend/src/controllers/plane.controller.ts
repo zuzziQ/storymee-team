@@ -27,6 +27,59 @@ export class PlaneController {
         }
     }
 
+    static async createProject(req: FastifyRequest, reply: FastifyReply) {
+        try {
+            const data = req.body as any;
+            if (!data.name) {
+                return reply.status(400).send({ success: false, message: "Missing project name" });
+            }
+
+            // Get default workspace
+            let workspace = await prisma.plWorkspace.findFirst();
+            if (!workspace) {
+                workspace = await prisma.plWorkspace.create({
+                    data: { name: 'Default Workspace', slug: 'default-workspace' }
+                });
+            }
+
+            let identifier = data.identifier;
+            if (!identifier) {
+                identifier = data.name.substring(0, 3).toUpperCase().replace(/[^A-Z]/g, '') || 'PRO';
+                // Add a random number to avoid collision
+                identifier += Math.floor(Math.random() * 100).toString();
+            }
+
+            const project = await prisma.plProject.create({
+                data: {
+                    name: data.name,
+                    identifier: identifier,
+                    description: data.description,
+                    workspaceId: workspace.id
+                }
+            });
+
+            // Create default states
+            await prisma.plState.createMany({
+                data: [
+                    { name: 'Backlog', group: 'backlog', projectId: project.id, color: '#9ca3af', sequence: 1 },
+                    { name: 'Todo', group: 'unstarted', projectId: project.id, color: '#3b82f6', sequence: 2 },
+                    { name: 'In Progress', group: 'started', projectId: project.id, color: '#f59e0b', sequence: 3 },
+                    { name: 'Done', group: 'completed', projectId: project.id, color: '#10b981', sequence: 4 }
+                ]
+            });
+
+            const finalProject = await prisma.plProject.findUnique({
+                where: { id: project.id },
+                include: { states: true }
+            });
+
+            return reply.send({ success: true, data: finalProject });
+        } catch (error: any) {
+            console.error("Lỗi createProject:", error);
+            return reply.status(500).send({ success: false, message: error.message });
+        }
+    }
+
     // ISSUES
     static async getIssues(req: FastifyRequest, reply: FastifyReply) {
         try {
