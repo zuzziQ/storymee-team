@@ -289,29 +289,17 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
       
       const allMembers = await getCachedMembers();
       
-      dbTasks.forEach((t: any) => {
-        if (Array.isArray(t.subTasks)) {
-          t.subTasks.forEach((sub: any) => {
-            const memberName = (allMembers || []).find((m:any) => m.id === sub.assigneeId)?.fullName || 'Không rõ';
-            
-            // Map status text (e.g. pending, in_progress, in_review, done)
-            let st = 'Pending';
-            if (sub.status === 'in_progress') st = 'In Progress';
-            else if (sub.status === 'in_review') st = 'In Review';
-            else if (sub.status === 'done') st = 'Done';
-            else if (sub.status === 'pending') st = 'Pending';
-            else st = sub.status;
-            
-            mappedTasks.push({
-              title: sub.title,
-              status: st,
-              deadline: sub.deadline ? sub.deadline.split('T')[0] : 'Chưa có',
-              rawDeadline: sub.deadline ? new Date(sub.deadline) : null,
-              assignee: memberName,
-              planeTaskId: sub.planeTaskId || 'Task'
-            });
-          });
-        }
+      dbTasks.forEach((sub: any) => {
+        const memberName = (allMembers || []).find((m:any) => m.id === sub.assigneeId)?.fullName || sub.Assignee?.fullName || 'Không rõ';
+        let st = sub.State?.name || 'Todo';
+        mappedTasks.push({
+          title: sub.title,
+          status: st,
+          deadline: sub.targetDate ? sub.targetDate.split('T')[0] : 'Chưa có',
+          rawDeadline: sub.targetDate ? new Date(sub.targetDate) : null,
+          assignee: memberName,
+          planeTaskId: sub.id
+        });
       });
     } catch (err) {
       console.error("Lỗi fetch tasks cho report:", err);
@@ -489,7 +477,7 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
   if (cleanText === "📝 công việc của tôi" || cleanText === "/cong_viec") {
     await sendMessage(chatId, "🔍 Đang truy vấn danh sách công việc của bạn...");
     try {
-      const result = await executeMcpTool("get_my_tasks", { employee_name: member.fullName }, member);
+      const result = await executeMcpTool("get_my_issues", { employee_name: member.fullName }, member);
       const text = result.content[0].text;
       
       // Chỉ thay tiêu đề, giữ nguyên format compact từ MCP tool
@@ -564,23 +552,19 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
       if (tasksData) {
         dbTasks = tasksData.data || [];
         
-        dbTasks.forEach((t: any) => {
-          if (Array.isArray(t.subTasks)) {
-            t.subTasks.forEach((sub: any) => {
-              mappedTasks.push({
-                id: sub.planeTaskId || sub.id,
-                title: sub.title,
-                description: sub.description || '',
-                assignee: sub.Assignee ? sub.Assignee.fullName : 'Chưa phân công',
-                priority: sub.priority.charAt(0).toUpperCase() + sub.priority.slice(1),
-                status: sub.status === 'pending' ? 'Todo' : sub.status === 'in_progress' ? 'In Progress' : sub.status === 'done' ? 'Done' : sub.status,
-                deadline: sub.deadline ? sub.deadline.split('T')[0] : '',
-                estimate: sub.estimatedHours || 0,
-                projectId: t.id,
-                uuid: sub.id // Lưu ID UUID thật của subtask để thao tác update sau này
-              });
-            });
-          }
+        dbTasks.forEach((sub: any) => {
+          mappedTasks.push({
+            id: sub.id,
+            title: sub.title,
+            description: sub.description || '',
+            assignee: sub.Assignee ? sub.Assignee.fullName : 'Chưa phân công',
+            priority: sub.priority ? sub.priority.charAt(0).toUpperCase() + sub.priority.slice(1) : 'None',
+            status: sub.State?.name || 'Todo',
+            deadline: sub.targetDate ? sub.targetDate.split('T')[0] : '',
+            estimate: 0,
+            projectId: sub.projectId,
+            uuid: sub.id // Lưu ID UUID thật của subtask để thao tác update sau này
+          });
         });
       }
     } catch (err) {
