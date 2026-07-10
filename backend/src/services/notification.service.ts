@@ -1,4 +1,4 @@
-import prisma from '@storymee/prisma-client';
+import { prisma } from '../config/prisma';
 
 export class NotificationService {
     static async createNotification(
