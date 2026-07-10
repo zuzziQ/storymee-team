@@ -154,7 +154,7 @@ export function useAppState() {
       const res = await fetchAxios('/api/ai/logs');
       if (res.ok) {
         const json = await res.json();
-        if (json.status === 'success' && Array.isArray(json.data)) {
+        if ((json.status === 'success' || json.success === true) && Array.isArray(json.data)) {
           setRoutingLogs(json.data);
           
           // Tự động tính toán tổng lượng token tiêu thụ từ danh sách logs của máy chủ
@@ -187,7 +187,7 @@ export function useAppState() {
       const res = await fetchAxios('/api/ai/announcements');
       if (res.ok) {
         const json = await res.json();
-        if (json.status === 'success' && Array.isArray(json.data)) {
+        if ((json.status === 'success' || json.success === true) && Array.isArray(json.data)) {
           setAnnouncements(json.data);
         }
       }
@@ -200,7 +200,7 @@ export function useAppState() {
     try {
       setDbError(null);
       const membersData = await coreApiClient.get(API_ROUTES.HR.TEAM_MEMBERS);
-      if (membersData.status === 'success' && Array.isArray(membersData.data)) {
+      if ((membersData.status === 'success' || membersData.success === true) && Array.isArray(membersData.data)) {
         const mappedMembers = membersData.data.map((m: any) => ({
           ...m,
           name: m.fullName
@@ -232,7 +232,7 @@ export function useAppState() {
 
       try {
         const attendanceData = await coreApiClient.get(API_ROUTES.HR.ATTENDANCE);
-        if (attendanceData.status === 'success' && Array.isArray(attendanceData.data)) {
+        if ((attendanceData.status === 'success' || attendanceData.success === true) && Array.isArray(attendanceData.data)) {
           setAttendanceList(attendanceData.data);
         }
       } catch (err) {
@@ -241,7 +241,7 @@ export function useAppState() {
 
       try {
         const projectsData = await coreApiClient.get(API_ROUTES.PLANE.PROJECTS);
-        if (projectsData.status === 'success' && Array.isArray(projectsData.data)) {
+        if ((projectsData.status === 'success' || projectsData.success === true) && Array.isArray(projectsData.data)) {
           const mappedProjects = projectsData.data.map((p: any) => ({
             id: p.id,
             name: p.name,
@@ -281,7 +281,7 @@ export function useAppState() {
 
       try {
         const issuesData = await coreApiClient.get(API_ROUTES.PLANE.ISSUES);
-        if (issuesData.status === 'success' && Array.isArray(issuesData.data)) {
+        if ((issuesData.status === 'success' || issuesData.success === true) && Array.isArray(issuesData.data)) {
           const dbIssues = issuesData.data;
 
           const mappedTasks: any[] = dbIssues.filter((issue: any) => !issue.parentId).map((issue: any) => {
@@ -331,7 +331,7 @@ export function useAppState() {
       }
       try {
         const leavesData = await coreApiClient.get(API_ROUTES.HR.LEAVE_REQUESTS);
-        if (leavesData.status === 'success' && Array.isArray(leavesData.data)) {
+        if ((leavesData.status === 'success' || leavesData.success === true) && Array.isArray(leavesData.data)) {
           const mappedLeaves = leavesData.data.map((l: any) => ({
             id: l.id,
             name: l.member?.fullName || 'Không rõ',
@@ -530,7 +530,7 @@ export function useAppState() {
 
       if (res.ok) {
         const json = await res.json();
-        if (json.status === 'success') {
+        if (json.status === 'success' || json.success === true) {
           const aiMsg: ChatMessage = { id: `m-${Date.now() + 1}`, sender: 'ai', text: json.data.reply };
           setAiChatMessages(prev => [...prev, aiMsg]);
           
@@ -651,7 +651,7 @@ export function useAppState() {
 
       if (res.ok) {
         const json = await res.json();
-        if (json.status === 'success') {
+        if (json.status === 'success' || json.success === true) {
           setAiProjectInsights(prev => ({
             ...prev,
             [id]: json.data.insights

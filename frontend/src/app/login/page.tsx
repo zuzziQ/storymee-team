@@ -30,7 +30,7 @@ export default function LoginPage() {
       setStatusText('Đang xác thực Token từ Telegram...');
       try {
         const json = await coreApiClient.get('/hr/team-members');
-        if (json.status === 'success' && Array.isArray(json.data)) {
+        if ((json.status === 'success' || json.success === true) && Array.isArray(json.data)) {
           const matchedUser = json.data.find(
             (u: any) => u.lettaConversationId === token || `conv-${u.id}` === token
           );
@@ -82,7 +82,7 @@ export default function LoginPage() {
 
     try {
       const json = await coreApiClient.get('/hr/team-members');
-      if (json.status === 'success' && Array.isArray(json.data)) {
+      if ((json.status === 'success' || json.success === true) && Array.isArray(json.data)) {
         // Tìm kiếm linh hoạt: Khớp Email hoặc Telegram Username
         const matchedUser = json.data.find((u: any) => 
           (u.email && u.email.toLowerCase() === searchVal) || 
