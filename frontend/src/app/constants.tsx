@@ -10,6 +10,9 @@ export interface SubTask {
   title: string;
   isDone: boolean;
   status?: string; // 'pending' | 'working' | 'done' | 'failed' | 'cancelled'
+  assignee?: string;
+  priority?: Priority;
+  targetDate?: string;
 }
 export interface Project {
   id: string;

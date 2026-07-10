@@ -158,7 +158,31 @@ export default function TaskDetailModal({
         }
       });
       
-      setSubtasks(Array.from(mergedMap.values()));
+      const currentMergedMap = Array.from(mergedMap.values());
+      const orphanedSubtasks = currentMergedMap.filter(sub => sub.id.startsWith('sub-ai-') && !sub.dbId);
+      
+      if (orphanedSubtasks.length > 0 && (task.dbId || task.id)) {
+        const syncPromises = orphanedSubtasks.map(subItem => 
+          coreApiClient.post(API_ROUTES.PLANE.ISSUES, {
+            title: subItem.title,
+            parentId: task.dbId || task.id,
+            projectId: task.projectId,
+            priority: 'medium'
+          }).then((res: any) => {
+            if (res.success || res.status === 'success') {
+              subItem.id = res.data.id;
+              subItem.dbId = res.data.id;
+            }
+          }).catch(e => console.error("Failed to auto-sync AI subtask to DB", e))
+        );
+        
+        Promise.all(syncPromises).then(() => {
+          setSubtasks([...currentMergedMap]);
+          localStorage.setItem(`subtasks_checklist_${task.id}`, JSON.stringify(currentMergedMap));
+        });
+      } else {
+        setSubtasks(currentMergedMap);
+      }
     }
   }, [task.id, task.subtasks]);
 
@@ -443,27 +467,71 @@ export default function TaskDetailModal({
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {subtasks.map(sub => (
-                      <div key={sub.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--bg-muted)', borderRadius: 10, border: '1px solid var(--border)' }}>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', flex: 1 }}>
+                      <div key={sub.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--bg-muted)', borderRadius: 10, border: '1px solid var(--border)', gap: 12 }}>
+                        
+                        {/* Checkbox & Title */}
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', flex: 1, minWidth: 0 }}>
                           <input
                             type="checkbox"
                             checked={sub.isDone || sub.status === 'done' || sub.status === 'completed'}
                             onChange={(e) => handleUpdateSubtaskStatus(sub.id, e.target.checked ? 'done' : 'pending')}
-                            style={{ width: 14, height: 14, accentColor: '#6366f1' }}
+                            style={{ width: 14, height: 14, accentColor: '#6366f1', flexShrink: 0 }}
                           />
-                          <span style={{ fontSize: 13, color: (sub.isDone || sub.status === 'done' || sub.status === 'completed' || sub.status === 'cancelled') ? '#71717a' : '#fafafa', textDecoration: (sub.isDone || sub.status === 'done' || sub.status === 'completed' || sub.status === 'cancelled') ? 'line-through' : 'none' }}>{sub.title}</span>
+                          <span style={{ fontSize: 13, color: (sub.isDone || sub.status === 'done' || sub.status === 'completed' || sub.status === 'cancelled') ? '#71717a' : '#fafafa', textDecoration: (sub.isDone || sub.status === 'done' || sub.status === 'completed' || sub.status === 'cancelled') ? 'line-through' : 'none', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub.title}</span>
                         </label>
-                        <select 
-                           value={sub.status || (sub.isDone ? 'done' : 'pending')}
-                           onChange={(e) => handleUpdateSubtaskStatus(sub.id, e.target.value)}
-                           style={{ fontSize: 11, padding: '4px 8px', borderRadius: 6, background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border)', color: '#fafafa', outline: 'none' }}
-                        >
-                          <option value="pending">Todo</option>
-                          <option value="working">In Progress</option>
-                          <option value="in_review">In Review</option>
-                          <option value="done">Done</option>
-                          <option value="cancelled">Huỷ</option>
-                        </select>
+                        
+                        {/* Assignee, Priority, Deadline Controls */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                          
+                          {/* Priority */}
+                          <select
+                             value={sub.priority || 'Medium'}
+                             onChange={(e) => {
+                               const p = e.target.value as Priority;
+                               const newSubs = subtasks.map(s => s.id === sub.id ? { ...s, priority: p } : s);
+                               setSubtasks(newSubs);
+                               if (sub.dbId) coreApiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${sub.dbId}`, { priority: p.toLowerCase() }).catch(() => {});
+                               handleTaskUpdate({ subtasks: newSubs });
+                             }}
+                             style={{ fontSize: 10, padding: '2px 4px', borderRadius: 4, background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: sub.priority === 'Urgent' ? '#ef4444' : sub.priority === 'High' ? '#f97316' : '#a1a1aa', outline: 'none', cursor: 'pointer' }}
+                          >
+                            <option value="Low">Low</option>
+                            <option value="Medium">Medium</option>
+                            <option value="High">High</option>
+                            <option value="Urgent">Urgent</option>
+                          </select>
+
+                          {/* Assignee */}
+                          <select
+                            value={sub.assignee || ''}
+                            onChange={(e) => {
+                               const a = e.target.value;
+                               const newSubs = subtasks.map(s => s.id === sub.id ? { ...s, assignee: a } : s);
+                               setSubtasks(newSubs);
+                               if (sub.dbId) coreApiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${sub.dbId}`, { assigneeId: a }).catch(() => {}); // Note: Requires mapping name to member ID on backend if needed, but standard behavior sends string name for now
+                               handleTaskUpdate({ subtasks: newSubs });
+                            }}
+                            style={{ fontSize: 11, padding: '2px 6px', borderRadius: 4, background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: sub.assignee ? getMemberColor(sub.assignee) : '#71717a', outline: 'none', cursor: 'pointer', maxWidth: 90 }}
+                          >
+                            <option value="">👤 Assign</option>
+                            {teamMembers.map(m => (
+                              <option key={m.id} value={m.name}>{m.name.split(' ').pop()}</option>
+                            ))}
+                          </select>
+                          
+                          {/* Status */}
+                          <select 
+                             value={sub.status || (sub.isDone ? 'done' : 'pending')}
+                             onChange={(e) => handleUpdateSubtaskStatus(sub.id, e.target.value)}
+                             style={{ fontSize: 11, padding: '4px 8px', borderRadius: 6, background: sub.status === 'done' ? 'rgba(34,197,94,0.2)' : sub.status === 'working' ? 'rgba(99,102,241,0.2)' : 'rgba(0,0,0,0.2)', border: '1px solid var(--border)', color: sub.status === 'done' ? '#4ade80' : sub.status === 'working' ? '#818cf8' : '#fafafa', outline: 'none', cursor: 'pointer', fontWeight: 500 }}
+                          >
+                            <option value="pending">Todo</option>
+                            <option value="working">In Progress</option>
+                            <option value="in_review">In Review</option>
+                            <option value="done">Done</option>
+                            <option value="cancelled">Huỷ</option>
+                          </select>
+                        </div>
                       </div>
                     ))}
                     {subtasks.length === 0 && (
