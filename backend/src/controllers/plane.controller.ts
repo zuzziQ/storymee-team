@@ -161,10 +161,22 @@ export class PlaneController {
 
             let finalStateId = data.stateId;
             if (data.status && !finalStateId) {
-                const issue = await prisma.plIssue.findUnique({ where: { id }, include: { Project: { include: { states: true } } } });
-                if (issue && issue.Project.states) {
+                const issue = await prisma.plIssue.findUnique({ 
+                    where: { id }, 
+                    include: { 
+                        Project: { include: { states: true } },
+                        Parent: { include: { Project: { include: { states: true } } } }
+                    } 
+                });
+                
+                let availableStates = issue?.Project?.states || issue?.Parent?.Project?.states;
+                if (!availableStates || availableStates.length === 0) {
+                    availableStates = await prisma.plState.findMany(); // Fallback to all states in DB
+                }
+
+                if (availableStates && availableStates.length > 0) {
                     const statusLower = data.status.toLowerCase();
-                    const stateObj = issue.Project.states.find((s: any) => 
+                    const stateObj = availableStates.find((s: any) => 
                         s.name.toLowerCase() === statusLower || 
                         ((statusLower === 'backlog') && s.group === 'backlog') ||
                         ((statusLower === 'todo' || statusLower === 'pending') && s.group === 'unstarted') ||
