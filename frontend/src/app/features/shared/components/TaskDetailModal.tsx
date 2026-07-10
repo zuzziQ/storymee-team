@@ -210,34 +210,8 @@ export default function TaskDetailModal({
         } else {
           // New subtask from DB (e.g. AI generated)
           mergedMap.set(item.id, item);
-        }
-      });
-      
       const currentMergedMap = Array.from(mergedMap.values());
-      const orphanedSubtasks = currentMergedMap.filter(sub => sub.id.startsWith('sub-ai-') && !sub.dbId);
-      
-      if (orphanedSubtasks.length > 0 && (task.dbId || task.id)) {
-        const syncPromises = orphanedSubtasks.map(subItem => 
-          coreApiClient.post(API_ROUTES.PLANE.ISSUES, {
-            title: subItem.title,
-            parentId: task.dbId || task.id,
-            projectId: task.projectId,
-            priority: 'medium'
-          }).then((res: any) => {
-            if (res.success || res.status === 'success') {
-              subItem.id = res.data.id;
-              subItem.dbId = res.data.id;
-            }
-          }).catch(e => console.error("Failed to auto-sync AI subtask to DB", e))
-        );
-        
-        Promise.all(syncPromises).then(() => {
-          setSubtasks([...currentMergedMap]);
-          localStorage.setItem(`subtasks_checklist_${task.id}`, JSON.stringify(currentMergedMap));
-        });
-      } else {
-        setSubtasks(currentMergedMap);
-      }
+      setSubtasks(currentMergedMap);
     }
   }, [task.id, task.subtasks]);
 
@@ -341,48 +315,57 @@ export default function TaskDetailModal({
             typeof s === 'string' ? s : (s.title || s.name || '')
           ).filter(Boolean);
 
-          // Hiển thị ngay trong UI
-          const uiList = titles.map((title: string, idx: number) => ({
-            id: `sub-ai-${Date.now()}-${idx}`,
-            title,
-            isDone: false,
-            status: 'pending'
-          }));
-          
-          setSubtasks([...subtasks, ...uiList]);
-
-          // Save to DB asynchronously
+          // Save to DB immediately
+          let finalUiList: SubTask[] = [];
           if (task.dbId || task.id) {
-            const promises = uiList.map((subItem: any) => 
-              coreApiClient.post(API_ROUTES.PLANE.ISSUES, {
-                title: subItem.title,
-                parentId: task.dbId || task.id,
-                projectId: task.projectId,
-                priority: 'medium'
-              }).then((res: any) => {
+            const promises = titles.map(async (title: string, idx: number) => {
+              try {
+                const res: any = await coreApiClient.post(API_ROUTES.PLANE.ISSUES, {
+                  title: title,
+                  parentId: task.dbId || task.id,
+                  projectId: task.projectId,
+                  priority: 'medium'
+                });
                 if (res.success || res.status === 'success') {
-                  subItem.id = res.data.id;
-                  subItem.dbId = res.data.id;
+                  return {
+                    id: res.data.id,
+                    dbId: res.data.id,
+                    title,
+                    isDone: false,
+                    status: 'pending'
+                  };
                 }
-              }).catch(e => console.error("Failed to save AI subtask to DB", e))
-            );
-            
-            Promise.all(promises).then(() => {
-              // Update state with real DB IDs
-              setSubtasks(prev => {
-                const updated = [...prev];
-                return updated;
-              });
-              if (onUpdate) {
-                try {
-                  handleTaskUpdate({ subtasks: [...subtasks, ...uiList] });
-                } catch (e) { /* silent fail */ }
+              } catch (e) {
+                console.error("Failed to save AI subtask to DB", e);
               }
+              // Fallback if failed
+              return {
+                id: `sub-ai-${Date.now()}-${idx}`,
+                title,
+                isDone: false,
+                status: 'pending'
+              };
             });
+            
+            finalUiList = await Promise.all(promises);
           } else {
-             if (onUpdate) handleTaskUpdate({ subtasks: [...subtasks, ...uiList] });
+             finalUiList = titles.map((title: string, idx: number) => ({
+                id: `sub-ai-${Date.now()}-${idx}`,
+                title,
+                isDone: false,
+                status: 'pending'
+             }));
           }
 
+          setSubtasks([...subtasks, ...finalUiList]);
+          
+          if (onUpdate) {
+            try {
+              handleTaskUpdate({ subtasks: [...subtasks, ...finalUiList] });
+            } catch (e) { /* silent fail */ }
+          }
+          
+          logActivity(`Đã tạo ${finalUiList.length} subtask bằng AI.`);
           if (json.log && onAddRoutingLog) {
             onAddRoutingLog(json.log, task.title.length * 0.75 + 1800);
           }
