@@ -529,11 +529,7 @@ case "request_issue_approval": {
         throw new McpError(ErrorCode.InvalidParams, `Không tìm thấy công việc mã ID ${task_id}.`);
       }
 
-      try {
-            await apiClient.post(`/omnitask/hr/tasks/${foundSubtask.id}/request`, { type, reason, newDeadline: new_deadline });
-          } catch (err: any) {
-            throw new McpError(ErrorCode.InternalError, "Lỗi khi gọi API xin duyệt.");
-          }
+      // Telegram Bot will handle sending notification to Admin. We just need to return success.
       return {
         content: [{
           type: "text",
@@ -570,11 +566,18 @@ case "approve_issue_request": {
         throw new McpError(ErrorCode.InvalidParams, `Không tìm thấy công việc mã ID ${task_id}.`);
       }
 
-      try {
-            await apiClient.post(`/omnitask/hr/tasks/${foundSubtask.id}/approve`, { type, decision, newDeadline: new_deadline });
-          } catch (err: any) {
-            throw new McpError(ErrorCode.InternalError, "Lỗi khi gọi API duyệt yêu cầu.");
+      if (decision === 'approve') {
+        try {
+          if (type === 'delete' || type === 'archive') {
+            await apiClient.delete(`${API_ROUTES.PLANE.ISSUES}/${foundSubtask.id}`);
+          } else if (type === 'extend' || type === 'extend_deadline') {
+            await apiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${foundSubtask.id}`, { target_date: new_deadline });
           }
+        } catch (err: any) {
+          throw new McpError(ErrorCode.InternalError, "Lỗi khi gọi API thực thi yêu cầu.");
+        }
+      }
+
       return {
         content: [{
           type: "text",
