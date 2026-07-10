@@ -1,5 +1,6 @@
 import { fetchAxios } from '@/lib/fetchAxios';
 import React, { useState, useEffect } from 'react';
+import { io } from 'socket.io-client';
 import { Calendar, Clock, X, Paperclip, MoreVertical, Search, CheckCircle2, Circle, Bot, AlertCircle, FileText, ExternalLink, Activity, Type, ListTodo, ChevronDown, Check, Plus, Trash2, Edit3, Globe } from 'lucide-react';
 import {
   Task, SubTask, TeamMember, Priority, TaskStatus, Project,
@@ -9,6 +10,15 @@ import { coreApiClient } from '../../../../lib/apiClient';
 import { API_ROUTES } from '@/lib/apiClient';
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL === '/api' || process.env.NEXT_PUBLIC_API_URL === '/' || (process.env.NEXT_PUBLIC_API_URL || '').includes('//hub.storymee.com') || !process.env.NEXT_PUBLIC_API_URL ? 'https://dev-hub.storymee.com' : process.env.NEXT_PUBLIC_API_URL) || 'http://localhost:4500';
+
+// Initialize socket outside component to prevent multiple connections
+let socket: ReturnType<typeof io> | null = null;
+if (typeof window !== 'undefined') {
+  socket = io(API_BASE, {
+    path: '/internal/v1/team/socket.io',
+    autoConnect: false
+  });
+}
 
 interface Note { id: string; text: string; author: string; time: string; }
 interface Attachment { id: string; type: 'link' | 'file'; label: string; url: string; }
@@ -76,6 +86,51 @@ export default function TaskDetailModal({
       localStorage.setItem(storageKey, JSON.stringify(initialLog));
     }
   }, [task.id]);
+
+  // Realtime Socket.io Subscription for Subtasks
+  useEffect(() => {
+    if (!socket) return;
+    
+    socket.connect();
+    
+    const handleIssueUpdated = (data: any) => {
+      // If the updated issue belongs to the current task
+      if (data.parentId === task.id || data.parentId === task.dbId) {
+        setSubtasks(prev => {
+          const index = prev.findIndex(s => s.dbId === data.id || s.id === data.id);
+          if (index !== -1) {
+            const updatedSubtasks = [...prev];
+            // Determine status based on returned stateId/status (simplification)
+            const isDone = data.stateId ? false : data.status === 'done'; 
+            updatedSubtasks[index] = { 
+              ...updatedSubtasks[index], 
+              title: data.title || updatedSubtasks[index].title,
+              isDone: isDone,
+              priority: data.priority || updatedSubtasks[index].priority,
+              assignee: data.assigneeId || updatedSubtasks[index].assignee
+            };
+            return updatedSubtasks;
+          }
+          // New subtask added by someone else
+          return [...prev, { 
+            id: data.id, 
+            dbId: data.id, 
+            title: data.title, 
+            isDone: false,
+            priority: data.priority,
+            assignee: data.assigneeId
+          }];
+        });
+      }
+    };
+    
+    socket.on('issue_updated', handleIssueUpdated);
+    
+    return () => {
+      socket?.off('issue_updated', handleIssueUpdated);
+      socket?.disconnect();
+    };
+  }, [task.id, task.dbId]);
 
   const logActivity = (actionText: string) => {
     let currentUser = 'Lê Quang Minh';

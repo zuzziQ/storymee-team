@@ -4,6 +4,8 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 import Fastify from 'fastify';
 import { setupCors, globalErrorHandler } from '@storymee/fastify-common';
+import { Server } from 'socket.io';
+import { connect, NatsConnection } from 'nats';
 
 import adminRoutes from './modules/tasks/index';
 import hrRoutes from './modules/hr/index';
@@ -21,6 +23,17 @@ const fastify = Fastify({
 
 async function startServer() {
   fastify.setErrorHandler(globalErrorHandler as any);
+  
+  // Setup NATS
+  let nc: NatsConnection | undefined;
+  try {
+    nc = await connect({ servers: process.env.NATS_URL || 'nats://localhost:4222' });
+    console.log(`[Core Team API] Connected to NATS on ${nc.getServer()}`);
+    // Expose NATS to controllers via fastify decorator
+    fastify.decorate('nats', nc);
+  } catch (err) {
+    console.warn('[Core Team API] Failed to connect to NATS:', err);
+  }
   
   await fastify.register(setupCors as any);
 
@@ -40,6 +53,37 @@ async function startServer() {
       process.exit(1);
     }
     console.log(`[Core Team API] Server is listening at ${address}`);
+
+    // Setup Socket.io
+    const io = new Server(fastify.server, {
+      cors: { origin: '*', methods: ['GET', 'POST'] },
+      path: '/internal/v1/team/socket.io'
+    });
+    
+    fastify.decorate('io', io);
+
+    io.on('connection', (socket) => {
+      console.log(`[Core Team API] Socket connected: ${socket.id}`);
+      socket.on('disconnect', () => {
+        console.log(`[Core Team API] Socket disconnected: ${socket.id}`);
+      });
+    });
+
+    // Subscribe to NATS to forward to WebSockets
+    if (nc) {
+      nc.subscribe('core.team.issue.updated', {
+        callback: (err, msg) => {
+          if (!err) {
+            try {
+              const data = JSON.parse(msg.data.toString());
+              io.emit('issue_updated', data);
+            } catch (e) {
+              console.error('Error forwarding NATS message to Socket.io', e);
+            }
+          }
+        }
+      });
+    }
   });
 }
 

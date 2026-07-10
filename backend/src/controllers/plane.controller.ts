@@ -189,6 +189,19 @@ export class PlaneController {
                     startDate: data.startDate ? new Date(data.startDate) : undefined
                 }
             });
+
+            // Publish NATS event
+            const fastify: any = req.server;
+            if (fastify.nats) {
+                try {
+                    const { StringCodec } = require('nats');
+                    const sc = StringCodec();
+                    fastify.nats.publish('core.team.issue.updated', sc.encode(JSON.stringify(updated)));
+                } catch (e) {
+                    console.error('Failed to publish NATS event', e);
+                }
+            }
+            
             return reply.send({ success: true, data: updated });
         } catch (error: any) {
             return reply.status(500).send({ success: false, message: error.message });
