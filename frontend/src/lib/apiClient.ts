@@ -34,7 +34,8 @@ export class CoreApiClient {
             const res = await fetch(fullUrl, {
                 method: 'GET',
                 headers: { 'Content-Type': 'application/json' },
-                signal: AbortSignal.timeout(60000)
+                signal: AbortSignal.timeout(60000),
+                cache: 'no-store'
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) throw { status: res.status, data };
@@ -55,7 +56,8 @@ export class CoreApiClient {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),
-                signal: AbortSignal.timeout(60000)
+                signal: AbortSignal.timeout(60000),
+                cache: 'no-store'
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) throw { status: res.status, data };
@@ -75,7 +77,8 @@ export class CoreApiClient {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),
-                signal: AbortSignal.timeout(60000)
+                signal: AbortSignal.timeout(60000),
+                cache: 'no-store'
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) throw { status: res.status, data };
@@ -95,7 +98,8 @@ export class CoreApiClient {
             const res = await fetch(fullUrl, {
                 method: 'DELETE',
                 headers: { 'Content-Type': 'application/json' },
-                signal: AbortSignal.timeout(60000)
+                signal: AbortSignal.timeout(60000),
+                cache: 'no-store'
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) throw { status: res.status, data };

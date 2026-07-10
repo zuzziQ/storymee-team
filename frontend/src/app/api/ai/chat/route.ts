@@ -5,6 +5,7 @@ import path from 'path';
 import { getOrCreateConversation, sendMessageToLetta, getLettaHistory } from '@/lib/lettaClient';
 import { coreApiClient } from '@/lib/apiClient';
 
+export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 export async function GET(request: Request) {
