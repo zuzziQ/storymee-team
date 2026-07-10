@@ -147,8 +147,8 @@ Nhiệm vụ của bạn:
 {
   "reply": "Câu trả lời của bạn định dạng Markdown sạch",
   "action": "create_project" | "update_issue" | "create_issue" | "leave_request" | "check_in_out" | "breakdown_issue" | "update_sub_issues" | "request_issue_approval" | "get_attendance_report" | "get_team_leaves" | "none",
-  "taskPayload": { "id": "Mã task (nếu sửa)", "title": "Tiêu đề (nếu tạo)", "assignee": "Người phụ trách", "status": "Trạng thái mới", "deadline": "YYYY-MM-DD", "estimate": số_giờ, "priority": "Độ ưu tiên" },
-  "projectPayload": { "title": "Tên dự án mới", "description": "Mô tả dự án (nếu có)" },
+  "taskPayload": { "id": "Mã task (nếu sửa)", "projectId": "Mã ID của dự án tương ứng", "title": "Tiêu đề (nếu tạo)", "assignee": "Người phụ trách", "status": "Trạng thái mới", "deadline": "YYYY-MM-DD", "estimate": số_giờ, "priority": "Độ ưu tiên" },
+  "projectPayload": { "id": "Mã dự án (nếu sửa)", "title": "Tên dự án mới", "description": "Mô tả dự án", "status": "Trạng thái mới" },
   "leavePayload": { "leaveType": "sick" | "annual" | "personal", "startDate": "YYYY-MM-DD", "endDate": "YYYY-MM-DD", "reason": "Lý do xin nghỉ" },
   "checkInOutPayload": { "status": "present", "notes": "Ghi chú", "employee_name": "Tên nhân sự" },
   "breakdownPayload": { "task_id": "Mã ID" },
@@ -189,7 +189,7 @@ Nhiệm vụ của bạn:
           body: JSON.stringify({
             contents: [{ parts: [{ text: fullPrompt }] }]
           }),
-          signal: AbortSignal.timeout(15000)
+          signal: AbortSignal.timeout(45000)
         });
 
         if (hubRes.ok) {
