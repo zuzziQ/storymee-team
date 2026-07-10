@@ -166,10 +166,11 @@ export class PlaneController {
                     const statusLower = data.status.toLowerCase();
                     const stateObj = issue.Project.states.find((s: any) => 
                         s.name.toLowerCase() === statusLower || 
-                        (statusLower === 'todo' && s.group === 'unstarted') ||
-                        (statusLower === 'pending' && s.group === 'unstarted') ||
-                        ((statusLower === 'in progress' || statusLower === 'in_progress') && s.group === 'started') ||
-                        (statusLower === 'done' && s.group === 'completed')
+                        ((statusLower === 'backlog') && s.group === 'backlog') ||
+                        ((statusLower === 'todo' || statusLower === 'pending') && s.group === 'unstarted') ||
+                        ((statusLower === 'in progress' || statusLower === 'in_progress' || statusLower === 'working' || statusLower === 'in review' || statusLower === 'in_review') && s.group === 'started') ||
+                        ((statusLower === 'done' || statusLower === 'completed') && s.group === 'completed') ||
+                        ((statusLower === 'cancelled' || statusLower === 'canceled') && s.group === 'cancelled')
                     );
                     if (stateObj) finalStateId = stateObj.id;
                 }
@@ -187,6 +188,9 @@ export class PlaneController {
                     estimateHours: data.estimateHours !== undefined ? parseFloat(data.estimateHours) : undefined,
                     targetDate: data.targetDate ? new Date(data.targetDate) : undefined,
                     startDate: data.startDate ? new Date(data.startDate) : undefined
+                },
+                include: {
+                    State: true
                 }
             });
 

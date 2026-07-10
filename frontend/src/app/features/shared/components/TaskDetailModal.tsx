@@ -101,11 +101,21 @@ export default function TaskDetailModal({
           if (index !== -1) {
             const updatedSubtasks = [...prev];
             // Determine status based on returned stateId/status (simplification)
-            const isDone = data.stateId ? false : data.status === 'done'; 
+            const isDone = data.State ? data.State.group === 'completed' : (data.status === 'done' || data.status === 'completed'); 
+            let newStatus = updatedSubtasks[index].status;
+            if (data.State) {
+                if (data.State.group === 'unstarted') newStatus = 'pending';
+                if (data.State.group === 'started') newStatus = 'working';
+                if (data.State.group === 'completed') newStatus = 'done';
+            } else if (data.status) {
+                newStatus = data.status;
+            }
+
             updatedSubtasks[index] = { 
               ...updatedSubtasks[index], 
               title: data.title || updatedSubtasks[index].title,
               isDone: isDone,
+              status: newStatus,
               priority: data.priority || updatedSubtasks[index].priority,
               assignee: data.assigneeId || updatedSubtasks[index].assignee
             };
