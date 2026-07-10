@@ -8,6 +8,7 @@ import { setupCors, globalErrorHandler } from '@storymee/fastify-common';
 import adminRoutes from './modules/tasks/index';
 import hrRoutes from './modules/hr/index';
 import omnitaskRoutes from './modules/omnitask/index';
+import planeRoutes from './modules/plane/index';
 
 (BigInt.prototype as any).toJSON = function () {
   return this.toString();
@@ -30,6 +31,7 @@ async function startServer() {
   await fastify.register(adminRoutes, { prefix: '/internal/v1/team/projects' });
   await fastify.register(hrRoutes, { prefix: '/internal/v1/team/hr' });
   await fastify.register(omnitaskRoutes, { prefix: '/internal/v1/team/omnitask' });
+  await fastify.register(planeRoutes, { prefix: '/internal/v1/team/plane' });
 
   const port = parseInt(process.env.PORT || '4503');
   fastify.listen({ port, host: '0.0.0.0' }, (err, address) => {
