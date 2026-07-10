@@ -1,6 +1,6 @@
 import { TelegramMessageContext, TelegramCommand } from './types';
 import { fetchAxios } from '../../fetchAxios';
-import { CoreApiClient, API_ROUTES } from "@storymee/api-client";
+import { executeMcpTool } from '../../index';
 import { 
   sendMessage, userFormSession, KEYBOARD_MAIN
 } from '../../telegram_agent';
@@ -260,10 +260,10 @@ export const formSessionCommand: TelegramCommand = {
       });
       
       try {
-        await apiClient.post(API_ROUTES.PLANE.PROJECTS, {
-          name: session.projectName,
+        const result = await executeMcpTool("create_project", {
+          title: session.projectName,
           description: description
-        });
+        }, ctx.member);
         
         await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
           method: "POST",
@@ -332,17 +332,13 @@ export const formSessionCommand: TelegramCommand = {
       });
       
       try {
-        const resJson = await apiClient.post(API_ROUTES.PLANE.ISSUES, {
+        const resJson = await executeMcpTool("create_issue", {
           title: session.taskTitle,
           description: description,
-          projectId: session.projectId,
-          assigneeId: ctx.member.id,
+          project_id: session.projectId,
+          assignee: ctx.member.id,
           priority: 'medium'
-        }) as any;
-        
-        if (resJson.success === false) {
-          throw new Error(resJson.message || "Lỗi tạo issue tại Core API Service.");
-        }
+        }, ctx.member);
         
         await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
           method: "POST",
