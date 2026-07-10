@@ -640,7 +640,7 @@ case "breakdown_issue": {
         subIdx++;
 
         try {
-            await apiClient.post("/hr/subtasks", {
+            await apiClient.post(API_ROUTES.HR.SUBTASKS, {
                       title: `[${task_id}] ${item.title}`,
                       estimatedHours: 2, // Mặc định 2 giờ mỗi subtask
                       priority: matchedSubtask.priority || "medium",
@@ -718,7 +718,7 @@ case "update_sub_issues": {
         subIdx++;
 
         try {
-            await apiClient.post("/hr/subtasks", {
+            await apiClient.post(API_ROUTES.HR.SUBTASKS, {
                       title: `[${task_id}] ${cleanTitle}`,
                       estimatedHours: 2,
                       priority: matchedSubtask.priority || "medium",
