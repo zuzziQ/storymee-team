@@ -108,7 +108,7 @@ export class CoreApiClient {
 }
 
 export const coreApiClient = new CoreApiClient({
-    baseURL, enforceApiPrefix: false
+    baseURL
 });
 
 export const API_ROUTES = {
@@ -121,6 +121,7 @@ export const API_ROUTES = {
         SUBTASKS: '/hr/subtasks',
         TASKS: '/hr/tasks',
         PROJECTS: '/hr/projects'
+    },
     PLANE: {
         ISSUES: '/plane/issues',
         PROJECTS: '/plane/projects'

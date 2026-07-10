@@ -220,6 +220,8 @@ export default function TaskDetailModal({
         } else {
           // New subtask from DB (e.g. AI generated)
           mergedMap.set(item.id, item);
+        }
+      });
       const currentMergedMap = Array.from(mergedMap.values());
       setSubtasks(currentMergedMap);
     }
@@ -369,11 +371,9 @@ export default function TaskDetailModal({
 
           setSubtasks([...subtasks, ...finalUiList]);
           
-          if (onUpdate) {
-            try {
-              handleTaskUpdate({ subtasks: [...subtasks, ...finalUiList] });
-            } catch (e) { /* silent fail */ }
-          }
+          try {
+            handleTaskUpdate({ subtasks: [...subtasks, ...finalUiList] });
+          } catch (e) { /* silent fail */ }
           
           logActivity(`Đã tạo ${finalUiList.length} subtask bằng AI.`);
           if (json.log && onAddRoutingLog) {
@@ -655,7 +655,7 @@ export default function TaskDetailModal({
               )}
 
               {/* RESOURCES (ATTACHMENTS & GIT COMMITS & CONTENT) */}
-              {activeSection === 'attachments' && (
+              {activeSection === 'resources' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 20, maxHeight: 380, overflowY: 'auto', paddingRight: 6 }}>
                   
                   {/* Task Content / Description */}
