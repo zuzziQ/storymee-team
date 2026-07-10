@@ -215,9 +215,8 @@ export async function handleTelegramMessage(message: {
   if (lowerText === "/team_status" || lowerText === "trạng thái checkin") {
     await sendMessage(chatId, "🔍 Đang truy vấn trạng thái check-in hôm nay...");
     try {
-      const res = await fetchAxios(CORE_API_URL + "/hr/attendance");
-      const json = await res.json();
-      const allRecords = Array.isArray(json) ? json : (json?.data || []);
+      const resJson = await apiClient.get(API_ROUTES.HR.ATTENDANCE) as any;
+      const allRecords = Array.isArray(resJson) ? resJson : (resJson?.data || []);
       const today = new Date().toISOString().split('T')[0];
       const todayRecords = allRecords.filter((r: any) => (r.date || "").startsWith(today));
       
