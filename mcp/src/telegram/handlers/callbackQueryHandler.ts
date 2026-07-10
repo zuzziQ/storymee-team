@@ -141,7 +141,42 @@ async function handleCallbackQuery(callbackQuery: any) {
   }
 
   if (data === "start_create_task") {
-    userFormSession[chatId] = { action: 'create_task', step: 'create_task_title' };
+    try {
+      const res = await apiClient.get('/plane/projects') as any;
+      const projects = (res.data || res) || [];
+      if (!Array.isArray(projects) || projects.length === 0) {
+        await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chat_id: chatId, text: `❌ Bạn cần tạo ít nhất 1 Dự án trước khi tạo Task.` })
+        });
+        return;
+      }
+      
+      const keyboard = projects.map((p: any) => [{ text: `📁 ${p.name}`, callback_data: `select_project:${p.id}` }]);
+      await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: `📋 *TẠO TASK MỚI*\n\nVui lòng chọn Dự án cho Task:`,
+          reply_markup: { inline_keyboard: keyboard }
+        })
+      });
+    } catch (e) {
+      console.error(e);
+      await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: chatId, text: `❌ Lỗi lấy danh sách dự án.` })
+      });
+    }
+    return;
+  }
+
+  if (data.startsWith("select_project:")) {
+    const projectId = data.split(":")[1];
+    userFormSession[chatId] = { action: 'create_task', step: 'create_task_title', projectId };
     await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

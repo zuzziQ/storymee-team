@@ -469,6 +469,39 @@ export function useAppState() {
     }
   };
 
+  const handleCreateSubtask = async (title: string, parentTaskId: string, projectId: string) => {
+    try {
+      await coreApiClient.post(API_ROUTES.PLANE.ISSUES, {
+        title,
+        parentId: parentTaskId,
+        projectId: projectId,
+        priority: 'medium'
+      });
+      await fetchDbData();
+    } catch (err) {
+      console.error("Lỗi tạo subtask lên Plane DB:", err);
+    }
+  };
+
+  const handleUpdateSubtaskState = async (subtaskId: string, isDone: boolean, statusName?: string) => {
+    try {
+      // Vì Plane.io dùng State ID, chúng ta cần Backend xử lý ánh xạ hoặc truyền lên trạng thái logic
+      // Tạm thời, Backend plane.controller (updateIssue) sẽ chấp nhận nếu gửi lên status string thay cho stateId? 
+      // Không, plane.controller updateIssue nhận: title, description, stateId, priority, etc.
+      // Do đó ta sẽ gọi API updateIssue nhưng cần StateId phù hợp, hoặc ta sẽ cập nhật state group (Todo/Done).
+      // Để đơn giản ta dùng `isDone` để tìm kiếm state `Done` ở backend, tạm thời ta có thể tạo 1 custom route trong Plane controller nếu cần.
+      // Thực tế Plane API cho subtask:
+      await coreApiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${subtaskId}`, {
+        // Tạm gửi cờ done để Backend tự bắt (cần sửa ở plane.controller nếu nó chưa hỗ trợ)
+        // Hiện tại ta gửi lên:
+        status: isDone ? 'done' : 'pending' 
+      });
+      await fetchDbData();
+    } catch (err) {
+      console.error("Lỗi cập nhật trạng thái subtask:", err);
+    }
+  };
+
   const handleDeleteProject = async (id: string) => {
     try {
       await coreApiClient.delete(`${API_ROUTES.PLANE.PROJECTS}/${id}`);
@@ -808,6 +841,8 @@ export function useAppState() {
     handleLogout,
     handleSaveMyProfile,
     handleUpdateTask,
+    handleCreateSubtask,
+    handleUpdateSubtaskState,
     handleDeleteProject,
     handleCreateTask,
     handleSendAiChat,

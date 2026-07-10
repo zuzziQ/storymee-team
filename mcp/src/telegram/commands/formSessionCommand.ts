@@ -332,13 +332,12 @@ export const formSessionCommand: TelegramCommand = {
       });
       
       try {
-        await apiClient.post("/omnitask/", {
+        await apiClient.post(API_ROUTES.PLANE.ISSUES, {
           title: session.taskTitle,
           description: description,
-          subtasks: [{ 
-            assigneeId: ctx.member.id,
-            priority: 'medium'
-          }]
+          projectId: session.projectId,
+          assigneeId: ctx.member.id,
+          priority: 'medium'
         });
         
         await fetchAxios(`${TELEGRAM_API}/sendMessage`, {

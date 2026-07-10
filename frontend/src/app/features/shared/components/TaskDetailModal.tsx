@@ -167,27 +167,47 @@ export default function TaskDetailModal({
     if (typeof window !== 'undefined') {
       localStorage.setItem(`subtasks_checklist_${task.id}`, JSON.stringify(subtasks));
     }
-    // onUpdate({ ...task, subtasks }); // Xoá tự động update để tránh lỗi 500 khi mở task mới
   }, [subtasks, task.id]);
 
   const col = getMemberColor(task.assignee);
 
-  const handleAddSubtask = (title: string) => {
+  const handleAddSubtask = async (title: string) => {
     if (!title.trim()) return;
+    
+    const tempId = `sub-${Date.now()}`;
     const newSub: SubTask = {
-      id: `sub-${Date.now()}`,
+      id: tempId,
       title: title.trim(),
       isDone: false
     };
-    const newSubtasks = [...subtasks, newSub];
-    setSubtasks(newSubtasks);
-    handleTaskUpdate({ subtasks: newSubtasks });
+    
+    setSubtasks([...subtasks, newSub]);
+    
+    try {
+      const response = await coreApiClient.post(API_ROUTES.PLANE.ISSUES, {
+        title: title.trim(),
+        parentId: task.dbId || task.id,
+        projectId: task.projectId,
+        priority: 'medium'
+      });
+      
+      if ((response.success || response.status === 'success') && response.data) {
+        const realId = response.data.id;
+        const mappedSub = { ...newSub, id: realId, dbId: realId };
+        
+        setSubtasks(prev => prev.map(s => s.id === tempId ? mappedSub : s));
+        handleTaskUpdate({ subtasks: [...subtasks, mappedSub] });
+      }
+    } catch (err) {
+      console.error("Lỗi tạo Subtask lên Plane DB:", err);
+      setSubtasks(prev => prev.filter(s => s.id !== tempId));
+    }
   };
 
   const toggleSubtask = (id: string) => {
-    const newSubtasks = subtasks.map(s => s.id === id ? { ...s, isDone: !s.isDone } : s);
-    setSubtasks(newSubtasks);
-    handleTaskUpdate({ subtasks: newSubtasks });
+    const sub = subtasks.find(s => s.id === id);
+    if (!sub) return;
+    handleUpdateSubtaskStatus(id, sub.isDone ? 'pending' : 'done');
   };
 
   const handleUpdateSubtaskStatus = async (id: string, newStatus: string) => {
@@ -198,7 +218,7 @@ export default function TaskDetailModal({
     const sub = subtasks.find(s => s.id === id);
     if (sub && sub.dbId) {
       try {
-        await coreApiClient.patch(`${API_ROUTES.HR.SUBTASKS}/${sub.dbId}`, { status: newStatus });
+        await coreApiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${sub.dbId}`, { status: isDone ? 'done' : 'pending' });
       } catch (err) {
         console.error("Failed to update subtask status", err);
       }
