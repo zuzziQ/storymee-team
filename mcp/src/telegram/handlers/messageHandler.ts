@@ -617,7 +617,7 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
         } else if (aiResponse.action === 'get_team_leaves') {
           const result = await executeMcpTool("get_team_leaves", aiResponse.teamLeavesPayload || {}, member);
           await sendMessage(chatId, result.content[0].text);
-        } else if (['update_task', 'create_task', 'leave_request', 'check_in_out', 'breakdown_task', 'update_subtasks', 'request_task_approval'].includes(aiResponse.action)) {
+        } else if (['create_project', 'update_task', 'create_task', 'leave_request', 'check_in_out', 'breakdown_task', 'update_subtasks', 'request_task_approval'].includes(aiResponse.action)) {
           const actionId = Math.random().toString(36).substring(2, 10);
           actionCache[actionId] = {
             action: aiResponse.action,
@@ -631,7 +631,9 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
                     ? aiResponse.updateSubtasksPayload
                     : aiResponse.action === 'request_task_approval'
                       ? aiResponse.approvalPayload
-                      : aiResponse.taskPayload,
+                      : aiResponse.action === 'create_project'
+                        ? aiResponse.projectPayload
+                        : aiResponse.taskPayload,
             member: member
           };
 
@@ -660,6 +662,9 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
           } else if (aiResponse.action === 'request_task_approval') {
             const ap = aiResponse.approvalPayload;
             confirmMsg = `💡 *ĐỀ XUẤT XIN DUYỆT CÔNG VIỆC ${ap.task_id}:*\n• Yêu cầu: *${ap.type}*\n• Hạn chót xin dời (nếu có): *${ap.new_deadline || 'Không'}*\n• Ghi chú: *${ap.reason || 'Không'}*`;
+          } else if (aiResponse.action === 'create_project') {
+            const pp = aiResponse.projectPayload;
+            confirmMsg = `💡 *ĐỀ XUẤT TẠO DỰ ÁN MỚI:*\n• Tên dự án: *${pp.title}*\n• Mô tả: *${pp.description || 'Không'}*`;
           } else {
             const tp = aiResponse.taskPayload;
             const assigneeText = tp.assignee ? `\n• Người phụ trách: *${tp.assignee}*` : '';
