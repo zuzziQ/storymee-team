@@ -1,7 +1,7 @@
 import { fetchAxios } from '../../fetchAxios';
 import { CoreApiClient, API_ROUTES } from "@storymee/api-client";
 import { 
-  getCachedMembers, createCalendarKeyboard, sendMessage, 
+  getCachedMembers, createCalendarKeyboard, sendMessage, sendChatAction,
   formatTelegramText, userFormSession, processingActions, 
   actionCache, chatHistories, KEYBOARD_MAIN, KEYBOARD_UNAUTHORIZED, 
   calculateWorkingHours, checkRealtimeOverdueDeadlines 
@@ -501,43 +501,73 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
     return;
   }
 
-  await sendMessage(chatId, `⏳ Trợ lý AI đang xử lý yêu cầu của bạn, **${member.fullName}**...`);
+  await sendChatAction(chatId, 'typing');
 
-  // E. Fetch Tasks & Projects thực tế từ Postgres để truyền cho AI làm ngữ cảnh
-  let dbTasks: any[] = [];
-  let mappedTasks: any[] = [];
+  // E. First-Pass LLM Routing: Phân loại Intent cực nhanh (Gemini 1.5 Flash)
+  let userIntent = "TASK"; // Mặc định là TASK nếu có lỗi
   try {
-    const tasksData = await prefetchTasksPromise;
-    if (tasksData) {
-      dbTasks = tasksData.data || [];
-      
-      dbTasks.forEach((t: any) => {
-        if (Array.isArray(t.subTasks)) {
-          t.subTasks.forEach((sub: any) => {
-            mappedTasks.push({
-              id: sub.planeTaskId || sub.id,
-              title: sub.title,
-              description: sub.description || '',
-              assignee: sub.Assignee ? sub.Assignee.fullName : 'Chưa phân công',
-              priority: sub.priority.charAt(0).toUpperCase() + sub.priority.slice(1),
-              status: sub.status === 'pending' ? 'Todo' : sub.status === 'in_progress' ? 'In Progress' : sub.status === 'done' ? 'Done' : sub.status,
-              deadline: sub.deadline ? sub.deadline.split('T')[0] : '',
-              estimate: sub.estimatedHours || 0,
-              projectId: t.id,
-              uuid: sub.id // Lưu ID UUID thật của subtask để thao tác update sau này
-            });
-          });
-        }
-      });
+    const flashRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          role: "user",
+          parts: [{ text: `Phân loại câu sau thuộc nhóm nào: [TASK, HR, PROJECT_MANAGEMENT, CHAT]. Chỉ in ra 1 từ duy nhất. Câu: "${text}"` }]
+        }],
+        generationConfig: { temperature: 0.1, maxOutputTokens: 10 }
+      })
+    });
+    if (flashRes.ok) {
+      const flashJson = await flashRes.json();
+      const rawOutput = flashJson.candidates?.[0]?.content?.parts?.[0]?.text || "TASK";
+      userIntent = rawOutput.trim().toUpperCase().replace(/[^A-Z_]/g, '');
     }
   } catch (err) {
-    console.error("Lỗi fetch tasks/projects cho AI context:", err);
+    console.error("Lỗi First-Pass LLM Routing:", err);
   }
 
-  const projects = dbTasks.map((t: any) => ({
-    id: t.id,
-    title: t.title
-  }));
+  // Tái kích hoạt "typing" (vì Telegram timeout action sau 5s)
+  await sendChatAction(chatId, 'typing');
+
+  // F. Fetch Tasks & Projects thực tế từ Postgres CHỈ NẾU intent = TASK hoặc PROJECT_MANAGEMENT
+  let dbTasks: any[] = [];
+  let mappedTasks: any[] = [];
+  let projects: any[] = [];
+  
+  if (userIntent === "TASK" || userIntent === "PROJECT_MANAGEMENT" || userIntent === "") {
+    try {
+      const tasksData = await prefetchTasksPromise;
+      if (tasksData) {
+        dbTasks = tasksData.data || [];
+        
+        dbTasks.forEach((t: any) => {
+          if (Array.isArray(t.subTasks)) {
+            t.subTasks.forEach((sub: any) => {
+              mappedTasks.push({
+                id: sub.planeTaskId || sub.id,
+                title: sub.title,
+                description: sub.description || '',
+                assignee: sub.Assignee ? sub.Assignee.fullName : 'Chưa phân công',
+                priority: sub.priority.charAt(0).toUpperCase() + sub.priority.slice(1),
+                status: sub.status === 'pending' ? 'Todo' : sub.status === 'in_progress' ? 'In Progress' : sub.status === 'done' ? 'Done' : sub.status,
+                deadline: sub.deadline ? sub.deadline.split('T')[0] : '',
+                estimate: sub.estimatedHours || 0,
+                projectId: t.id,
+                uuid: sub.id // Lưu ID UUID thật của subtask để thao tác update sau này
+              });
+            });
+          }
+        });
+      }
+    } catch (err) {
+      console.error("Lỗi fetch tasks/projects cho AI context:", err);
+    }
+  
+    projects = dbTasks.map((t: any) => ({
+      id: t.id,
+      title: t.title
+    }));
+  }
 
   // F. Định tuyến cuộc gọi đến OmniRouter AI
   try {

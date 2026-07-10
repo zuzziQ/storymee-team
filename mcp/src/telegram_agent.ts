@@ -650,3 +650,22 @@ export async function startTelegramPolling() {
 // import { startCronJobs } from "./cronJobs.js";
 // startCronJobs(apiClient, sendMessage); // Đã gộp vào vòng lặp cron bên trong
 // startTelegramPolling() has been moved to index.ts
+
+export async function sendChatAction(chatId: number, action: string = 'typing') {
+  if (!TELEGRAM_BOT_TOKEN) return;
+  try {
+    let res = await fetchAxios(`${TELEGRAM_API}/sendChatAction`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ 
+        chat_id: chatId, 
+        action: action
+      })
+    });
+    if (!res.ok) {
+      console.error(`Failed to sendChatAction to ${chatId}:`, await res.text());
+    }
+  } catch (err: any) {
+    console.error("Lỗi sendChatAction:", err.message);
+  }
+}
