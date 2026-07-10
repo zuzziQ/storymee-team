@@ -162,7 +162,41 @@ async function handleCallbackQuery(callbackQuery) {
         return;
     }
     if (data === "start_create_task") {
-        telegram_agent_1.userFormSession[chatId] = { action: 'create_task', step: 'create_task_title' };
+        try {
+            const res = await apiClient.get('/plane/projects');
+            const projects = (res.data || res) || [];
+            if (!Array.isArray(projects) || projects.length === 0) {
+                await (0, fetchAxios_1.fetchAxios)(`${TELEGRAM_API}/sendMessage`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ chat_id: chatId, text: `❌ Bạn cần tạo ít nhất 1 Dự án trước khi tạo Task.` })
+                });
+                return;
+            }
+            const keyboard = projects.map((p) => [{ text: `📁 ${p.name}`, callback_data: `select_project:${p.id}` }]);
+            await (0, fetchAxios_1.fetchAxios)(`${TELEGRAM_API}/sendMessage`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    chat_id: chatId,
+                    text: `📋 *TẠO TASK MỚI*\n\nVui lòng chọn Dự án cho Task:`,
+                    reply_markup: { inline_keyboard: keyboard }
+                })
+            });
+        }
+        catch (e) {
+            console.error(e);
+            await (0, fetchAxios_1.fetchAxios)(`${TELEGRAM_API}/sendMessage`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ chat_id: chatId, text: `❌ Lỗi lấy danh sách dự án.` })
+            });
+        }
+        return;
+    }
+    if (data.startsWith("select_project:")) {
+        const projectId = data.split(":")[1];
+        telegram_agent_1.userFormSession[chatId] = { action: 'create_task', step: 'create_task_title', projectId };
         await (0, fetchAxios_1.fetchAxios)(`${TELEGRAM_API}/sendMessage`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },

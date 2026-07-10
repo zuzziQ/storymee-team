@@ -93,52 +93,65 @@ server.setRequestHandler(types_js_1.ListToolsRequestSchema, async () => {
     return {
         tools: [
             {
-                name: "get_my_tasks",
-                description: "Truy vấn danh sách công việc (tasks) trên bảng Kanban. Nhân viên chỉ xem được task của mình. Admin/Boss xem được của tất cả.",
+                name: "get_my_issues",
+                description: "Truy vấn danh sách công việc (issues) trên bảng Kanban chuẩn Plane. Nhân viên chỉ xem được issue của mình. Admin/Boss xem được của tất cả.",
                 inputSchema: {
                     type: "object",
                     properties: {
-                        employee_name: { type: "string", description: "Tên nhân sự cần lọc (Ví dụ: Trung Dũng, Quang Minh). Để trống nếu tự xem của mình." }
+                        employee_name: { type: "string", description: "Tên nhân sự cần lọc. Để trống nếu tự xem của mình." },
+                        project_id: { type: "string", description: "Lọc theo dự án (tuỳ chọn)" }
                     }
                 }
             },
             {
-                name: "create_task",
-                description: "Tạo một task mới trên Kanban. Yêu cầu tiêu đề và người gán. Có thể truyền thêm ước tính giờ công hoặc deadline. Nếu không truyền ước tính, hệ thống sẽ tự tính toán dựa trên deadline.",
+                name: "create_project",
+                description: "Tạo một Dự án (Project) lớn mới trong cấu trúc Plane.io.",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        title: { type: "string", description: "Tên của dự án mới" },
+                        description: { type: "string", description: "Mô tả chi tiết dự án (tuỳ chọn)" }
+                    },
+                    required: ["title"]
+                }
+            },
+            {
+                name: "create_issue",
+                description: "Tạo một issue mới. Yêu cầu tiêu đề và người gán. Plane structure hỗ trợ project_id, state, priority.",
                 inputSchema: {
                     type: "object",
                     properties: {
                         title: { type: "string", description: "Tiêu đề công việc" },
-                        assignee: { type: "string", description: "Tên nhân sự thực hiện (ví dụ: Trung Dũng, Quang Minh)" },
-                        estimate: { type: "number", description: "Thời gian ước lượng (giờ). Để trống để tự tính." },
-                        priority: { type: "string", enum: ["Low", "Medium", "High"], description: "Độ ưu tiên (mặc định Medium)" },
-                        deadline: { type: "string", description: "Hạn chót hoàn thành định dạng YYYY-MM-DD hoặc ISO string (ví dụ: 2026-06-30T12:00:00). Để trống nếu không có." }
+                        project_id: { type: "string", description: "ID của dự án (Plane Project ID)" },
+                        assignee: { type: "string", description: "Tên nhân sự thực hiện (ví dụ: Trung Dũng)" },
+                        priority: { type: "string", enum: ["none", "low", "medium", "high", "urgent"], description: "Độ ưu tiên (mặc định medium)" },
+                        target_date: { type: "string", description: "Hạn chót hoàn thành định dạng YYYY-MM-DD" }
                     },
-                    required: ["title", "assignee"]
+                    required: ["title", "project_id"]
                 }
             },
             {
-                name: "update_task_status",
-                description: "Cập nhật trạng thái Kanban của task (Todo, In Progress, Done). Nhân sự chỉ được sửa task được gán cho chính mình. Admin/Boss sửa được tất cả.",
+                name: "update_issue_state",
+                description: "Cập nhật trạng thái (State) của issue (Todo, In Progress, Done).",
                 inputSchema: {
                     type: "object",
                     properties: {
-                        task_id: { type: "string", description: "Mã ID công việc (ví dụ: T-103)" },
-                        status: { type: "string", enum: ["Todo", "In Progress", "Done"], description: "Trạng thái mới" }
+                        issue_id: { type: "string", description: "Mã ID công việc (ví dụ: UUID)" },
+                        state: { type: "string", enum: ["Todo", "In Progress", "Done"], description: "Trạng thái mới" }
                     },
-                    required: ["task_id", "status"]
+                    required: ["issue_id", "state"]
                 }
             },
             {
-                name: "assign_task",
-                description: "Bàn giao/giao lại công việc cho nhân sự khác. Nhân viên chỉ bàn giao được task của chính mình. Admin/Boss bàn giao được bất kỳ task nào.",
+                name: "assign_issue",
+                description: "Bàn giao công việc (issue) cho nhân sự khác.",
                 inputSchema: {
                     type: "object",
                     properties: {
-                        task_id: { type: "string", description: "Mã ID công việc (ví dụ: T-103)" },
+                        issue_id: { type: "string", description: "Mã ID công việc" },
                         assignee: { type: "string", description: "Tên nhân sự mới nhận công việc" }
                     },
-                    required: ["task_id", "assignee"]
+                    required: ["issue_id", "assignee"]
                 }
             },
             {
@@ -322,8 +335,8 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
 async function executeMcpTool(name, args, user) {
     const isBoss = ["kimngan151091@gmail.com", "lehuyducanh.vn@gmail.com", "zuzzivn@gmail.com"].includes(user.email.toLowerCase());
     const members = await getTeamMembersCache();
-    if (['get_my_tasks', 'create_task', 'update_task', 'update_task_status', 'assign_task', 'breakdown_task', 'update_subtasks', 'request_task_approval', 'approve_task_request', 'get_task_details'].includes(name)) {
-        return (await Promise.resolve().then(() => __importStar(require('./mcp/tools/taskTools')))).executeTaskTool(name, args, user, isBoss, apiClient, members);
+    if (['get_my_issues', 'create_issue', 'update_issue', 'update_issue_state', 'assign_issue', 'breakdown_issue', 'update_sub_issues', 'request_issue_approval', 'approve_issue_request', 'get_issue_details'].includes(name)) {
+        return (await Promise.resolve().then(() => __importStar(require('./mcp/tools/planeTools')))).executePlaneTool(name, args, user, isBoss, apiClient, members);
     }
     if (['submit_leave_request', 'get_leave_allowance', 'get_my_payroll_slip', 'update_personal_info', 'upsert_team_member'].includes(name)) {
         return (await Promise.resolve().then(() => __importStar(require('./mcp/tools/hrTools')))).executeHrTool(name, args, user, isBoss, apiClient, members);

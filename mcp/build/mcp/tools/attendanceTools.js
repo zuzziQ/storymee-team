@@ -35,15 +35,25 @@ async function executeAttendanceTool(name, args, user, isBoss, apiClient, member
                 }
             }
             catch (err) {
-                if (err.response?.data?.status === 'already_checked_out') {
+                console.error("[attendanceTools] Core API Error:", err);
+                const errorData = err.data || err.response?.data;
+                if (errorData?.status === 'already_checked_in') {
                     return {
                         content: [{
                                 type: "text",
-                                text: `⚠️ Nhân sự ${targetMember.fullName} đã checkout trước đó rồi.`
+                                text: `⚠️ Nhân sự ${targetMember.fullName} đã check-in trước đó rồi.`
                             }]
                     };
                 }
-                throw new types_js_1.McpError(types_js_1.ErrorCode.InternalError, "Lỗi kết nối điểm danh với Core API.");
+                if (errorData?.status === 'already_checked_out') {
+                    return {
+                        content: [{
+                                type: "text",
+                                text: `⚠️ Nhân sự ${targetMember.fullName} đã check-out trước đó rồi.`
+                            }]
+                    };
+                }
+                throw new types_js_1.McpError(types_js_1.ErrorCode.InternalError, `Lỗi kết nối điểm danh với Core API. Chi tiết: ${err.message || JSON.stringify(err)}`);
             }
             const att = checkinData.data;
             // Định dạng phản hồi

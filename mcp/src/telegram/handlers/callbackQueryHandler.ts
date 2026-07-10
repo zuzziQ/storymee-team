@@ -436,10 +436,11 @@ async function handleCallbackQuery(callbackQuery: any) {
 
         const result = await executeMcpTool("create_task", {
           title: payload.title || "Nhiệm vụ mới từ Telegram",
+          project_id: payload.project_id || payload.projectId || payload.project,
           assignee: payload.assignee || actionMember.fullName,
           estimate: estimateVal || undefined,
           priority: payload.priority || "Medium",
-          deadline: payload.deadline || undefined
+          target_date: payload.deadline || undefined
         }, actionMember);
 
         try {
