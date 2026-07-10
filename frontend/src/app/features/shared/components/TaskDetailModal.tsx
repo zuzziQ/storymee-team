@@ -216,9 +216,9 @@ export default function TaskDetailModal({
     setSubtasks(newSubtasks);
     
     const sub = subtasks.find(s => s.id === id);
-    if (sub && sub.dbId) {
+    if (sub && (sub.dbId || sub.id.length > 20)) { // Assuming dbId exists or id is UUID
       try {
-        await coreApiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${sub.dbId}`, { status: isDone ? 'done' : 'pending' });
+        await coreApiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${sub.dbId || sub.id}`, { status: newStatus });
       } catch (err) {
         console.error("Failed to update subtask status", err);
       }
@@ -266,15 +266,42 @@ export default function TaskDetailModal({
           const uiList = titles.map((title: string, idx: number) => ({
             id: `sub-ai-${Date.now()}-${idx}`,
             title,
-            isDone: false
+            isDone: false,
+            status: 'pending'
           }));
+          
           setSubtasks([...subtasks, ...uiList]);
 
-          // Lưu vào DB ngay (nếu có onUpdate)
-          if (onUpdate && task.dbId) {
-            try {
-              handleTaskUpdate({ subtasks: [...subtasks, ...uiList] });
-            } catch (e) { /* silent fail, UI vẫn hiển thị */ }
+          // Save to DB asynchronously
+          if (task.dbId || task.id) {
+            const promises = uiList.map((subItem: any) => 
+              coreApiClient.post(API_ROUTES.PLANE.ISSUES, {
+                title: subItem.title,
+                parentId: task.dbId || task.id,
+                projectId: task.projectId,
+                priority: 'medium'
+              }).then((res: any) => {
+                if (res.success || res.status === 'success') {
+                  subItem.id = res.data.id;
+                  subItem.dbId = res.data.id;
+                }
+              }).catch(e => console.error("Failed to save AI subtask to DB", e))
+            );
+            
+            Promise.all(promises).then(() => {
+              // Update state with real DB IDs
+              setSubtasks(prev => {
+                const updated = [...prev];
+                return updated;
+              });
+              if (onUpdate) {
+                try {
+                  handleTaskUpdate({ subtasks: [...subtasks, ...uiList] });
+                } catch (e) { /* silent fail */ }
+              }
+            });
+          } else {
+             if (onUpdate) handleTaskUpdate({ subtasks: [...subtasks, ...uiList] });
           }
 
           if (json.log && onAddRoutingLog) {
