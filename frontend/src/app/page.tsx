@@ -285,6 +285,7 @@ export default function StorymeeTeamPage() {
               aiPredictedDate={aiPredictedDate}
               handleAnalyzeProject={handleAnalyzeProject}
               handleDeleteProject={handleDeleteProject}
+              handleCreateTask={handleCreateTask}
               teamMembers={teamMembers}
               showAddProjectModal={showAddProjectModal}
               setShowAddProjectModal={setShowAddProjectModal}
