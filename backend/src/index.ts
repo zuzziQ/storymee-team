@@ -47,43 +47,43 @@ async function startServer() {
   await fastify.register(planeRoutes, { prefix: '/internal/v1/team/plane' });
 
   const port = parseInt(process.env.PORT || '4503');
+
+  // Setup Socket.io before listening
+  const io = new Server(fastify.server, {
+    cors: { origin: '*', methods: ['GET', 'POST'] },
+    path: '/internal/v1/team/socket.io'
+  });
+  fastify.decorate('io', io);
+
+  io.on('connection', (socket) => {
+    console.log(`[Core Team API] Socket connected: ${socket.id}`);
+    socket.on('disconnect', () => {
+      console.log(`[Core Team API] Socket disconnected: ${socket.id}`);
+    });
+  });
+
+  // Subscribe to NATS to forward to WebSockets
+  if (nc) {
+    nc.subscribe('core.team.issue.updated', {
+      callback: (err, msg) => {
+        if (!err) {
+          try {
+            const data = JSON.parse(msg.data.toString());
+            io.emit('issue_updated', data);
+          } catch (e) {
+            console.error('Error forwarding NATS message to Socket.io', e);
+          }
+        }
+      }
+    });
+  }
+
   fastify.listen({ port, host: '0.0.0.0' }, (err, address) => {
     if (err) {
       console.error('[Core Team API] Startup failed:', err);
       process.exit(1);
     }
     console.log(`[Core Team API] Server is listening at ${address}`);
-
-    // Setup Socket.io
-    const io = new Server(fastify.server, {
-      cors: { origin: '*', methods: ['GET', 'POST'] },
-      path: '/internal/v1/team/socket.io'
-    });
-    
-    fastify.decorate('io', io);
-
-    io.on('connection', (socket) => {
-      console.log(`[Core Team API] Socket connected: ${socket.id}`);
-      socket.on('disconnect', () => {
-        console.log(`[Core Team API] Socket disconnected: ${socket.id}`);
-      });
-    });
-
-    // Subscribe to NATS to forward to WebSockets
-    if (nc) {
-      nc.subscribe('core.team.issue.updated', {
-        callback: (err, msg) => {
-          if (!err) {
-            try {
-              const data = JSON.parse(msg.data.toString());
-              io.emit('issue_updated', data);
-            } catch (e) {
-              console.error('Error forwarding NATS message to Socket.io', e);
-            }
-          }
-        }
-      });
-    }
   });
 }
 
