@@ -124,5 +124,9 @@ export const API_ROUTES = {
     },
     OMNITASK: {
         ROOT: '/omnitask/'
+    },
+    PLANE: {
+        ISSUES: '/plane/issues',
+        PROJECTS: '/plane/projects'
     }
 };
