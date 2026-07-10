@@ -213,7 +213,7 @@ case "update_issue": {
 
       let tasksData;
           try {
-            tasksData = (await apiClient.get(API_ROUTES.OMNITASK.ROOT)) as any;
+            tasksData = (await apiClient.get(API_ROUTES.PLANE.ISSUES)) as any;
           } catch (err: any) {
             throw new McpError(ErrorCode.InternalError, "Lỗi fetch tasks từ Core API");
           }
@@ -276,7 +276,7 @@ case "get_issue_details": {
 
       let tasksData;
           try {
-            tasksData = (await apiClient.get(API_ROUTES.OMNITASK.ROOT)) as any;
+            tasksData = (await apiClient.get(API_ROUTES.PLANE.ISSUES)) as any;
           } catch (err: any) {
             throw new McpError(ErrorCode.InternalError, "Lỗi fetch tasks từ Core API");
           }
@@ -324,7 +324,7 @@ case "breakdown_issue": {
       // 1. Tìm task có planeTaskId bằng task_id
       let tasksData;
           try {
-            tasksData = (await apiClient.get(API_ROUTES.OMNITASK.ROOT)) as any;
+            tasksData = (await apiClient.get(API_ROUTES.PLANE.ISSUES)) as any;
           } catch (err: any) {
             throw new McpError(ErrorCode.InternalError, "Lỗi fetch tasks từ Core API");
           }
@@ -417,7 +417,7 @@ case "update_sub_issues": {
       // 1. Tìm task có planeTaskId bằng task_id
       let tasksData;
           try {
-            tasksData = (await apiClient.get(API_ROUTES.OMNITASK.ROOT)) as any;
+            tasksData = (await apiClient.get(API_ROUTES.PLANE.ISSUES)) as any;
           } catch (err: any) {
             throw new McpError(ErrorCode.InternalError, "Lỗi fetch tasks từ Core API");
           }
@@ -508,7 +508,7 @@ case "request_issue_approval": {
 
       let tasksData;
           try {
-            tasksData = (await apiClient.get(API_ROUTES.OMNITASK.ROOT)) as any;
+            tasksData = (await apiClient.get(API_ROUTES.PLANE.ISSUES)) as any;
           } catch (err: any) {
             throw new McpError(ErrorCode.InternalError, "Lỗi fetch tasks từ Core API");
           }
@@ -551,7 +551,7 @@ case "approve_issue_request": {
 
       let tasksData;
           try {
-            tasksData = (await apiClient.get(API_ROUTES.OMNITASK.ROOT)) as any;
+            tasksData = (await apiClient.get(API_ROUTES.PLANE.ISSUES)) as any;
           } catch (err: any) {
             throw new McpError(ErrorCode.InternalError, "Lỗi fetch tasks từ Core API");
           }

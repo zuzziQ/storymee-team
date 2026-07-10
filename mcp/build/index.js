@@ -335,16 +335,32 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
 async function executeMcpTool(name, args, user) {
     const isBoss = ["kimngan151091@gmail.com", "lehuyducanh.vn@gmail.com", "zuzzivn@gmail.com"].includes(user.email.toLowerCase());
     const members = await getTeamMembersCache();
-    if (['get_my_issues', 'create_issue', 'update_issue', 'update_issue_state', 'assign_issue', 'breakdown_issue', 'update_sub_issues', 'request_issue_approval', 'approve_issue_request', 'get_issue_details'].includes(name)) {
-        return (await Promise.resolve().then(() => __importStar(require('./mcp/tools/planeTools')))).executePlaneTool(name, args, user, isBoss, apiClient, members);
+    // ALIAS mapping for LLM compatibility
+    let toolName = name;
+    if (toolName === 'create_task')
+        toolName = 'create_issue';
+    if (toolName === 'update_task')
+        toolName = 'update_issue';
+    if (toolName === 'breakdown_task')
+        toolName = 'breakdown_issue';
+    if (toolName === 'update_subtasks')
+        toolName = 'update_sub_issues';
+    if (toolName === 'request_task_approval')
+        toolName = 'request_issue_approval';
+    if (toolName === 'approve_task_request')
+        toolName = 'approve_issue_request';
+    if (toolName === 'get_task_details')
+        toolName = 'get_issue_details';
+    if (['get_my_issues', 'create_issue', 'update_issue', 'update_issue_state', 'assign_issue', 'breakdown_issue', 'update_sub_issues', 'request_issue_approval', 'approve_issue_request', 'get_issue_details'].includes(toolName)) {
+        return (await Promise.resolve().then(() => __importStar(require('./mcp/tools/planeTools')))).executePlaneTool(toolName, args, user, isBoss, apiClient, members);
     }
-    if (['submit_leave_request', 'get_leave_allowance', 'get_my_payroll_slip', 'update_personal_info', 'upsert_team_member'].includes(name)) {
-        return (await Promise.resolve().then(() => __importStar(require('./mcp/tools/hrTools')))).executeHrTool(name, args, user, isBoss, apiClient, members);
+    if (['submit_leave_request', 'get_leave_allowance', 'get_my_payroll_slip', 'update_personal_info', 'upsert_team_member'].includes(toolName)) {
+        return (await Promise.resolve().then(() => __importStar(require('./mcp/tools/hrTools')))).executeHrTool(toolName, args, user, isBoss, apiClient, members);
     }
-    if (['check_in_out', 'get_attendance_report'].includes(name)) {
-        return (await Promise.resolve().then(() => __importStar(require('./mcp/tools/attendanceTools')))).executeAttendanceTool(name, args, user, isBoss, apiClient, members);
+    if (['check_in_out', 'get_attendance_report'].includes(toolName)) {
+        return (await Promise.resolve().then(() => __importStar(require('./mcp/tools/attendanceTools')))).executeAttendanceTool(toolName, args, user, isBoss, apiClient, members);
     }
-    throw new types_js_1.McpError(types_js_1.ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
+    throw new types_js_1.McpError(types_js_1.ErrorCode.MethodNotFound, `Unknown tool: ${toolName} (original: ${name})`);
 }
 // Chạy server StdIO
 async function main() {

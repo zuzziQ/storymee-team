@@ -49,7 +49,7 @@ async function executeHrTool(name, args, user, isBoss, apiClient, members) {
             if (!targetUser) {
                 throw new types_js_1.McpError(types_js_1.ErrorCode.InvalidParams, `Không tìm thấy nhân sự ${targetName}.`);
             }
-            const leavesRes = await apiClient.get("/omnitask/hr/leave-requests");
+            const leavesRes = await apiClient.get("/internal/v1/team/hr/leave-requests");
             let annualUsed = 0;
             let remoteUsed = 0;
             if (leavesRes.ok) {

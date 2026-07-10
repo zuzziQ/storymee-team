@@ -13,7 +13,7 @@ function startCronJobs(apiClient, sendMessage) {
             const res = await apiClient.get("/hr/team-members");
             const members = res.data || [];
             const todayStr = new Date().toISOString().split('T')[0];
-            const tasksRes = await apiClient.get("/omnitask/tasks");
+            const tasksRes = await apiClient.get("/internal/v1/team/plane/issues");
             const allTasks = tasksRes.data || [];
             for (const m of members) {
                 if (!m.telegramChatId)

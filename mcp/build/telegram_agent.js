@@ -49,6 +49,7 @@ exports.checkRealtimeOverdueDeadlines = checkRealtimeOverdueDeadlines;
 exports.handleTelegramMessage = handleTelegramMessage;
 exports.handleCallbackQuery = handleCallbackQuery;
 exports.startTelegramPolling = startTelegramPolling;
+exports.sendChatAction = sendChatAction;
 const fetchAxios_1 = require("./fetchAxios");
 const dotenv = __importStar(require("dotenv"));
 const fastify_1 = __importDefault(require("fastify"));
@@ -324,7 +325,7 @@ async function sendDailySummaryAndNotify(type) {
             return;
         let dbTasks = [];
         try {
-            const tasksData = (await apiClient.get("/omnitask/"));
+            const tasksData = (await apiClient.get("/internal/v1/team/plane/issues"));
             dbTasks = Array.isArray(tasksData) ? tasksData : (tasksData?.data || []);
         }
         catch (err) {
@@ -437,7 +438,7 @@ async function checkRealtimeOverdueDeadlines() {
             return;
         let dbTasks = [];
         try {
-            const tasksData = (await apiClient.get("/omnitask/"));
+            const tasksData = (await apiClient.get("/internal/v1/team/plane/issues"));
             dbTasks = Array.isArray(tasksData) ? tasksData : (tasksData?.data || []);
         }
         catch (err) {
@@ -623,3 +624,23 @@ async function startTelegramPolling() {
 // import { startCronJobs } from "./cronJobs.js";
 // startCronJobs(apiClient, sendMessage); // Đã gộp vào vòng lặp cron bên trong
 // startTelegramPolling() has been moved to index.ts
+async function sendChatAction(chatId, action = 'typing') {
+    if (!TELEGRAM_BOT_TOKEN)
+        return;
+    try {
+        let res = await (0, fetchAxios_1.fetchAxios)(`${TELEGRAM_API}/sendChatAction`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                chat_id: chatId,
+                action: action
+            })
+        });
+        if (!res.ok) {
+            console.error(`Failed to sendChatAction to ${chatId}:`, await res.text());
+        }
+    }
+    catch (err) {
+        console.error("Lỗi sendChatAction:", err.message);
+    }
+}

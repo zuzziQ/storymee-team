@@ -443,10 +443,11 @@ async function handleCallbackQuery(callbackQuery) {
                 }
                 const result = await (0, index_1.executeMcpTool)("create_task", {
                     title: payload.title || "Nhiệm vụ mới từ Telegram",
+                    project_id: payload.project_id || payload.projectId || payload.project,
                     assignee: payload.assignee || actionMember.fullName,
                     estimate: estimateVal || undefined,
                     priority: payload.priority || "Medium",
-                    deadline: payload.deadline || undefined
+                    target_date: payload.deadline || undefined
                 }, actionMember);
                 try {
                     await (0, fetchAxios_1.fetchAxios)(`${TELEGRAM_API}/editMessageText`, {
@@ -651,7 +652,7 @@ async function handleCallbackQuery(callbackQuery) {
         const reason = parts.slice(4).join(":"); // Hỗ trợ lý do có dấu hai chấm
         try {
             try {
-                const resJson = await apiClient.post("/omnitask/hr/leave-request", {
+                const resJson = await apiClient.post("/internal/v1/team/hr/leave-requests", {
                     telegramUsername: member.telegramUsername,
                     leaveType,
                     startDate: startDate + "T00:00:00.000Z",
@@ -720,7 +721,7 @@ async function handleCallbackQuery(callbackQuery) {
         const reqType = parts[2] || 'archive'; // fallback if undefined
         try {
             try {
-                await apiClient.post(`/omnitask/hr/tasks/${taskId}/approve`, { type: reqType, decision: action });
+                await apiClient.post(`/internal/v1/team/hr/tasks/${taskId}/approve`, { type: reqType, decision: action });
                 const actionStr = action === "approve" ? "Đã Phê duyệt" : "Đã Từ chối";
                 const emoji = action === "approve" ? "✅" : "❌";
                 await (0, fetchAxios_1.fetchAxios)(`${TELEGRAM_API}/editMessageText`, {

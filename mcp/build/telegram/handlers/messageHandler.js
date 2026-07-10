@@ -73,7 +73,7 @@ async function handleTelegramMessage(message) {
         return;
     }
     // PRE-FETCH Tasks để tối ưu hoá tốc độ (ẩn độ trễ mạng)
-    const prefetchTasksPromise = apiClient.get("/omnitask/").catch(err => {
+    const prefetchTasksPromise = apiClient.get("/internal/v1/team/plane/issues").catch(err => {
         console.error("Lỗi prefetch tasks:", err);
         return null;
     });
@@ -157,18 +157,40 @@ async function handleTelegramMessage(message) {
             console.error("Lỗi đồng bộ chat_id lên Postgres API:", err);
         }
     }
-    // Xử lý các bước nhập Form đăng ký (nghỉ phép/remote)
+    // C. Intercept Global Commands & Buttons để Hủy Session (Tránh kẹt Form)
+    const GLOBAL_COMMANDS = [
+        "/start", "/check", "/team_status", "trạng thái checkin",
+        "/check_all", "/check_team", "📊 trạng thái thành viên",
+        "👤 hồ sơ của tôi", "/ho_so",
+        "/portal", "🌐 mở web portal",
+        "📁 quản lý dự án & task",
+        "🌅 điểm danh (check-in/out)", "/checkin", "/checkout",
+        "📝 đăng ký nghỉ phép / remote", "/dang_ky", "/nghi_phep", "/remote",
+        "📝 công việc của tôi", "/cong_viec",
+        "📊 hỏi quy chế đãi ngộ", "/quy_che",
+        "/cancel", "hủy", "cancel", "huy"
+    ];
+    if (GLOBAL_COMMANDS.includes(lowerText) || lowerText.startsWith("/subtask")) {
+        if (telegram_agent_1.userFormSession[chatId]) {
+            delete telegram_agent_1.userFormSession[chatId];
+        }
+    }
+    if (lowerText === "/cancel" || lowerText === "hủy" || lowerText === "cancel" || lowerText === "huy") {
+        await (0, telegram_agent_1.sendMessage)(chatId, "✅ Đã hủy thao tác hiện tại.", telegram_agent_1.KEYBOARD_MAIN);
+        return;
+    }
+    // Xử lý các bước nhập Form đăng ký (nghỉ phép/remote/tạo task/dự án)
     const session = telegram_agent_1.userFormSession[chatId];
     if (session) {
         const { formSessionCommand } = require('../commands/formSessionCommand');
         const ctx = {
-            chatId, username, text, lowerText: text.toLowerCase().trim(), isGroup, member, allMembers, apiClient, message
+            chatId, username, text, lowerText, isGroup, member, allMembers, apiClient, message
         };
         if (await formSessionCommand.execute(ctx)) {
             return;
         }
     }
-    if (text.trim() === "/start") {
+    if (lowerText === "/start") {
         telegram_agent_1.chatHistories[chatId] = []; // Reset context chat
         await (0, telegram_agent_1.sendMessage)(chatId, `👋 Chào mừng *${member.fullName}* đến với Storymee AI Task Manager!\n\n🤖 Tôi là trợ lý bot tự động hóa. Tôi đã ghi nhận Chat ID của bạn để gửi thông báo công việc & deadline định kỳ.\n\n💡 Sử dụng **khay nút bấm bên dưới** để thực hiện nhanh các tác vụ, hoặc chat trực tiếp bằng tiếng Việt với tôi.`, telegram_agent_1.KEYBOARD_MAIN);
         return;
@@ -267,7 +289,7 @@ async function handleTelegramMessage(message) {
         let dbTasks = [];
         let mappedTasks = [];
         try {
-            const json = await apiClient.get("/omnitask/");
+            const json = await apiClient.get("/internal/v1/team/plane/issues");
             dbTasks = Array.isArray(json) ? json : (json?.data || []);
             const allMembers = await (0, telegram_agent_1.getCachedMembers)();
             dbTasks.forEach((t) => {
@@ -490,41 +512,69 @@ async function handleTelegramMessage(message) {
         await (0, telegram_agent_1.sendMessage)(chatId, "Vui lòng nhập nội dung để AI hỗ trợ.");
         return;
     }
-    await (0, telegram_agent_1.sendMessage)(chatId, `⏳ Trợ lý AI đang xử lý yêu cầu của bạn, **${member.fullName}**...`);
-    // E. Fetch Tasks & Projects thực tế từ Postgres để truyền cho AI làm ngữ cảnh
-    let dbTasks = [];
-    let mappedTasks = [];
+    await (0, telegram_agent_1.sendChatAction)(chatId, 'typing');
+    // E. First-Pass LLM Routing: Phân loại Intent cực nhanh (Gemini 1.5 Flash)
+    let userIntent = "TASK"; // Mặc định là TASK nếu có lỗi
     try {
-        const tasksData = await prefetchTasksPromise;
-        if (tasksData) {
-            dbTasks = tasksData.data || [];
-            dbTasks.forEach((t) => {
-                if (Array.isArray(t.subTasks)) {
-                    t.subTasks.forEach((sub) => {
-                        mappedTasks.push({
-                            id: sub.planeTaskId || sub.id,
-                            title: sub.title,
-                            description: sub.description || '',
-                            assignee: sub.Assignee ? sub.Assignee.fullName : 'Chưa phân công',
-                            priority: sub.priority.charAt(0).toUpperCase() + sub.priority.slice(1),
-                            status: sub.status === 'pending' ? 'Todo' : sub.status === 'in_progress' ? 'In Progress' : sub.status === 'done' ? 'Done' : sub.status,
-                            deadline: sub.deadline ? sub.deadline.split('T')[0] : '',
-                            estimate: sub.estimatedHours || 0,
-                            projectId: t.id,
-                            uuid: sub.id // Lưu ID UUID thật của subtask để thao tác update sau này
-                        });
-                    });
-                }
-            });
+        const flashRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{
+                        role: "user",
+                        parts: [{ text: `Phân loại câu sau thuộc nhóm nào: [TASK, HR, PROJECT_MANAGEMENT, CHAT]. Chỉ in ra 1 từ duy nhất. Câu: "${text}"` }]
+                    }],
+                generationConfig: { temperature: 0.1, maxOutputTokens: 10 }
+            })
+        });
+        if (flashRes.ok) {
+            const flashJson = (await flashRes.json());
+            const rawOutput = flashJson.candidates?.[0]?.content?.parts?.[0]?.text || "TASK";
+            userIntent = rawOutput.trim().toUpperCase().replace(/[^A-Z_]/g, '');
         }
     }
     catch (err) {
-        console.error("Lỗi fetch tasks/projects cho AI context:", err);
+        console.error("Lỗi First-Pass LLM Routing:", err);
     }
-    const projects = dbTasks.map((t) => ({
-        id: t.id,
-        title: t.title
-    }));
+    // Tái kích hoạt "typing" (vì Telegram timeout action sau 5s)
+    await (0, telegram_agent_1.sendChatAction)(chatId, 'typing');
+    // F. Fetch Tasks & Projects thực tế từ Postgres CHỈ NẾU intent = TASK hoặc PROJECT_MANAGEMENT
+    let dbTasks = [];
+    let mappedTasks = [];
+    let projects = [];
+    if (userIntent === "TASK" || userIntent === "PROJECT_MANAGEMENT" || userIntent === "") {
+        try {
+            const tasksData = await prefetchTasksPromise;
+            if (tasksData) {
+                dbTasks = tasksData.data || [];
+                dbTasks.forEach((t) => {
+                    if (Array.isArray(t.subTasks)) {
+                        t.subTasks.forEach((sub) => {
+                            mappedTasks.push({
+                                id: sub.planeTaskId || sub.id,
+                                title: sub.title,
+                                description: sub.description || '',
+                                assignee: sub.Assignee ? sub.Assignee.fullName : 'Chưa phân công',
+                                priority: sub.priority.charAt(0).toUpperCase() + sub.priority.slice(1),
+                                status: sub.status === 'pending' ? 'Todo' : sub.status === 'in_progress' ? 'In Progress' : sub.status === 'done' ? 'Done' : sub.status,
+                                deadline: sub.deadline ? sub.deadline.split('T')[0] : '',
+                                estimate: sub.estimatedHours || 0,
+                                projectId: t.id,
+                                uuid: sub.id // Lưu ID UUID thật của subtask để thao tác update sau này
+                            });
+                        });
+                    }
+                });
+            }
+        }
+        catch (err) {
+            console.error("Lỗi fetch tasks/projects cho AI context:", err);
+        }
+        projects = dbTasks.map((t) => ({
+            id: t.id,
+            title: t.title
+        }));
+    }
     // F. Định tuyến cuộc gọi đến OmniRouter AI
     try {
         const history = telegram_agent_1.chatHistories[chatId] || [];

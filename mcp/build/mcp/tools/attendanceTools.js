@@ -88,8 +88,8 @@ async function executeAttendanceTool(name, args, user, isBoss, apiClient, member
                 targetMem = user;
             }
             const queryPath = targetMem
-                ? `/omnitask/hr/attendance?memberId=${targetMem.id}`
-                : `/omnitask/hr/attendance`;
+                ? `/internal/v1/team/hr/attendance?memberId=${targetMem.id}`
+                : `/internal/v1/team/hr/attendance`;
             let attData;
             try {
                 attData = (await apiClient.get(queryPath));
