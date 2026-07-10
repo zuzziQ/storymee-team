@@ -121,10 +121,6 @@ export const API_ROUTES = {
         SUBTASKS: '/hr/subtasks',
         TASKS: '/hr/tasks',
         PROJECTS: '/hr/projects'
-    },
-    OMNITASK: {
-        ROOT: '/omnitask/'
-    },
     PLANE: {
         ISSUES: '/plane/issues',
         PROJECTS: '/plane/projects'

@@ -642,7 +642,7 @@ async function handleCallbackQuery(callbackQuery: any) {
 
     try {
       try {
-          const resJson = await apiClient.post("/omnitask/hr/leave-request", {
+          const resJson = await apiClient.post("/internal/v1/team/hr/leave-requests", {
             telegramUsername: member.telegramUsername,
             leaveType,
             startDate: startDate + "T00:00:00.000Z",
@@ -712,7 +712,7 @@ async function handleCallbackQuery(callbackQuery: any) {
 
     try {
       try {
-          await apiClient.post(`/omnitask/hr/tasks/${taskId}/approve`, { type: reqType, decision: action });
+          await apiClient.post(`/internal/v1/team/hr/tasks/${taskId}/approve`, { type: reqType, decision: action });
           const actionStr = action === "approve" ? "Đã Phê duyệt" : "Đã Từ chối";
           const emoji = action === "approve" ? "✅" : "❌";
 

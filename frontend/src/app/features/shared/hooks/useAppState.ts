@@ -652,7 +652,7 @@ export function useAppState() {
     setNewProjectDesc('');
     
     try {
-      await coreApiClient.post(API_ROUTES.OMNITASK.ROOT, {
+      await coreApiClient.post(API_ROUTES.PLANE.PROJECTS, {
         title: newProj.name,
         description: newProj.description,
         color: newProj.color,

@@ -323,7 +323,7 @@ export async function sendDailySummaryAndNotify(type: "morning" | "evening") {
 
     let dbTasks: any[] = [];
     try {
-      const tasksData = (await apiClient.get("/omnitask/")) as any;
+      const tasksData = (await apiClient.get("/internal/v1/team/plane/issues")) as any;
       dbTasks = Array.isArray(tasksData) ? tasksData : (tasksData?.data || []);
     } catch (err: any) {
       throw new Error("Không thể fetch tasks");
@@ -440,7 +440,7 @@ export async function checkRealtimeOverdueDeadlines() {
 
     let dbTasks: any[] = [];
     try {
-      const tasksData = (await apiClient.get("/omnitask/")) as any;
+      const tasksData = (await apiClient.get("/internal/v1/team/plane/issues")) as any;
       dbTasks = Array.isArray(tasksData) ? tasksData : (tasksData?.data || []);
     } catch (err: any) {
       throw new Error("Không thể fetch tasks");

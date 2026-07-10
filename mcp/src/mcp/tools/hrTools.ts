@@ -2,14 +2,7 @@ import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
 import { CoreApiClient, API_ROUTES } from "@storymee/api-client";
 import { fetchAxios } from "../../fetchAxios";
 
-export async function executeHrTool(name: string, args: any, user: any, isBoss: boolean, apiClient: CoreApiClient): Promise<{ content: Array<{ type: string; text: string }> }> {
-  let data;
-  try {
-    data = (await apiClient.get(API_ROUTES.HR.TEAM_MEMBERS)) as any;
-  } catch (err: any) {
-    throw new McpError(ErrorCode.InternalError, "Không thể kết nối đến Core API Service để lấy danh sách thành viên.");
-  }
-  const members = data.data || [];
+export async function executeHrTool(name: string, args: any, user: any, isBoss: boolean, apiClient: CoreApiClient, members: any[]): Promise<{ content: Array<{ type: string; text: string }> }> {
 
   switch (name) {
 case "submit_leave_request": {
@@ -67,7 +60,7 @@ case "get_leave_allowance": {
         throw new McpError(ErrorCode.InvalidParams, `Không tìm thấy nhân sự ${targetName}.`);
       }
 
-      const leavesRes = await apiClient.get("/omnitask/hr/leave-requests");
+      const leavesRes = await apiClient.get("/internal/v1/team/hr/leave-requests");
       let annualUsed = 0;
       let remoteUsed = 0;
 

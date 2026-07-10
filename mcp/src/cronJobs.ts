@@ -11,7 +11,7 @@ export function startCronJobs(apiClient: CoreApiClient, sendMessage: (chatId: nu
       const members = res.data || [];
       const todayStr = new Date().toISOString().split('T')[0];
       
-      const tasksRes = await apiClient.get("/omnitask/tasks") as any;
+      const tasksRes = await apiClient.get("/internal/v1/team/plane/issues") as any;
       const allTasks = tasksRes.data || [];
 
       for (const m of members) {

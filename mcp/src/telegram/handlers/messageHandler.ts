@@ -55,7 +55,7 @@ export async function handleTelegramMessage(message: {
 
 
   // PRE-FETCH Tasks để tối ưu hoá tốc độ (ẩn độ trễ mạng)
-  const prefetchTasksPromise = apiClient.get("/omnitask/").catch(err => {
+  const prefetchTasksPromise = apiClient.get("/internal/v1/team/plane/issues").catch(err => {
     console.error("Lỗi prefetch tasks:", err);
     return null;
   });
@@ -284,7 +284,7 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
     let dbTasks: any[] = [];
     let mappedTasks: any[] = [];
     try {
-      const json = await apiClient.get("/omnitask/") as any;
+      const json = await apiClient.get("/internal/v1/team/plane/issues") as any;
       dbTasks = Array.isArray(json) ? json : (json?.data || []);
       
       const allMembers = await getCachedMembers();
