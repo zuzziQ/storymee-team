@@ -36,7 +36,8 @@ export const PLANE_TOOLS_SCHEMA = [
         project_id: { type: "string", description: "ID của dự án (Plane Project ID)" },
         assignee: { type: "string", description: "Tên nhân sự thực hiện (ví dụ: Trung Dũng)" },
         priority: { type: "string", enum: ["none", "low", "medium", "high", "urgent"], description: "Độ ưu tiên (mặc định medium)" },
-        target_date: { type: "string", description: "Hạn chót hoàn thành định dạng YYYY-MM-DD" }
+        target_date: { type: "string", description: "Hạn chót hoàn thành định dạng YYYY-MM-DD" },
+        parent_id: { type: "string", description: "ID của task cha (nếu đây là subtask). Truyền ID dạng UUID hoặc Short ID đều được (mcp sẽ tự map)" }
       },
       required: ["title", "project_id"]
     }
@@ -269,18 +270,37 @@ case "create_project": {
       }
     }
 case "create_issue": {
-      const { title, project_id, assignee, priority, target_date } = args as any;
+      const { title, project_id, assignee, priority, target_date, parent_id } = args as any;
       
-      if (!isBoss && assignee.toLowerCase() !== user.fullName.toLowerCase()) {
+      if (!isBoss && assignee && assignee.toLowerCase() !== user.fullName.toLowerCase()) {
         throw new McpError(
           ErrorCode.InvalidRequest,
           "TỪ CHỐI TRUY CẬP: Bạn không có quyền tạo task và gán cho nhân sự khác."
         );
       }
 
-      const targetUser = members.find((m: any) => m.fullName.toLowerCase() === assignee.toLowerCase());
-      if (!targetUser) {
-        throw new McpError(ErrorCode.InvalidParams, `Không tìm thấy nhân sự ${assignee} trong hệ thống.`);
+      let targetUser = user;
+      if (assignee) {
+        targetUser = members.find((m: any) => m.fullName.toLowerCase() === assignee.toLowerCase());
+        if (!targetUser) {
+          throw new McpError(ErrorCode.InvalidParams, `Không tìm thấy nhân sự ${assignee} trong hệ thống.`);
+        }
+      }
+
+      let actualParentId = parent_id;
+      // Convert Short ID to UUID if needed
+      if (parent_id && !parent_id.includes('-') === false && parent_id.split('-').length === 2 && parent_id.length < 15) {
+          try {
+              const resJson = (await apiClient.get(API_ROUTES.PLANE.ISSUES)) as any;
+              const allIssues = resJson.data || [];
+              const parts = parent_id.split('-');
+              const seqId = parseInt(parts[1], 10);
+              const ident = parts[0].toUpperCase();
+              const found = allIssues.find((i: any) => i.sequenceId === seqId && (i.Project?.identifier || '').toUpperCase() === ident);
+              if (found) actualParentId = found.id;
+          } catch (e) {
+              // ignore
+          }
       }
 
       let resJson;
@@ -291,7 +311,8 @@ case "create_issue": {
                     description: "Tạo tự động qua Model Context Protocol (MCP)",
                     assigneeId: targetUser.id,
                     priority: priority ? priority.toLowerCase() : "medium",
-                    targetDate: target_date || undefined
+                    targetDate: target_date || undefined,
+                    parentId: actualParentId || undefined
                   })) as any;
             
             if (resJson.success === false) {
