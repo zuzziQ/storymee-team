@@ -166,19 +166,22 @@ case "get_my_issues": {
           }
       const dbIssues = resJson.data || [];
       
-      const myIssues: any[] = [];
+      // Tập hợp các ID liên quan đến user (User là assignee của task cha hoặc task con)
+      const involvedParentIds = new Set<string>();
       dbIssues.forEach((issue: any) => {
         const assigneeName = issue.Assignee ? issue.Assignee.fullName : "";
         if (assigneeName.toLowerCase() === targetName.toLowerCase()) {
-          myIssues.push(issue);
+          if (issue.parentId) involvedParentIds.add(issue.parentId);
+          else involvedParentIds.add(issue.id);
         }
       });
 
-      // Lọc task cha và subtask
-      const parentTasks = myIssues.filter(i => i.parentId === null);
-      const subTasks = myIssues.filter(i => i.parentId !== null);
+      // Lấy tất cả task cha có liên quan
+      const parentTasks = dbIssues.filter((i: any) => i.parentId === null && involvedParentIds.has(i.id));
+      // Lấy tất cả subtask của các task cha này (hoặc subtask được assign cho user nhưng cha bị xóa)
+      const subTasks = dbIssues.filter((i: any) => i.parentId !== null && (involvedParentIds.has(i.parentId) || (i.Assignee?.fullName || '').toLowerCase() === targetName.toLowerCase()));
 
-      let outputText = `📝 CÔNG VIỆC CỦA BẠN (*${targetName}*)\n──────────────────────────────\n\n`;
+      let outputText = `📝 CÔNG VIỆC CỦA BẠN (*${targetName}*)\n\n`;
       
       const formatIssue = (pt: any, isSub: boolean = false) => {
           const statusStr = pt.State ? pt.State.name : 'Unknown';
@@ -211,10 +214,10 @@ case "get_my_issues": {
         };
       }
 
-      parentTasks.forEach(pt => {
+      parentTasks.forEach((pt: any) => {
           outputText += formatIssue(pt);
-          const subs = subTasks.filter(sub => sub.parentId === pt.id);
-          subs.forEach((sub, idx) => {
+          const subs = subTasks.filter((sub: any) => sub.parentId === pt.id);
+          subs.forEach((sub: any, idx: number) => {
               const isLast = idx === subs.length - 1;
               const formattedSub = formatIssue(sub, true);
               outputText += isLast ? formattedSub.replace('┣', '┗') : formattedSub;
@@ -223,9 +226,9 @@ case "get_my_issues": {
       });
 
       // Nếu có subtask bị mồ côi (Task mẹ do người khác cầm)
-      const orphanSubs = subTasks.filter(sub => !parentTasks.find(p => p.id === sub.parentId));
+      const orphanSubs = subTasks.filter((sub: any) => !parentTasks.find((p: any) => p.id === sub.parentId));
       if (orphanSubs.length > 0) {
-          orphanSubs.forEach(pt => {
+          orphanSubs.forEach((pt: any) => {
               outputText += formatIssue(pt);
               outputText += '\n';
           });

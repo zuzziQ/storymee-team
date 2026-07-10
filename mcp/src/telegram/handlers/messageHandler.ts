@@ -346,8 +346,7 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
     const reviewCount = activeTasks.filter(t => t.status === 'In Review').length;
 
     let reportMsg = `📊 *BÁO CÁO TIẾN ĐỘ ĐỘI NGŨ*\n`
-      + `🔵 Review: ${reviewCount} | 🔴 Quá hạn: ${overdueCount} | 🟢 Done: ${doneCount} | 📋 Đang mở: ${activeTasks.length}\n`
-      + `──────────────────────────────\n`;
+      + `🔵 Review: ${reviewCount} | 🔴 Quá hạn: ${overdueCount} | 🟢 Done: ${doneCount} | 📋 Đang mở: ${activeTasks.length}\n`;
 
     for (const task of activeTasks) {
       const isOverdue = task.rawDeadline && task.rawDeadline < now;
