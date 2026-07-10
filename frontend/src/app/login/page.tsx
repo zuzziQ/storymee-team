@@ -29,6 +29,7 @@ export default function LoginPage() {
         const json = await coreApiClient.get('/hr/team-members');
         if (json.status === 'success' && Array.isArray(json.data)) {
             const mapped = json.data.map((m: any) => ({
+              id: m.id,
               email: m.email,
               name: m.fullName,
               role: m.role || 'Developer',
@@ -38,7 +39,7 @@ export default function LoginPage() {
 
             // Xử lý tự động đăng nhập nếu có token hợp lệ
             if (token) {
-              const matchedUser = mapped.find((u: any) => u.lettaConversationId === token);
+              const matchedUser = mapped.find((u: any) => u.lettaConversationId === token || `conv-${u.id}` === token);
               if (matchedUser) {
                 setStatusText(`Xác thực thành công. Đang chuyển hướng cho ${matchedUser.name}...`);
                 localStorage.setItem('st_user', JSON.stringify({
