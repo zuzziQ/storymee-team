@@ -64,12 +64,19 @@ async function startServer() {
 
   // Subscribe to NATS to forward to WebSockets
   if (nc) {
-    nc.subscribe('core.team.issue.updated', {
+    nc.subscribe('core.team.>', {
       callback: (err, msg) => {
         if (!err) {
           try {
             const data = JSON.parse(msg.data.toString());
-            io.emit('issue_updated', data);
+            // Map subject 'core.team.issue.updated' -> 'issue_updated'
+            const eventName = msg.subject.replace('core.team.', '').replace(/\./g, '_');
+            io.emit(eventName, data);
+            
+            // For backward compatibility since frontend expects 'issue_updated'
+            if (msg.subject === 'core.team.issue.updated') {
+              // already handled by mapping above
+            }
           } catch (e) {
             console.error('Error forwarding NATS message to Socket.io', e);
           }

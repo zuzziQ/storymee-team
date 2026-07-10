@@ -1,10 +1,10 @@
 // @ts-nocheck
 import { ITeamMember, ILeaveRequest } from "@storymee/api-client";
-import { ITeamMember, ILeaveRequest } from "@storymee/api-client";
-
 import { prisma } from '../config/prisma';
 import { HrHandoverService } from '../services/hrHandover.service';
 import { HrService } from '../services/hr.service';
+import { NotificationService } from '../services/notification.service';
+import { StringCodec } from 'nats';
 
 function serialize(obj: any): any {
   return JSON.parse(JSON.stringify(obj, (key, value) =>
@@ -297,6 +297,22 @@ export class HrController {
       include: { member: true }
     });
 
+    const notif = await NotificationService.createNotification(
+      memberId,
+      `Yêu cầu nghỉ phép`,
+      `Nhân sự xin ${leaveType === 'sick' ? 'nghỉ ốm' : leaveType === 'annual' ? 'nghỉ phép năm' : leaveType === 'remote' ? 'làm remote' : 'nghỉ việc riêng'} từ ${startDate} đến ${endDate}`,
+      'leave_request',
+      { leaveRequestId: request.id, leaveType, startDate, endDate, reason }
+    );
+
+    if (req.server && req.server.nats) {
+      const sc = StringCodec();
+      req.server.nats.publish('core.team.leave.request', sc.encode(JSON.stringify({
+        leaveRequest: request,
+        notification: notif
+      })));
+    }
+
     reply.code(201).send({ status: 'success', data: serialize(request) });
   }
 
@@ -321,6 +337,23 @@ export class HrController {
     let handoverResult = null;
     if (updated.status === 'approved') {
       handoverResult = await HrHandoverService.handleLeaveApproval(updated.id);
+    }
+    
+    const notif = await NotificationService.createNotification(
+      updated.memberId,
+      updated.status === 'approved' ? `Đơn xin nghỉ được duyệt` : `Đơn xin nghỉ bị từ chối`,
+      updated.status === 'approved' ? `Admin đã phê duyệt đơn xin nghỉ của bạn.` : `Admin đã từ chối đơn xin nghỉ của bạn.`,
+      'leave_resolved',
+      { leaveRequestId: updated.id, status: updated.status }
+    );
+
+    if (req.server && req.server.nats) {
+      const sc = StringCodec();
+      req.server.nats.publish('core.team.leave.resolved', sc.encode(JSON.stringify({
+        leaveRequest: updated,
+        handover: handoverResult,
+        notification: notif
+      })));
     }
 
     reply.code(200).send({
