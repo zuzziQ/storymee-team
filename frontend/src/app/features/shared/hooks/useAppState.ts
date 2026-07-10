@@ -1,5 +1,6 @@
 import { fetchAxios } from '@/lib/fetchAxios';
 import { useState, useEffect, useRef } from 'react';
+import { io } from 'socket.io-client';
 import { useRouter } from 'next/navigation';
 import {
   Task, Project, TeamMember, Announcement, ChatMessage, Priority, TaskStatus,
@@ -65,6 +66,7 @@ export function useAppState() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [selectedMemberId, setSelectedMemberId] = useState<string>('m2');
   const [showNotifications, setShowNotifications] = useState(false);
+  const [appNotifications, setAppNotifications] = useState<any[]>([]);
 
   useEffect(() => {
     const saved = localStorage.getItem('storymee_company_rules');
@@ -415,6 +417,90 @@ export function useAppState() {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       clearInterval(interval);
+    };
+  }, [authReady, activeUser]);
+
+  // Global WebSocket connection for Notifications
+  useEffect(() => {
+    if (!authReady || !activeUser) return;
+    
+    // Khôi phục từ localStorage
+    if (typeof window !== 'undefined') {
+      const savedNotifs = localStorage.getItem('storymee_app_notifications');
+      if (savedNotifs) {
+        setAppNotifications(JSON.parse(savedNotifs));
+      }
+    }
+
+    const socket = io('/internal/v1/team/socket.io', {
+      path: '/internal/v1/team/socket.io',
+      transports: ['websocket', 'polling']
+    });
+
+    const addNotif = (notif: any) => {
+      setAppNotifications(prev => {
+        const updated = [{ ...notif, id: Date.now(), timestamp: new Date() }, ...prev];
+        localStorage.setItem('storymee_app_notifications', JSON.stringify(updated));
+        return updated;
+      });
+      setShowNotifications(true); // Tự động mở menu báo
+    };
+
+    const dismissNotifByAction = (action: string, taskIdOrLeaveId?: string) => {
+      setAppNotifications(prev => {
+        const updated = prev.map(n => {
+          if (n.action === action && n.id_ref === taskIdOrLeaveId) {
+            return { ...n, read: true };
+          }
+          return n;
+        });
+        localStorage.setItem('storymee_app_notifications', JSON.stringify(updated));
+        return updated;
+      });
+    };
+
+    socket.on('task_request_approval', (data) => {
+      if (activeUser.role === 'admin' || activeUser.role === 'manager') {
+        addNotif({ title: 'Yêu cầu duyệt Task', message: `Nhân sự ${data.employee_name} vừa xin duyệt hoàn thành task ${data.task_id}`, action: 'request_approval', id_ref: data.task_id });
+      }
+    });
+
+    socket.on('leave_request_approval', (data) => {
+      if (activeUser.role === 'admin' || activeUser.role === 'manager') {
+        addNotif({ title: 'Yêu cầu nghỉ phép', message: `Nhân sự ${data.employee_name} vừa xin nghỉ phép`, action: 'leave_request', id_ref: data.employee_name });
+      }
+    });
+
+    socket.on('task_approved', (data) => {
+      dismissNotifByAction('request_approval', data.task_id);
+      if (data.employee_name === activeUser.name) {
+        addNotif({ title: 'Duyệt Task', message: `Task ${data.task_id} của bạn đã được DUYỆT!`, type: 'success' });
+      }
+    });
+
+    socket.on('task_rejected', (data) => {
+      dismissNotifByAction('request_approval', data.task_id);
+      if (data.employee_name === activeUser.name) {
+        addNotif({ title: 'Từ chối Task', message: `Task ${data.task_id} của bạn ĐÃ BỊ TỪ CHỐI!`, type: 'error' });
+      }
+    });
+
+    socket.on('leave_approved', (data) => {
+      dismissNotifByAction('leave_request', data.employee_name);
+      if (data.employee_name === activeUser.name) {
+        addNotif({ title: 'Duyệt Nghỉ phép', message: `Yêu cầu nghỉ phép của bạn đã được DUYỆT!`, type: 'success' });
+      }
+    });
+
+    socket.on('leave_rejected', (data) => {
+      dismissNotifByAction('leave_request', data.employee_name);
+      if (data.employee_name === activeUser.name) {
+        addNotif({ title: 'Từ chối Nghỉ phép', message: `Yêu cầu nghỉ phép của bạn ĐÃ BỊ TỪ CHỐI!`, type: 'error' });
+      }
+    });
+
+    return () => {
+      socket.disconnect();
     };
   }, [authReady, activeUser]);
 
@@ -847,6 +933,8 @@ export function useAppState() {
     setSelectedMemberId,
     showNotifications,
     setShowNotifications,
+    appNotifications,
+    setAppNotifications,
     aiChatMessages,
     aiChatInput,
     setAiChatInput,

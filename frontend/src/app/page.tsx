@@ -151,6 +151,8 @@ export default function StorymeeTeamPage() {
           setShowAddProjectModal={setShowAddProjectModal}
           showNotifications={showNotifications}
           setShowNotifications={setShowNotifications}
+          appNotifications={appNotifications}
+          setAppNotifications={setAppNotifications}
           announcements={announcements}
           setAnnouncements={setAnnouncements}
           activeUser={activeUser}

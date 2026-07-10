@@ -11,6 +11,8 @@ interface HeaderBarProps {
   setShowAddProjectModal: (show: boolean) => void;
   showNotifications: boolean;
   setShowNotifications: (show: boolean) => void;
+  appNotifications?: any[];
+  setAppNotifications?: (notifs: any[]) => void;
   announcements: Announcement[];
   setAnnouncements: React.Dispatch<React.SetStateAction<Announcement[]>>;
   activeUser: TeamMember;
@@ -179,7 +181,7 @@ export default function HeaderBar({
             title="Thông báo công ty"
           >
             <Bell size={16} />
-            {unreadAnnouncements.length > 0 && (
+            {(unreadAnnouncements.length > 0 || appNotifications?.some(n => !n.read)) && (
               <span style={{ position: 'absolute', top: 2, right: 2, width: 6, height: 6, borderRadius: '50%', background: '#ef4444' }} />
             )}
           </button>
@@ -188,10 +190,36 @@ export default function HeaderBar({
           {showNotifications && (
             <div style={{ position: 'absolute', top: '120%', right: 0, width: 320, background: 'rgba(24,24,27,0.98)', border: '1px solid var(--border)', borderRadius: 12, padding: 12, zIndex: 100, boxShadow: '0 16px 40px rgba(0,0,0,0.6)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border)', paddingBottom: 8, marginBottom: 8 }}>
-                <span style={{ fontSize: 12, fontWeight: 600, color: '#fafafa' }}>Thông báo công ty ({announcements.length})</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: '#fafafa' }}>Thông báo ({appNotifications.length + announcements.length})</span>
                 <button onClick={() => setShowNotifications(false)} style={{ background: 'none', border: 'none', color: '#71717a', cursor: 'pointer', fontSize: 11 }}>Đóng</button>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 260, overflowY: 'auto' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 360, overflowY: 'auto' }}>
+                {/* System Notifications */}
+                {appNotifications.map(notif => (
+                    <div key={notif.id} style={{ padding: 8, borderRadius: 8, background: notif.read ? 'transparent' : 'rgba(99,102,241,0.06)', border: `1px solid ${notif.read ? 'rgba(255,255,255,0.03)' : 'rgba(99,102,241,0.15)'}` }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
+                        <span style={{ fontSize: 11, fontWeight: 600, color: notif.type === 'error' ? '#ef4444' : notif.type === 'success' ? '#22c55e' : '#fafafa' }}>{notif.title}</span>
+                        {!notif.read && (
+                          <button
+                            onClick={() => {
+                              if (setAppNotifications) {
+                                setAppNotifications(appNotifications.map(n => n.id === notif.id ? { ...n, read: true } : n));
+                              }
+                            }}
+                            style={{ background: 'none', border: 'none', color: '#a78bfa', cursor: 'pointer', fontSize: 9, fontWeight: 500 }}
+                          >
+                            Đã đọc
+                          </button>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 10, color: '#a1a1aa', lineHeight: 1.4, marginBottom: 4 }}>{notif.message}</div>
+                      <div style={{ fontSize: 9, color: '#52525b', textAlign: 'right' }}>
+                         {notif.timestamp ? new Date(notif.timestamp).toLocaleTimeString('vi-VN') : ''}
+                      </div>
+                    </div>
+                ))}
+                
+                {/* Announcements */}
                 {announcements.map(ann => {
                   const isRead = ann.readBy.includes(activeUser.id);
                   return (
@@ -214,7 +242,7 @@ export default function HeaderBar({
                     </div>
                   );
                 })}
-                {announcements.length === 0 && (
+                {announcements.length === 0 && appNotifications.length === 0 && (
                   <div style={{ fontSize: 11, color: '#52525b', textAlign: 'center', padding: 20 }}>Không có thông báo nào</div>
                 )}
               </div>
