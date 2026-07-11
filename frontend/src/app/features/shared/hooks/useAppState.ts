@@ -566,7 +566,7 @@ export function useAppState() {
       }
 
       await coreApiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${subtaskId}`, {
-        status: task.status,
+        status: apiStatus,
         assigneeId: matchedMember ? matchedMember.id : undefined,
         priority: task.priority ? task.priority.toLowerCase() : undefined,
         targetDate: isoTargetDate,
