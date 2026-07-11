@@ -176,14 +176,30 @@ export class PlaneController {
 
                 if (availableStates && availableStates.length > 0) {
                     const statusLower = data.status.toLowerCase();
-                    const stateObj = availableStates.find((s: any) => 
+                    let stateObj = availableStates.find((s: any) => 
                         s.name.toLowerCase() === statusLower || 
-                        ((statusLower === 'backlog') && s.group === 'backlog') ||
-                        ((statusLower === 'todo' || statusLower === 'pending') && s.group === 'unstarted') ||
-                        ((statusLower === 'in progress' || statusLower === 'in_progress' || statusLower === 'working' || statusLower === 'in review' || statusLower === 'in_review') && s.group === 'started') ||
-                        ((statusLower === 'done' || statusLower === 'completed') && s.group === 'completed') ||
-                        ((statusLower === 'cancelled' || statusLower === 'canceled') && s.group === 'cancelled')
+                        ((statusLower === 'in review' || statusLower === 'in_review') && s.name.toLowerCase() === 'in review')
                     );
+                    
+                    if (!stateObj) {
+                        stateObj = availableStates.find((s: any) => 
+                            ((statusLower === 'backlog') && s.group === 'backlog') ||
+                            ((statusLower === 'todo' || statusLower === 'pending') && s.group === 'unstarted') ||
+                            ((statusLower === 'in progress' || statusLower === 'in_progress' || statusLower === 'working') && s.group === 'started') ||
+                            ((statusLower === 'done' || statusLower === 'completed') && s.group === 'completed') ||
+                            ((statusLower === 'cancelled' || statusLower === 'canceled') && s.group === 'cancelled')
+                        );
+                    }
+
+                    if (!stateObj && (statusLower === 'in review' || statusLower === 'in_review')) {
+                        const projectId = issue?.projectId || issue?.Parent?.projectId;
+                        if (projectId) {
+                            stateObj = await prisma.plState.create({
+                                data: { name: 'In Review', group: 'started', projectId: projectId, color: '#8b5cf6', sequence: 4 }
+                            });
+                        }
+                    }
+
                     if (stateObj) finalStateId = stateObj.id;
                 }
             }
