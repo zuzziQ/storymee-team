@@ -320,7 +320,7 @@ export class HrController {
     const { id } = req.params;
     const { status } = req.body; // "approved" hoặc "rejected"
 
-    const current = await prisma.leaveRequest.findUnique({ where: { id } });
+    const current = await prisma.leaveRequest.findUnique({ where: { id }, include: { member: true } });
     if (!current) {
       reply.code(404).send({ status: 'error', message: 'Không tìm thấy đơn xin nghỉ' });
       return;
@@ -333,6 +333,50 @@ export class HrController {
       },
       include: { member: true }
     });
+
+    // Nếu approve → cộng số ngày vào counter của member
+    if (updated.status === 'approved' && current.status !== 'approved') {
+      const start = new Date(current.startDate);
+      const end = new Date(current.endDate);
+      // Tính số ngày (inclusive, min 1)
+      const diffDays = Math.max(1, Math.round((end.getTime() - start.getTime()) / (1000 * 3600 * 24)) + 1);
+
+      const member = current.member;
+      if (member) {
+        if (current.leaveType === 'annual' || current.leaveType === 'sick') {
+          await prisma.teamMember.update({
+            where: { id: member.id },
+            data: { annualLeaveUsed: { increment: diffDays } }
+          });
+        } else if (current.leaveType === 'remote') {
+          await prisma.teamMember.update({
+            where: { id: member.id },
+            data: { remoteUsed: { increment: diffDays } }
+          });
+        }
+      }
+    }
+
+    // Nếu reject sau khi đã approve trước đó → hoàn trả counter
+    if (updated.status === 'rejected' && current.status === 'approved') {
+      const start = new Date(current.startDate);
+      const end = new Date(current.endDate);
+      const diffDays = Math.max(1, Math.round((end.getTime() - start.getTime()) / (1000 * 3600 * 24)) + 1);
+      const member = current.member;
+      if (member) {
+        if (current.leaveType === 'annual' || current.leaveType === 'sick') {
+          await prisma.teamMember.update({
+            where: { id: member.id },
+            data: { annualLeaveUsed: { decrement: diffDays } }
+          });
+        } else if (current.leaveType === 'remote') {
+          await prisma.teamMember.update({
+            where: { id: member.id },
+            data: { remoteUsed: { decrement: diffDays } }
+          });
+        }
+      }
+    }
 
     let handoverResult = null;
     if (updated.status === 'approved') {
