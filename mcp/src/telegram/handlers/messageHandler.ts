@@ -55,11 +55,11 @@ export async function handleTelegramMessage(message: {
 
 
   // PRE-FETCH Tasks để tối ưu hoá tốc độ (ẩn độ trễ mạng)
-  const prefetchTasksPromise = apiClient.get("/internal/v1/team/plane/issues").catch(err => {
+  const prefetchTasksPromise = apiClient.get(API_ROUTES.PLANE.ISSUES).catch(err => {
     console.error("Lỗi prefetch tasks:", err);
     return null;
   });
-  const prefetchProjectsPromise = apiClient.get("/internal/v1/team/plane/projects").catch(err => {
+  const prefetchProjectsPromise = apiClient.get(API_ROUTES.PLANE.PROJECTS).catch(err => {
     console.error("Lỗi prefetch projects:", err);
     return null;
   });
@@ -129,7 +129,7 @@ export async function handleTelegramMessage(message: {
     try {
       console.log(`[Postgres API] Đang cập nhật chat_id ${chatId} cho @${username}...`);
       try {
-          await apiClient.post("/hr/team-members", {
+          await apiClient.post(API_ROUTES.HR.TEAM_MEMBERS, {
             fullName: member.fullName,
             email: member.email,
             telegramUsername: member.telegramUsername,
@@ -287,7 +287,7 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
     let dbTasks: any[] = [];
     let mappedTasks: any[] = [];
     try {
-      const json = await apiClient.get("/internal/v1/team/plane/issues") as any;
+      const json = await apiClient.get(API_ROUTES.PLANE.ISSUES) as any;
       dbTasks = Array.isArray(json) ? json : (json?.data || []);
       
       const allMembers = await getCachedMembers();

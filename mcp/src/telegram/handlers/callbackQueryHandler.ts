@@ -142,7 +142,7 @@ async function handleCallbackQuery(callbackQuery: any) {
 
   if (data === "start_create_task") {
     try {
-      const res = await apiClient.get('/plane/projects') as any;
+      const res = await apiClient.get(API_ROUTES.PLANE.PROJECTS) as any;
       const projects = (res.data || res) || [];
       if (!Array.isArray(projects) || projects.length === 0) {
         await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
@@ -782,7 +782,7 @@ async function handleCallbackQuery(callbackQuery: any) {
     try {
       const statusParam = action === "approve" ? "approved" : "rejected";
       try {
-          const resJson = await apiClient.post(`/hr/leave-requests/${requestId}/approve`, { status: statusParam }) as any;
+          const resJson = await apiClient.post(`${API_ROUTES.HR.LEAVE_REQUESTS}/${requestId}/approve`, { status: statusParam }) as any;
           const actionStr = action === "approve" ? "Đã Phê duyệt" : "Đã Từ chối";
           const emoji = action === "approve" ? "✅" : "❌";
 

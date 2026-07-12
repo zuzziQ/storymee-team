@@ -4,6 +4,7 @@ import { executeMcpTool } from '../../index';
 import { 
   sendMessage, userFormSession, KEYBOARD_MAIN
 } from '../../telegram_agent';
+import { API_ROUTES } from '@storymee/api-client';
 import * as dotenv from "dotenv";
 
 dotenv.config();
@@ -146,7 +147,7 @@ export const formSessionCommand: TelegramCommand = {
         const targetMonth = targetDate.getMonth() + 1;
         
         // Gọi API lấy lịch sử HR của nhân sự trong năm
-        const hrRes = await apiClient.get(`/hr/attendance/report?year=${targetYear}&memberId=${ctx.member.id}`);
+        const hrRes = await apiClient.get(`${API_ROUTES.HR.ATTENDANCE}/report?year=${targetYear}&memberId=${ctx.member.id}`);
         const hrData = hrRes as any;
         if (hrData && hrData.status === 'success' && Array.isArray(hrData.data)) {
            // Lọc các bản ghi trong tháng

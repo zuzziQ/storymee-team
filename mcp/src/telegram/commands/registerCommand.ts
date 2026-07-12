@@ -1,5 +1,6 @@
 import { TelegramMessageContext, TelegramCommand } from './types';
 import { sendMessage, getCachedMembers, KEYBOARD_MAIN } from '../../telegram_agent';
+import { API_ROUTES } from '@storymee/api-client';
 
 export const registerCommand: TelegramCommand = {
   name: 'register',
@@ -58,7 +59,7 @@ export const registerCommand: TelegramCommand = {
             // Nếu email tồn tại nhưng chưa liên kết Telegram -> Thực hiện liên kết hồ sơ sẵn có
             await sendMessage(chatId, "⏳ Đang liên kết tài khoản Telegram của bạn với hồ sơ sẵn có...");
             try {
-                await apiClient.post("/hr/team-members", {
+                await apiClient.post(API_ROUTES.HR.TEAM_MEMBERS, {
                   ...existingEmailMember,
                   telegramUsername: username,
                   telegramChatId: chatId
@@ -76,7 +77,7 @@ export const registerCommand: TelegramCommand = {
       // 3. Nếu là email hoàn toàn mới -> Tạo mới nhân sự mới
       await sendMessage(chatId, "⏳ Đang tạo hồ sơ nhân sự mới trên hệ thống...");
       try {
-          await apiClient.post("/hr/team-members", {
+          await apiClient.post(API_ROUTES.HR.TEAM_MEMBERS, {
             email,
             fullName,
             telegramUsername: username,
