@@ -504,6 +504,20 @@ export function useAppState() {
       }
     });
 
+    // TC-L05: NATS emit 'core.team.leave.resolved' → Socket.io forward 'leave_resolved'
+    socket.on('leave_resolved', (data) => {
+      const memberName = data?.leaveRequest?.member?.fullName || '';
+      const leaveStatus = data?.leaveRequest?.status; // 'approved' | 'rejected'
+      fetchDbData(); // Refresh leave list
+      if (memberName === activeUser.name) {
+        if (leaveStatus === 'approved') {
+          addNotif({ title: '✅ Đơn nghỉ phép được duyệt', message: 'Admin đã phê duyệt đơn nghỉ phép của bạn.', type: 'success' });
+        } else if (leaveStatus === 'rejected') {
+          addNotif({ title: '❌ Đơn nghỉ phép bị từ chối', message: 'Admin đã từ chối đơn nghỉ phép của bạn.', type: 'error' });
+        }
+      }
+    });
+
     return () => {
       socket.disconnect();
     };
