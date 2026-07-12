@@ -63,6 +63,8 @@ export default function ProjectsTab({
   const totalH = projTasks.reduce((s, t) => s + t.estimate, 0);
   const pct = projTasks.length ? Math.round((doneTasks.length / projTasks.length) * 100) : 0;
   const assignees = Array.from(new Set(projTasks.map(t => t.assignee).filter(Boolean)));
+  // Tính trạng thái active từ tasks (không dùng proj.status vì field này không có trong DB)
+  const isProjectActive = projTasks.length === 0 || projTasks.some(t => t.status !== 'Done');
 
   return (
     <div style={{ display: 'flex', gap: 20, height: 'calc(100vh - 120px)', overflow: 'hidden' }}>
@@ -185,7 +187,7 @@ export default function ProjectsTab({
             <div style={{ display: 'flex', gap: 24, marginTop: 14, flexWrap: 'wrap' }}>
               <div>
                 <span style={{ fontSize: 10, color: '#71717a', textTransform: 'uppercase' }}>Trạng thái</span>
-                <div style={{ fontSize: 14, fontWeight: 600, color: proj.status === 'Active' ? '#10b981' : '#71717a', marginTop: 2 }}>{proj.status === 'Active' ? 'Đang chạy' : 'Đã đóng'}</div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: isProjectActive ? '#10b981' : '#71717a', marginTop: 2 }}>{isProjectActive ? 'Đang chạy' : 'Đã hoàn thành'}</div>
               </div>
               <div>
                 <span style={{ fontSize: 10, color: '#71717a', textTransform: 'uppercase' }}>Tổng khối lượng</span>
