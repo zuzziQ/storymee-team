@@ -567,8 +567,12 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
         dbTasks = tasksData.data || [];
         
         dbTasks.forEach((sub: any) => {
+          // Project có thể là string (identifier) hoặc object {identifier, ...}
+          const projIdent = typeof sub.Project === 'string'
+            ? sub.Project
+            : (sub.Project?.identifier || '');
           mappedTasks.push({
-            id: sub.Project && sub.sequenceId ? `${sub.Project.identifier}-${sub.sequenceId}` : sub.id,
+            id: projIdent && sub.sequenceId ? `${projIdent}-${sub.sequenceId}` : sub.id,
             title: sub.title,
             description: sub.description || '',
             assignee: sub.Assignee ? sub.Assignee.fullName : 'Chưa phân công',
@@ -639,7 +643,7 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
         } else if (aiResponse.action === 'get_team_leaves') {
           const result = await executeMcpTool("get_team_leaves", aiResponse.teamLeavesPayload || {}, member);
           await sendMessage(chatId, result.content[0].text);
-        } else if (['create_project', 'update_issue', 'create_issue', 'leave_request', 'check_in_out', 'breakdown_issue', 'update_sub_issues', 'request_issue_approval'].includes(aiResponse.action)) {
+        } else if (['create_project', 'update_issue', 'update_issues', 'create_issue', 'leave_request', 'check_in_out', 'breakdown_issue', 'update_sub_issues', 'request_issue_approval'].includes(aiResponse.action)) {
           const actionId = Math.random().toString(36).substring(2, 10);
           actionCache[actionId] = {
             action: aiResponse.action,

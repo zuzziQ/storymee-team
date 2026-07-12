@@ -427,6 +427,36 @@ async function handleCallbackQuery(callbackQuery: any) {
             })
           });
         } catch (e) {}
+      } else if (action === 'update_issues') {
+        // Batch update nhiều task cùng lúc (e.g. "STO80-5 và STO80-2 done")
+        const taskList: any[] = payload.tasks || (payload.id ? [payload] : []);
+        const results: string[] = [];
+        for (const t of taskList) {
+          try {
+            await executeMcpTool("update_issue", {
+              task_id: t.id,
+              status: t.status || payload.status || undefined,
+              assignee: t.assignee || undefined,
+              priority: t.priority || undefined,
+              deadline: t.deadline || undefined
+            }, actionMember);
+            results.push(`✅ ${t.id}`);
+          } catch (e: any) {
+            results.push(`❌ ${t.id}: ${e.message || 'Lỗi'}`);
+          }
+        }
+        try {
+          await fetchAxios(`${TELEGRAM_API}/editMessageText`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              chat_id: chatId,
+              message_id: messageId,
+              text: `✅ *Hệ thống:* Đã cập nhật ${taskList.length} công việc:\n${results.join('\n')}`,
+              parse_mode: "Markdown"
+            })
+          });
+        } catch (e) {}
       } else if (action === 'create_issue') {
         let estimateVal = payload.estimate;
         if (payload.deadline && (!estimateVal || estimateVal === 0)) {

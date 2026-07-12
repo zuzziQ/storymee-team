@@ -148,32 +148,58 @@ export const PLANE_TOOLS_SCHEMA = [
 
 function findIssueHelper(dbTasks: any[], taskIdStr: string): any {
     if (!taskIdStr) return null;
-    const str = taskIdStr.toLowerCase();
-    
+    const str = taskIdStr.toLowerCase().trim();
+
     // 1. Direct match by UUID or planeTaskId
-    let found = dbTasks.find((t: any) => 
-        (t.id && t.id.toLowerCase() === str) || 
+    let found = dbTasks.find((t: any) =>
+        (t.id && t.id.toLowerCase() === str) ||
         (t.planeTaskId && t.planeTaskId.toLowerCase() === str)
     );
     if (found) return found;
 
-    // 2. Match Short ID (e.g. STO34-3)
+    // 2. Match Short ID (e.g. STO80-5, MP-3)
+    // API trả về Project là string identifier HOẶC object { identifier: "STO80" }
     if (taskIdStr.includes('-')) {
         const parts = taskIdStr.split('-');
         if (parts.length >= 2) {
             const ident = parts[0].toUpperCase();
             const seqId = parseInt(parts[1], 10);
             if (!isNaN(seqId)) {
-                const parentFound = dbTasks.find((t: any) => t.sequenceId === seqId && (t.Project?.identifier || '').toUpperCase() === ident);
-                if (parentFound) {
-                    if (parts.length === 2) return parentFound;
+                const projectMatch = dbTasks.find((t: any) => {
+                    if (t.sequenceId !== seqId) return false;
+                    // Project có thể là string hoặc object
+                    const projIdent = typeof t.Project === 'string'
+                        ? t.Project.toUpperCase()
+                        : (t.Project?.identifier || '').toUpperCase();
+                    return projIdent === ident;
+                });
+                if (projectMatch) return projectMatch;
+
+                // Tìm cả trong subIssues (subtask)
+                for (const parent of dbTasks) {
+                    const subs = parent.subIssues || [];
+                    const subFound = subs.find((s: any) => {
+                        if (s.sequenceId !== seqId) return false;
+                        const projIdent = typeof s.Project === 'string'
+                            ? s.Project.toUpperCase()
+                            : (s.Project?.identifier || '').toUpperCase();
+                        return projIdent === ident;
+                    });
+                    if (subFound) return subFound;
                 }
             }
         }
     }
-    
+
+    // 3. Fuzzy fallback: match by title substring
+    const titleMatch = dbTasks.find((t: any) =>
+        t.title && t.title.toLowerCase().includes(str)
+    );
+    if (titleMatch) return titleMatch;
+
     return null;
 }
+
 
 export async function executePlaneTool(name: string, args: any, user: any, isBoss: boolean, apiClient: CoreApiClient, members: any[]): Promise<{ content: Array<{ type: string; text: string }> }> {
 
