@@ -465,6 +465,11 @@ export function useAppState() {
       }
     });
 
+    // Real-time Kanban sync khi issue được cập nhật (NATS → Socket.io)
+    socket.on('issue_updated', () => {
+      fetchDbData();
+    });
+
     socket.on('leave_request_approval', (data) => {
       if (activeUser.role === 'admin' || activeUser.role === 'manager') {
         addNotif({ title: 'Yêu cầu nghỉ phép', message: `Nhân sự ${data.employee_name} vừa xin nghỉ phép`, action: 'leave_request', id_ref: data.employee_name });
@@ -764,16 +769,14 @@ export function useAppState() {
     
     try {
       await coreApiClient.post(API_ROUTES.PLANE.PROJECTS, {
-        title: newProj.name,
+        name: newProj.name,         // ← BUG FIX: backend yêu cầu "name", không phải "title"
         description: newProj.description,
-        color: newProj.color,
-        type: 'project'
+        color: newProj.color
       });
       // Re-fetch to get real ID from DB
       await fetchDbData();
     } catch (err) {
       console.error('Lỗi khi tạo dự án:', err);
-      // Rollback UI (optional) or just alert
       alert('Không thể tạo dự án trên server.');
     }
   };
@@ -836,16 +839,18 @@ export function useAppState() {
   };
 
 
-  /** ADMIN: Lưu trữ task trực tiếp */
-  const handleArchiveTaskDirect = async (task: { id: string; dbId?: string }) => {
+  /** ADMIN: Lưu trữ task trực tiếp (archive Plane issue) */
+  const handleArchiveTaskDirect = async (task: { id: string; dbId?: string; title?: string }) => {
     const dbId = task.dbId || task.id;
-    if (!window.confirm(`Đưa task "${task.id}" vào Lưu trữ (Archive)?`)) return;
+    if (!window.confirm(`Đưa task "${task.title || task.id}" vào Lưu trữ (Archive)?`)) return;
     try {
-      await coreApiClient.patch(`${API_ROUTES.HR.SUBTASKS}/${dbId}`, { status: 'archived' });
+      // Plane issues dùng status 'cancelled' để archive
+      await coreApiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${dbId}`, { status: 'cancelled' });
       setTasks(prev => prev.filter(t => t.id !== task.id)); // Ẩn khỏi UI
       setSelectedTask(null);
     } catch (err) {
       console.error('Lỗi lưu trữ task:', err);
+      alert('Không thể lưu trữ task: ' + String(err));
     }
   };
 

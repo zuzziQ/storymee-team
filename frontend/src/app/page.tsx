@@ -109,6 +109,8 @@ export default function StorymeeTeamPage() {
     handleArchiveTaskDirect,
     handleRequestArchive,
     handleCheckoutOffice,
+    appNotifications,
+    setAppNotifications,
     dbError
   } = useAppState();
 

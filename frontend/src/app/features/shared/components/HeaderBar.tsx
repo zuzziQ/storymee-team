@@ -51,7 +51,9 @@ export default function HeaderBar({
   setHrSubTab,
   handleCheckinOffice,
   handleCheckoutOffice,
-  attendanceList
+  attendanceList,
+  appNotifications = [],
+  setAppNotifications
 }: HeaderBarProps) {
   const unreadAnnouncements = announcements.filter(a => !a.readBy.includes(activeUser.id));
 
