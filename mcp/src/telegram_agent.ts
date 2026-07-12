@@ -5,7 +5,7 @@ import * as fs from "fs";
 import * as path from "path";
 import cron from "node-cron";
 import { executeMcpTool } from "./index";
-import { CoreApiClient } from "@storymee/api-client";
+import { CoreApiClient, API_ROUTES } from "@storymee/api-client";
 
 dotenv.config();
 
@@ -20,7 +20,7 @@ export async function getCachedMembers(): Promise<any[]> {
   }
   
   try {
-    const json = await apiClient.get("/hr/team-members") as any;
+    const json = await apiClient.get(API_ROUTES.HR.TEAM_MEMBERS) as any;
     const dataArr = Array.isArray(json) ? json : (json?.data || []);
     if (Array.isArray(dataArr)) {
       const now = Date.now();
@@ -323,7 +323,7 @@ export async function sendDailySummaryAndNotify(type: "morning" | "evening") {
 
     let dbTasks: any[] = [];
     try {
-      const tasksData = (await apiClient.get("/internal/v1/team/plane/issues")) as any;
+      const tasksData = (await apiClient.get(API_ROUTES.PLANE.ISSUES)) as any;
       dbTasks = Array.isArray(tasksData) ? tasksData : (tasksData?.data || []);
     } catch (err: any) {
       throw new Error("Không thể fetch tasks");
@@ -440,7 +440,7 @@ export async function checkRealtimeOverdueDeadlines() {
 
     let dbTasks: any[] = [];
     try {
-      const tasksData = (await apiClient.get("/internal/v1/team/plane/issues")) as any;
+      const tasksData = (await apiClient.get(API_ROUTES.PLANE.ISSUES)) as any;
       dbTasks = Array.isArray(tasksData) ? tasksData : (tasksData?.data || []);
     } catch (err: any) {
       throw new Error("Không thể fetch tasks");
@@ -576,15 +576,10 @@ export async function startTelegramPolling() {
   await setupBotCommands();
   
   // Vòng lặp Cron Worker nội bộ với timezone cụ thể
-  cron.schedule('30 8 * * 1-6', async () => {
-    console.log("⏰ [Cron Summary] Đến giờ 8h30 sáng, gửi báo cáo đầu ngày...");
-    await sendDailySummaryAndNotify("morning");
-  }, { timezone: "Asia/Ho_Chi_Minh" });
-
-  cron.schedule('0 18 * * 1-6', async () => {
-    console.log("⏰ [Cron Summary] Đến giờ 18h00 chiều, gửi nhắc nhở cuối ngày...");
-    await sendDailySummaryAndNotify("evening");
-  }, { timezone: "Asia/Ho_Chi_Minh" });
+  // NOTE: Cron sáng/chiều đã được chuyển sang cronJobs.ts để tránh gửi trùng (BUG-004).
+  // Chỉ giữ lại cron check deadline realtime ở dưới.
+  // cron.schedule('30 8 * * 1-6', sendDailySummaryAndNotify("morning"), { timezone: "Asia/Ho_Chi_Minh" });
+  // cron.schedule('0 18 * * 1-6', sendDailySummaryAndNotify("evening"), { timezone: "Asia/Ho_Chi_Minh" });
 
   cron.schedule('*/5 * * * *', async () => {
     try {

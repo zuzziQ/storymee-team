@@ -61,10 +61,11 @@ export class PlaneController {
             // Create default states
             await prisma.plState.createMany({
                 data: [
-                    { name: 'Backlog', group: 'backlog', projectId: project.id, color: '#9ca3af', sequence: 1 },
-                    { name: 'Todo', group: 'unstarted', projectId: project.id, color: '#3b82f6', sequence: 2 },
-                    { name: 'In Progress', group: 'started', projectId: project.id, color: '#f59e0b', sequence: 3 },
-                    { name: 'Done', group: 'completed', projectId: project.id, color: '#10b981', sequence: 4 }
+                    { name: 'Backlog',     group: 'backlog',    projectId: project.id, color: '#9ca3af', sequence: 1 },
+                    { name: 'Todo',        group: 'unstarted',  projectId: project.id, color: '#3b82f6', sequence: 2 },
+                    { name: 'In Progress', group: 'started',    projectId: project.id, color: '#f59e0b', sequence: 3 },
+                    { name: 'In Review',   group: 'started',    projectId: project.id, color: '#8b5cf6', sequence: 4 },
+                    { name: 'Done',        group: 'completed',  projectId: project.id, color: '#10b981', sequence: 5 }
                 ]
             });
 
