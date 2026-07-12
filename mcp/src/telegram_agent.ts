@@ -312,6 +312,33 @@ export function filterRelevantRules(message: string, rawRules: string): string {
   return relevantContent.trim();
 }
 
+/** Lấy status string thống nhất từ State DB object */
+function getStatusFromState(state: { group: string; name: string } | null | undefined): string {
+  if (!state) return 'pending';
+  const g = state.group;
+  const n = state.name.toLowerCase();
+  if (g === 'backlog') return 'backlog';
+  if (n === 'in review' || n === 'in_review') return 'in_review';
+  if (g === 'started') return 'working';
+  if (g === 'completed') return 'done';
+  if (g === 'cancelled') return 'cancelled';
+  return 'pending';
+}
+
+function isDoneIssue(issue: any): boolean {
+  const s = getStatusFromState(issue?.State);
+  return s === 'done' || s === 'cancelled';
+}
+
+function getIssueShortId(issue: any): string {
+  const projIdent = typeof issue.Project === 'string'
+    ? issue.Project
+    : (issue.Project?.identifier || '');
+  return projIdent && issue.sequenceId
+    ? `${projIdent}-${issue.sequenceId}`
+    : (issue.id?.substring(0, 8) || 'Task');
+}
+
 /**
  * 1A. Gửi báo cáo tổng hợp 8h30 sáng và 17h chiều hàng ngày
  */
@@ -321,13 +348,22 @@ export async function sendDailySummaryAndNotify(type: "morning" | "evening") {
     const members = await getCachedMembers();
     if (!members || members.length === 0) return;
 
-    let dbTasks: any[] = [];
+    let rawTasks: any[] = [];
     try {
       const tasksData = (await apiClient.get(API_ROUTES.PLANE.ISSUES)) as any;
-      dbTasks = Array.isArray(tasksData) ? tasksData : (tasksData?.data || []);
+      rawTasks = Array.isArray(tasksData) ? tasksData : (tasksData?.data || []);
     } catch (err: any) {
       throw new Error("Không thể fetch tasks");
     }
+
+    // Flatten parent + subIssues (field đúng là subIssues, không phải subTasks)
+    const allIssues: any[] = [];
+    rawTasks.forEach((t: any) => {
+      allIssues.push(t);
+      (t.subIssues || []).forEach((sub: any) => {
+        allIssues.push({ ...sub, Project: sub.Project || t.Project });
+      });
+    });
 
     // Send group summary if configured
     const groupId = process.env.TELEGRAM_GROUP_ID;
@@ -348,20 +384,11 @@ export async function sendDailySummaryAndNotify(type: "morning" | "evening") {
       if (!m.telegramChatId) continue;
       const chatId = Number(m.telegramChatId);
 
-      // Lọc subtask của người này
-      const mySubTasks: any[] = [];
-      dbTasks.forEach((t: any) => {
-        if (Array.isArray(t.subTasks)) {
-          t.subTasks.forEach((sub: any) => {
-            if (sub.assigneeId === m.id) {
-              mySubTasks.push(sub);
-            }
-          });
-        }
-      });
+      // Lấy tất cả issues của member (bao gồm parent + sub đã flatten)
+      const myIssues = allIssues.filter((t: any) => t.assigneeId === m.id);
 
       if (type === "morning") {
-        const pendingTasks = mySubTasks.filter(s => s.status !== 'done');
+        const pendingTasks = myIssues.filter(s => !isDoneIssue(s));
         if (pendingTasks.length === 0) {
           await sendMessage(chatId, `☀️ *BÁO CÁO ĐẦU NGÀY (8h30)*\n\nChào *${m.fullName}*, hôm nay bạn không có công việc nào đang chờ xử lý. Chúc bạn một ngày mới làm việc tràn đầy năng lượng!`, {
             inline_keyboard: [[{ text: "🌅 Vào ca (Check-in)", callback_data: `attendance_direct:present` }]]
@@ -371,8 +398,10 @@ export async function sendDailySummaryAndNotify(type: "morning" | "evening") {
 
         let taskListStr = "";
         pendingTasks.forEach(s => {
-          const dlStr = s.deadline ? s.deadline.split('T')[0] : 'Chưa có';
-          taskListStr += `• *${s.planeTaskId || 'Task'}: ${s.title}* (Trạng thái: *${s.status}*, Hạn chót: *${dlStr}*)\n`;
+          const dlStr = s.targetDate ? s.targetDate.split('T')[0] : 'Chưa có'; // targetDate thay vì deadline
+          const shortId = getIssueShortId(s);
+          const stateName = s.State?.name || 'Todo';
+          taskListStr += `• *${shortId}: ${s.title}* (Trạng thái: *${stateName}*, Hạn chót: *${dlStr}*)\n`;
         });
 
         const msg = `☀️ *BÁO CÁO CÔNG VIỆC ĐẦU NGÀY (8h30)*\n\nChào *${m.fullName}*, dưới đây là danh sách các công việc bạn cần tập trung xử lý trong hôm nay:\n\n${taskListStr}\n💪 Chúc bạn một ngày làm việc hiệu quả và hoàn thành xuất sắc mục tiêu!`;
@@ -380,7 +409,6 @@ export async function sendDailySummaryAndNotify(type: "morning" | "evening") {
           inline_keyboard: [[{ text: "🌅 Vào ca (Check-in)", callback_data: `attendance_direct:present` }]]
         });
 
-        // Gửi thông báo lên Web Dashboard Bell icon
         try {
           await fetchAxios(`${WEB_PORTAL_URL}/api/ai/announcements`, {
             method: 'POST',
@@ -394,15 +422,18 @@ export async function sendDailySummaryAndNotify(type: "morning" | "evening") {
         } catch (e) {}
 
       } else {
-        const activeTasks = mySubTasks.filter(s => s.status === 'in_progress' || s.status === 'pending');
+        // Buổi chiều: task chưa done
+        const activeTasks = myIssues.filter(s => !isDoneIssue(s));
         
         let taskListStr = "";
         if (activeTasks.length > 0) {
           activeTasks.forEach(s => {
-            taskListStr += `• *${s.planeTaskId || 'Task'}: ${s.title}* (Trạng thái: *${s.status}*)\n`;
+            const shortId = getIssueShortId(s);
+            const stateName = s.State?.name || 'Todo';
+            taskListStr += `• *${shortId}: ${s.title}* (Trạng thái: *${stateName}*)\n`;
           });
         } else {
-          taskListStr = "Không có công việc nào đang mở.";
+          taskListStr = "🎉 Tất cả công việc đã hoàn thành hôm nay!";
         }
 
         const msg = `🌙 *CẬP NHẬT TIẾN ĐỘ CUỐI NGÀY (18h00)*\n\nChào *${m.fullName}*, bạn vui lòng dành ít phút cập nhật tiến trình của các công việc sau lên bảng Kanban trước khi ra về nhé:\n\n${taskListStr}\n🙏 Cảm ơn bạn và chúc bạn có một buổi tối thư giãn vui vẻ!`;
@@ -410,7 +441,6 @@ export async function sendDailySummaryAndNotify(type: "morning" | "evening") {
           inline_keyboard: [[{ text: "🚪 Tan ca (Check-out)", callback_data: `attendance_direct:checkout` }]]
         });
 
-        // Gửi thông báo lên Web Dashboard Bell icon
         try {
           await fetchAxios(`${WEB_PORTAL_URL}/api/ai/announcements`, {
             method: 'POST',
@@ -464,45 +494,52 @@ export async function checkRealtimeOverdueDeadlines() {
 
     let alertCount = 0;
 
-    for (const t of dbTasks) {
-      if (Array.isArray(t.subTasks)) {
-        for (const sub of t.subTasks) {
-          if (sub.status === 'done') continue;
-          if (!sub.deadline) continue;
+    // Flatten: xét cả parent issues và subIssues (field đúng là subIssues)
+    const allIssuesFlat: any[] = [];
+    dbTasks.forEach((t: any) => {
+      allIssuesFlat.push(t);
+      (t.subIssues || []).forEach((sub: any) => {
+        allIssuesFlat.push({ ...sub, Project: sub.Project || t.Project });
+      });
+    });
 
-          const deadline = new Date(sub.deadline);
-          // Quá hạn và chưa từng gửi thông báo cho id này
-          if (deadline <= now && !alertedIds.has(sub.id)) {
-            // Tìm nhân sự phụ trách
-            const member = (members || []).find((m: any) => m.id === sub.assigneeId);
-            if (!member || !member.telegramChatId) continue;
+    for (const sub of allIssuesFlat) {
+      // Bỏ qua nếu đã done/cancelled: dùng State.group thay vì sub.status
+      const stateGroup = sub.State?.group || 'unstarted';
+      if (stateGroup === 'completed' || stateGroup === 'cancelled') continue;
+      // Dùng targetDate thay vì deadline
+      if (!sub.targetDate) continue;
 
-            const chatId = Number(member.telegramChatId);
-            const dlStr = sub.deadline.split('T')[0] + ' ' + sub.deadline.split('T')[1].substring(0, 5);
+      const deadline = new Date(sub.targetDate);
+      if (deadline <= now && !alertedIds.has(sub.id)) {
+        const member = (members || []).find((m: any) => m.id === sub.assigneeId);
+        if (!member || !member.telegramChatId) continue;
 
-            // 1. Gửi tin nhắn Telegram
-            await sendMessage(
-              chatId,
-              `🚨 *CẢNH BÁO QUÁ HẠN DEADLINE REALTIME!*\n\n• Nhiệm vụ: *${sub.planeTaskId || 'Task'}: ${sub.title}*\n• Người phụ trách: *${member.fullName}*\n• Hạn chót: *${dlStr}* (Đã quá hạn)\n\n⚠️ Vui lòng cập nhật trạng thái công việc hoặc liên hệ admin hoãn task ngay lập tức!`
-            );
+        const chatId = Number(member.telegramChatId);
+        const dlStr = sub.targetDate.split('T')[0];
+        const shortId = getIssueShortId(sub);
 
-            // 2. Gửi thông báo lên Web Bell icon
-            try {
-              await fetchAxios(`${WEB_PORTAL_URL}/api/ai/announcements`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  title: `🚨 Quá hạn Realtime: ${sub.title}`,
-                  content: `Nhiệm vụ '${sub.title}' giao cho ${member.fullName} đã quá hạn vào lúc ${dlStr}.`,
-                  sender: "Cảnh báo Hệ thống"
-                })
-              });
-            } catch (e) {}
+        // 1. Gửi tin nhắn Telegram
+        await sendMessage(
+          chatId,
+          `🚨 *CẢNH BÁO QUÁ HẠN DEADLINE REALTIME!*\n\n• Nhiệm vụ: *${shortId}: ${sub.title}*\n• Người phụ trách: *${member.fullName}*\n• Hạn chót: *${dlStr}* (Đã quá hạn)\n\n⚠️ Vui lòng cập nhật trạng thái công việc hoặc liên hệ admin hoãn task ngay lập tức!`
+        );
 
-            alertedIds.add(sub.id);
-            alertCount++;
-          }
-        }
+        // 2. Gửi thông báo lên Web Bell icon
+        try {
+          await fetchAxios(`${WEB_PORTAL_URL}/api/ai/announcements`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              title: `🚨 Quá hạn Realtime: ${sub.title}`,
+              content: `Nhiệm vụ '${sub.title}' giao cho ${member.fullName} đã quá hạn vào ngày ${dlStr}.`,
+              sender: "Cảnh báo Hệ thống"
+            })
+          });
+        } catch (e) {}
+
+        alertedIds.add(sub.id);
+        alertCount++;
       }
     }
 

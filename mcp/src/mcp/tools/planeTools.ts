@@ -591,21 +591,27 @@ case "get_issue_details": {
       }
 
       const assigneeName = foundSubtask.Assignee ? foundSubtask.Assignee.fullName : "Chưa phân công";
-      const deadlineStr = foundSubtask.deadline ? foundSubtask.deadline.split('T')[0] : "Chưa đặt";
-      
+      const stateName = foundSubtask.State?.name || 'Todo';
+      const deadlineStr = foundSubtask.targetDate ? foundSubtask.targetDate.split('T')[0] : 'Chưa đặt';
+      const projIdent = typeof foundSubtask.Project === 'string'
+        ? foundSubtask.Project
+        : (foundSubtask.Project?.identifier || '');
+      const shortId = projIdent && foundSubtask.sequenceId ? `${projIdent}-${foundSubtask.sequenceId}` : task_id.toUpperCase();
+      const projName = typeof foundSubtask.Project === 'string'
+        ? foundSubtask.Project
+        : (foundSubtask.Project?.name || (parentTask?.title || 'N/A'));
       return {
         content: [{
           type: "text",
-          text: `📄 **CHI TIẾT CÔNG VIỆC ${task_id.toUpperCase()}:**\n\n` +
+          text: `📄 **CHI TIẾT CÔNG VIỆC ${shortId}:**\n\n` +
             `• **Tiêu đề**: ${foundSubtask.title}\n` +
             `• **Mô tả**: ${foundSubtask.description || "Không có mô tả"}\n` +
-            `• **Dự án**: ${parentTask ? parentTask.title : "N/A"}\n` +
+            `• **Dự án**: ${projName}\n` +
             `• **Người phụ trách**: ${assigneeName}\n` +
-            `• **Trạng thái**: ${foundSubtask.status === 'pending' ? 'Todo' : foundSubtask.status === 'working' ? 'In Progress' : 'Done'} (${foundSubtask.status})\n` +
+            `• **Trạng thái**: ${stateName}\n` +
             `• **Độ ưu tiên**: ${foundSubtask.priority.charAt(0).toUpperCase() + foundSubtask.priority.slice(1)}\n` +
             `• **Hạn chót**: ${deadlineStr}\n` +
-            `• **Thời gian ước tính**: ${foundSubtask.estimatedHours || 0} giờ\n` +
-            `• **Gợi ý đầu ra (Deliverables)**: ${foundSubtask.outputSuggested || "Không có"}`
+            `• **Thời gian ước tính**: ${foundSubtask.estimateHours || 0} giờ`
         }]
       };
     }
