@@ -41,6 +41,7 @@ fastify.post('/tasks/:taskId/approve', HrTaskController.approveApproval);
 
 fastify.get('/meetings', MeetingController.getMeetings);
 fastify.post('/meetings', MeetingController.createMeeting);
+fastify.patch('/meetings/:id', MeetingController.updateMeeting);
 fastify.get('/announcements', AnnouncementController.getAnnouncements);
 fastify.post('/announcements', AnnouncementController.createAnnouncement);
 

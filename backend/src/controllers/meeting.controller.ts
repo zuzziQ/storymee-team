@@ -38,4 +38,30 @@ export class MeetingController {
       reply.status(500).send({ status: 'error', message: err.message });
     }
   }
+
+  static async updateMeeting(req: any, reply: any) {
+    try {
+      const { id } = req.params;
+      const { title, description, startTime, endTime, attendees, meetLink, status, documents, outputUrls } = req.body;
+      
+      const meeting = await MeetingService.updateMeeting(id, {
+        title, description, startTime, endTime, attendees, meetLink, status, documents, outputUrls
+      });
+
+      // TODO: Publish event via NATS
+      try {
+        const nats = (req.server as any).nats;
+        if (nats) {
+          nats.publish('core.team.meeting.updated', JSON.stringify({ meeting }));
+        }
+      } catch (e) {
+        req.log.error('Failed to publish meeting updated NATS event:', e);
+      }
+
+      reply.send({ status: 'success', data: meeting });
+    } catch (err: any) {
+      req.log.error(err);
+      reply.status(500).send({ status: 'error', message: err.message });
+    }
+  }
 }

@@ -38,4 +38,32 @@ export class MeetingService {
       include: { host: true }
     });
   }
+
+  static async updateMeeting(id: string, data: {
+    title?: string;
+    description?: string;
+    startTime?: string;
+    endTime?: string;
+    attendees?: any;
+    meetLink?: string;
+    status?: string;
+    documents?: string[];
+    outputUrls?: string[];
+  }) {
+    return prisma.omniMeeting.update({
+      where: { id },
+      data: {
+        ...(data.title && { title: data.title }),
+        ...(data.description !== undefined && { description: data.description }),
+        ...(data.startTime && { startTime: new Date(data.startTime) }),
+        ...(data.endTime && { endTime: new Date(data.endTime) }),
+        ...(data.attendees && { attendees: data.attendees }),
+        ...(data.meetLink !== undefined && { meetLink: data.meetLink }),
+        ...(data.status && { status: data.status }),
+        ...(data.documents && { documents: data.documents }),
+        ...(data.outputUrls && { outputUrls: data.outputUrls })
+      },
+      include: { host: true }
+    });
+  }
 }
