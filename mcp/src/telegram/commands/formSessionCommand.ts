@@ -380,8 +380,33 @@ export const formSessionCommand: TelegramCommand = {
     if (session.step === 'await_meeting_time') {
       const textContent = text.trim();
       if (textContent === '/cancel') { delete userFormSession[chatId]; await fetchAxios(`${TELEGRAM_API}/sendMessage`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: chatId, text: "Đã hủy." }) }); return true; }
+      
       let startTime = new Date();
-      startTime.setHours(startTime.getHours() + 1);
+      startTime.setHours(startTime.getHours() + 1); // fallback
+      
+      try {
+        const prompt = `You are a datetime parser. Convert this Vietnamese time text "${textContent}" into an ISO 8601 datetime string. The current time is ${new Date().toISOString()}. Only return the raw ISO 8601 string, nothing else.`;
+        const flashRes = await fetchAxios(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.1, maxOutputTokens: 30 }
+          })
+        });
+        const flashJson = await flashRes.json() as any;
+        const rawOutput = flashJson.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (rawOutput) {
+          const parsedStr = rawOutput.trim().replace(/```/g, '');
+          const parsedDate = new Date(parsedStr);
+          if (!isNaN(parsedDate.getTime())) {
+            startTime = parsedDate;
+          }
+        }
+      } catch (e) {
+        console.error("Parse time error", e);
+      }
+
       let endTime = new Date(startTime.getTime() + 60*60*1000);
       try {
         await apiClient.post('/hr/meetings', {

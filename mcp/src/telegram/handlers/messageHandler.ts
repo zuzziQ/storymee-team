@@ -79,9 +79,25 @@ export async function handleTelegramMessage(message: any) {
     isAiCommand = true;
   }
 
-  // Trong group chat, chỉ xử lý nếu bắt đầu bằng /ai hoặc các lệnh hệ thống (vd: /checkin, /register)
+  const GLOBAL_COMMANDS = [
+    "/start", "/check", "/team_status", "trạng thái checkin", 
+    "/check_all", "/check_team", "📊 trạng thái thành viên",
+    "👤 hồ sơ của tôi", "/ho_so",
+    "/portal", "🌐 mở web portal",
+    "📁 quản lý dự án & task",
+    "🌅 điểm danh (check-in/out)", "/checkin", "/checkout",
+    "📝 đăng ký nghỉ phép / remote", "/dang_ky", "/nghi_phep", "/remote",
+    "📝 công việc của tôi", "/cong_viec",
+    "📊 hỏi quy chế đãi ngộ", "/quy_che",
+    "/cancel", "hủy", "cancel", "huy",
+    "/lichhop", "📅 lịch họp", "/thongbao"
+  ];
+
+  // Trong group chat, chỉ xử lý nếu bắt đầu bằng /ai hoặc các lệnh hệ thống
   if (isGroup && !isAiCommand && !text.startsWith('/') && !userFormSession[chatId]) {
-    return; // Bỏ qua tin nhắn thường trong group
+    if (!GLOBAL_COMMANDS.includes(text.trim().toLowerCase())) {
+      return; // Bỏ qua tin nhắn thường trong group
+    }
   }
 
   console.log(`[Telegram Msg from @${username} in ${isGroup ? 'Group' : 'Private'} ${chatId}]: ${text}`);
@@ -150,19 +166,9 @@ export async function handleTelegramMessage(message: any) {
     return;
   }
 
-  // Group commands (Inline Keyboard)
+  // Group commands
   if (isGroup && (lowerText === "/menu" || lowerText.startsWith("/menu@"))) {
-    await sendMessage(chatId, "🤖 *STORYMEE TEAM BOT*\nChọn chức năng quản lý nhóm:", {
-      inline_keyboard: [
-        [
-          { text: "📊 Báo cáo Tiến độ Team", callback_data: "group_cmd:check_team" },
-          { text: "🔍 Hỗ trợ AI", callback_data: "group_cmd:ai_help" }
-        ],
-        [
-          { text: "🌐 Mở Web Quản trị", url: "https://storymee-team.vercel.app/" }
-        ]
-      ]
-    });
+    await sendMessage(chatId, "🤖 *STORYMEE TEAM BOT*\nMenu chức năng nhóm & cá nhân:", KEYBOARD_MAIN);
     return;
   }
 
@@ -271,18 +277,6 @@ export async function handleTelegramMessage(message: any) {
   }
 
   // C. Intercept Global Commands & Buttons để Hủy Session (Tránh kẹt Form)
-  const GLOBAL_COMMANDS = [
-    "/start", "/check", "/team_status", "trạng thái checkin", 
-    "/check_all", "/check_team", "📊 trạng thái thành viên",
-    "👤 hồ sơ của tôi", "/ho_so",
-    "/portal", "🌐 mở web portal",
-    "📁 quản lý dự án & task",
-    "🌅 điểm danh (check-in/out)", "/checkin", "/checkout",
-    "📝 đăng ký nghỉ phép / remote", "/dang_ky", "/nghi_phep", "/remote",
-    "📝 công việc của tôi", "/cong_viec",
-    "📊 hỏi quy chế đãi ngộ", "/quy_che",
-    "/cancel", "hủy", "cancel", "huy"
-  ];
   if (GLOBAL_COMMANDS.includes(lowerText) || lowerText.startsWith("/subtask")) {
     if (userFormSession[chatId]) {
       delete userFormSession[chatId];
