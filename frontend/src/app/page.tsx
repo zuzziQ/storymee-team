@@ -198,7 +198,10 @@ export default function StorymeeTeamPage() {
         )}
 
         {/* ===== ANNOUNCEMENT BANNER ===== */}
-        {announcements.filter(a => !a.readBy.includes(activeUser.id)).map(ann => (
+        {announcements
+          .filter(a => !a.targetUserId || a.targetUserId === activeUser.id)
+          .filter(a => !a.readBy.includes(activeUser.id))
+          .map(ann => (
           <div
             key={ann.id}
             style={{

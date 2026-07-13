@@ -1,0 +1,20 @@
+[
+  {
+    "id": "ann-auto-1782783018416",
+    "title": "☀️ Báo cáo đầu ngày (8h30): Lê Quang Minh",
+    "content": "Hệ thống tự động nhắc nhở đầu ngày cho Lê Quang Minh. Số task cần làm: 2.",
+    "sender": "Bot AI Tự động",
+    "date": "2026-06-30",
+    "targetUserId": "8e73cb7d-09c0-4cb0-a0b5-e610d49e4b25",
+    "readBy": []
+  },
+  {
+    "id": "ann-auto-1782727217174",
+    "title": "🌙 Nhắc tiến độ cuối ngày (17h00): Lê Quang Minh",
+    "content": "Hệ thống nhắc nhở cập nhật trạng thái cuối ngày cho Lê Quang Minh. Số task đang làm: 3.",
+    "sender": "Bot AI Tự động",
+    "date": "2026-06-29",
+    "targetUserId": "8e73cb7d-09c0-4cb0-a0b5-e610d49e4b25",
+    "readBy": []
+  }
+]

@@ -55,7 +55,8 @@ export default function HeaderBar({
   appNotifications = [],
   setAppNotifications
 }: HeaderBarProps) {
-  const unreadAnnouncements = announcements.filter(a => !a.readBy.includes(activeUser.id));
+  const relevantAnnouncements = announcements.filter(a => !a.targetUserId || a.targetUserId === activeUser.id);
+  const unreadAnnouncements = relevantAnnouncements.filter(a => !a.readBy.includes(activeUser.id));
 
   // Determine today's attendance status for active user
   const todayStr = new Date().toISOString().split('T')[0];
@@ -192,7 +193,7 @@ export default function HeaderBar({
           {showNotifications && (
             <div style={{ position: 'absolute', top: '120%', right: 0, width: 320, background: 'rgba(24,24,27,0.98)', border: '1px solid var(--border)', borderRadius: 12, padding: 12, zIndex: 100, boxShadow: '0 16px 40px rgba(0,0,0,0.6)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border)', paddingBottom: 8, marginBottom: 8 }}>
-                <span style={{ fontSize: 12, fontWeight: 600, color: '#fafafa' }}>Thông báo ({appNotifications.length + announcements.length})</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: '#fafafa' }}>Thông báo ({appNotifications.length + relevantAnnouncements.length})</span>
                 <button onClick={() => setShowNotifications(false)} style={{ background: 'none', border: 'none', color: '#71717a', cursor: 'pointer', fontSize: 11 }}>Đóng</button>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 360, overflowY: 'auto' }}>
@@ -222,7 +223,7 @@ export default function HeaderBar({
                 ))}
                 
                 {/* Announcements */}
-                {announcements.map(ann => {
+                {relevantAnnouncements.map(ann => {
                   const isRead = ann.readBy.includes(activeUser.id);
                   return (
                     <div key={ann.id} style={{ padding: 8, borderRadius: 8, background: isRead ? 'transparent' : 'rgba(99,102,241,0.06)', border: `1px solid ${isRead ? 'rgba(255,255,255,0.03)' : 'rgba(99,102,241,0.15)'}` }}>
@@ -244,7 +245,7 @@ export default function HeaderBar({
                     </div>
                   );
                 })}
-                {announcements.length === 0 && appNotifications.length === 0 && (
+                {relevantAnnouncements.length === 0 && appNotifications.length === 0 && (
                   <div style={{ fontSize: 11, color: '#52525b', textAlign: 'center', padding: 20 }}>Không có thông báo nào</div>
                 )}
               </div>
