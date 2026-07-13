@@ -18,7 +18,11 @@ import { useProjectState } from './useProjectState';
 import { useChatState } from './useChatState';
 import { useSocketState } from './useSocketState';
 
+import { useState as useReactState } from 'react';
+
 export function useAppState() {
+  const [tab, setTab] = useReactState<string>('kanban');
+  const [overviewSubTab, setOverviewSubTab] = useReactState<'workload' | 'kpi' | 'efficiency'>('workload');
   const auth = useAuthState();
   const hr = useHrState();
   const taskState = useTaskState();
@@ -236,7 +240,7 @@ export function useAppState() {
 
     // Meta
     dbError: hr.dbError || taskState.dbTaskError,
-    tab: undefined as any, setTab: undefined as any,
-    overviewSubTab: undefined as any, setOverviewSubTab: undefined as any,
+    tab, setTab,
+    overviewSubTab, setOverviewSubTab,
   };
 }
