@@ -1,4 +1,4 @@
-import { prisma } from 'prisma-client';
+import { prisma } from '../config/prisma';
 
 export class AnnouncementService {
   static async getAnnouncements(userId?: string) {
