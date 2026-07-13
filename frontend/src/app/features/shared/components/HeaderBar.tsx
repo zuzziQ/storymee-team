@@ -60,7 +60,7 @@ export default function HeaderBar({
 
   // Determine today's attendance status for active user
   const todayStr = new Date().toISOString().split('T')[0];
-  const todayRecord = attendanceList?.find(a => a.memberId === activeUser.id && a.date?.startsWith(todayStr));
+  const todayRecord = attendanceList?.find(a => a.memberId === activeUser?.id && a.date?.startsWith(todayStr));
   const hasCheckedIn = !!todayRecord?.checkIn;
   const hasCheckedOut = !!todayRecord?.checkOut;
   
@@ -136,7 +136,7 @@ export default function HeaderBar({
            <button
              onClick={async () => {
                if (activeUser) {
-                 await handleCheckoutOffice(activeUser.id, 'Check-out từ Header Bar');
+                 await handleCheckoutOffice(activeUser?.id, 'Check-out từ Header Bar');
                }
              }}
              style={{
@@ -151,7 +151,7 @@ export default function HeaderBar({
            <button
              onClick={async () => {
                if (activeUser) {
-                 await handleCheckinOffice(activeUser.id, 'Check-in từ Header Bar', 'office');
+                 await handleCheckinOffice(activeUser?.id, 'Check-in từ Header Bar', 'office');
                }
              }}
              style={{
@@ -224,7 +224,7 @@ export default function HeaderBar({
                 
                 {/* Announcements */}
                 {relevantAnnouncements.map(ann => {
-                  const isRead = ann.readBy.includes(activeUser.id);
+                  const isRead = (ann.readBy || []).includes(activeUser?.id || '');
                   return (
                     <div key={ann.id} style={{ padding: 8, borderRadius: 8, background: isRead ? 'transparent' : 'rgba(99,102,241,0.06)', border: `1px solid ${isRead ? 'rgba(255,255,255,0.03)' : 'rgba(99,102,241,0.15)'}` }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
@@ -232,7 +232,7 @@ export default function HeaderBar({
                         {!isRead && (
                           <button
                             onClick={() => {
-                              setAnnouncements(prev => prev.map(a => a.id === ann.id ? { ...a, readBy: [...a.readBy, activeUser.id] } : a));
+                              setAnnouncements(prev => prev.map(a => a.id === ann.id ? { ...a, readBy: [...(a.readBy || []), activeUser?.id || ''] } : a));
                             }}
                             style={{ background: 'none', border: 'none', color: '#a78bfa', cursor: 'pointer', fontSize: 9, fontWeight: 500 }}
                           >
@@ -261,15 +261,15 @@ export default function HeaderBar({
         {/* User Selector */}
         <div style={{ position: 'relative' }}>
           <button className="user-select" onClick={() => setShowUserMenu(!showUserMenu)}>
-            <div className="avatar" style={{ background: activeUser.color + '30', color: activeUser.color, width: 24, height: 24, fontSize: 10 }}>
-              {getInitials(activeUser.name)}
+            <div className="avatar" style={{ background: activeUser?.color + '30', color: activeUser?.color, width: 24, height: 24, fontSize: 10 }}>
+              {getInitials(activeUser?.name)}
             </div>
-            <span style={{ fontSize: 12, fontWeight: 500 }}>{activeUser.name}</span>
+            <span style={{ fontSize: 12, fontWeight: 500 }}>{activeUser?.name}</span>
             <ChevronDown size={12} color="#71717a" />
           </button>
           {showUserMenu && (
             <div style={{ position: 'absolute', top: '110%', right: 0, width: 220, background: 'rgba(18,18,20,0.98)', border: '1px solid var(--border)', borderRadius: 12, padding: 6, zIndex: 100, boxShadow: '0 16px 40px rgba(0,0,0,0.5)' }}>
-              <button onClick={() => { setTab('hr'); setHrSubTab('profile'); setSelectedMemberId(activeUser.id); setShowUserMenu(false); }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 8, border: 'none', background: 'rgba(167,139,250,0.12)', cursor: 'pointer', color: '#a78bfa', transition: 'all 0.15s', marginBottom: 6 }}>
+              <button onClick={() => { setTab('hr'); setHrSubTab('profile'); setSelectedMemberId(activeUser?.id); setShowUserMenu(false); }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 8, border: 'none', background: 'rgba(167,139,250,0.12)', cursor: 'pointer', color: '#a78bfa', transition: 'all 0.15s', marginBottom: 6 }}>
                 <User size={14} color="#a78bfa" />
                 <div style={{ textAlign: 'left' }}>
                   <div style={{ fontSize: 12, fontWeight: 600 }}>Hồ sơ của tôi</div>
@@ -280,13 +280,13 @@ export default function HeaderBar({
               
               <div style={{ fontSize: 9, color: '#52525b', padding: '6px 10px 4px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Xem với tư cách</div>
               {teamMembers.map(m => (
-                <button key={m.id} onClick={() => { setActiveUser(m); localStorage.setItem('st_user', JSON.stringify({ email: m.email, name: m.name, role: m.role })); setShowUserMenu(false); }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 8, border: 'none', background: activeUser.id === m.id ? 'rgba(99,102,241,0.12)' : 'transparent', cursor: 'pointer', color: '#fafafa', transition: 'all 0.15s' }}>
+                <button key={m.id} onClick={() => { setActiveUser(m); localStorage.setItem('st_user', JSON.stringify({ email: m.email, name: m.name, role: m.role })); setShowUserMenu(false); }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 8, border: 'none', background: activeUser?.id === m.id ? 'rgba(99,102,241,0.12)' : 'transparent', cursor: 'pointer', color: '#fafafa', transition: 'all 0.15s' }}>
                   <div className="avatar" style={{ background: m.color + '30', color: m.color, width: 26, height: 26, fontSize: 11 }}>{getInitials(m.name)}</div>
                   <div style={{ textAlign: 'left' }}>
                     <div style={{ fontSize: 12, fontWeight: 500 }}>{m.name}</div>
                     <div style={{ fontSize: 10, color: '#71717a' }}>{m.role.split(' - ')[1] || m.role}</div>
                   </div>
-                  {activeUser.id === m.id && <Check size={12} color="#6366f1" style={{ marginLeft: 'auto' }} />}
+                  {activeUser?.id === m.id && <Check size={12} color="#6366f1" style={{ marginLeft: 'auto' }} />}
                 </button>
               ))}
             </div>
