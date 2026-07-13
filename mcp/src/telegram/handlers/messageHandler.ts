@@ -90,7 +90,7 @@ export async function handleTelegramMessage(message: any) {
     "📝 công việc của tôi", "/cong_viec",
     "📊 hỏi quy chế đãi ngộ", "/quy_che",
     "/cancel", "hủy", "cancel", "huy",
-    "/lichhop", "📅 lịch họp", "/thongbao"
+    "/lichhop", "📅 lịch họp", "/thongbao", "/notify", "/menu"
   ];
 
   // Trong group chat, chỉ xử lý nếu bắt đầu bằng /ai hoặc các lệnh hệ thống
@@ -168,7 +168,7 @@ export async function handleTelegramMessage(message: any) {
 
   // Group commands
   if (isGroup && (lowerText === "/menu" || lowerText.startsWith("/menu@"))) {
-    await sendMessage(chatId, "🤖 *STORYMEE TEAM BOT*\nMenu chức năng nhóm & cá nhân:", KEYBOARD_MAIN);
+    await sendMessage(chatId, "🤖 *STORYMEE TEAM BOT*\nĐể sử dụng bot trong nhóm, vui lòng gõ `/` để chọn lệnh hoặc dùng trực tiếp:\n\n/checkin - Điểm danh vào ca\n/checkout - Điểm danh ra về\n/cong_viec - Xem việc của tôi\n/lichhop - Quản lý lịch họp\n/dang_ky - Xin nghỉ phép / remote\n/check_team - Tiến độ công việc nhóm\n/team_status - Trạng thái check-in hôm nay\n/subtask [ID] - Phân rã task bằng AI\n\n_(Lưu ý: Bạn cũng có thể tag bot kèm câu hỏi tiếng Việt để nhờ AI hỗ trợ)_", { remove_keyboard: true });
     return;
   }
 
@@ -544,7 +544,7 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
     return;
   }
 
-  if (cleanText === "/thongbao") {
+  if (cleanText === "/thongbao" || cleanText === "/notify") {
     const isAdmin = ['kimngan151091@gmail.com', 'lehuyducanh.vn@gmail.com', 'zuzzivn@gmail.com'].includes((member.email || '').toLowerCase());
     if (!isAdmin) {
       await sendMessage(chatId, "⚠️ Chỉ Ban Giám Đốc mới được dùng lệnh /thongbao.");

@@ -583,6 +583,9 @@ async function setupBotCommands() {
       body: JSON.stringify({
         commands: [
           { command: "start", description: "Khởi động trợ lý AI & hiện khay phím tắt" },
+          { command: "menu", description: "Hiển thị danh sách chức năng nhóm" },
+          { command: "checkin", description: "Điểm danh vào ca" },
+          { command: "checkout", description: "Điểm danh tan ca" },
           { command: "register", description: "Đăng ký liên kết tài khoản cho nhân sự mới" },
           { command: "ho_so", description: "Xem thông tin hồ sơ cá nhân của tôi" },
           { command: "portal", description: "Đăng nhập nhanh vào Web Portal" },
@@ -590,10 +593,12 @@ async function setupBotCommands() {
           { command: "cong_viec", description: "Xem danh sách công việc của tôi" },
           { command: "lichhop", description: "Quản lý và nhắc lịch họp" },
           { command: "thongbao", description: "Gửi thông báo toàn hệ thống (Admin)" },
+          { command: "notify", description: "Gửi thông báo toàn hệ thống (Admin)" },
           { command: "check", description: "Quét deadline quá hạn realtime (Admin)" },
           { command: "check_all", description: "Báo cáo trạng thái toàn bộ nhân viên" },
           { command: "team_status", description: "Báo cáo chấm công hôm nay" },
-          { command: "subtask", description: "Phân rã task bằng AI" }
+          { command: "subtask", description: "Phân rã task bằng AI" },
+          { command: "cancel", description: "Hủy thao tác hiện tại" }
         ]
       })
     });
