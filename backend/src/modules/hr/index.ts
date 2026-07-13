@@ -1,3 +1,5 @@
+import { MeetingController } from '../../controllers/meeting.controller';
+import { AnnouncementController } from '../../controllers/announcement.controller';
 import { FastifyPluginAsync } from 'fastify';
 import { HrController } from '../../controllers/hr.controller';
 
