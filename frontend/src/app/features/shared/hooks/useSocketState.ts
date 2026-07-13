@@ -17,7 +17,7 @@ export function useSocketState(
 
   const fetchServerMeetings = async () => {
     try {
-      const res = await coreApiClient.get('/meetings');
+      const res = await coreApiClient.get('/hr/meetings');
       if (res.data?.status === 'success') {
         setMeetings(res.data.data);
       }
@@ -28,7 +28,7 @@ export function useSocketState(
 
   const fetchServerAnnouncements = async () => {
     try {
-      const res = await coreApiClient.get('/announcements');
+      const res = await coreApiClient.get('/hr/announcements');
       if (res.data?.status === 'success') {
         setAnnouncements(res.data.data);
       }
@@ -166,5 +166,8 @@ export function useSocketState(
     announcements,
     setAnnouncements,
     fetchServerAnnouncements,
+    meetings,
+    setMeetings,
+    fetchServerMeetings,
   };
 }

@@ -114,7 +114,9 @@ export default function StorymeeTeamPage() {
     handleCheckoutOffice,
     appNotifications,
     setAppNotifications,
-    dbError
+    dbError,
+    meetings,
+    setMeetings,
   } = useAppState();
 
   const ADMIN_EMAILS = ['kimngan151091@gmail.com', 'lehuyducanh.vn@gmail.com', 'zuzzivn@gmail.com'];
@@ -261,6 +263,7 @@ export default function StorymeeTeamPage() {
               filteredTasks={filteredTasks}
               leavesPending={leavesPending}
               announcements={announcements}
+              meetings={meetings}
               attendanceList={attendanceList}
               setSelectedTask={setSelectedTask}
               setTab={setTab}

@@ -461,6 +461,32 @@ export default function DashboardTab({
               ) : null;
             })()}
 
+            {/* Upcoming Meetings */}
+            {meetings && meetings.length > 0 && (
+              <div className="glass" style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#fafafa', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Calendar size={14} color="#818cf8" /> Lịch họp sắp tới
+                </div>
+                {meetings.slice(0, 5).map((m: any) => {
+                  const start = new Date(m.startTime);
+                  return (
+                    <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'rgba(99,102,241,0.07)', borderRadius: 8, border: '1px solid rgba(99,102,241,0.2)' }}>
+                      <div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: '#fafafa' }}>{m.title}</div>
+                        <div style={{ fontSize: 10, color: '#71717a', marginTop: 2 }}>
+                          🎤 {m.host?.fullName || 'N/A'} · {m.meetLink ? <a href={m.meetLink} target="_blank" rel="noreferrer" style={{ color: '#818cf8' }}>Meet Link</a> : 'Chưa có link'}
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 11, color: '#818cf8', fontWeight: 600, textAlign: 'right', flexShrink: 0 }}>
+                        <div>{start.toLocaleDateString('vi-VN')}</div>
+                        <div>{start.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
           </div>
         )}
 

@@ -46,6 +46,7 @@ export function useAppState() {
       fetchDbData();
       chat.fetchServerLogs();
       socket.fetchServerAnnouncements();
+      socket.fetchServerMeetings();
     }
   }, [auth.authReady]);
 
@@ -57,6 +58,7 @@ export function useAppState() {
         fetchDbData();
         chat.fetchServerLogs();
         socket.fetchServerAnnouncements();
+        socket.fetchServerMeetings();
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -237,6 +239,8 @@ export function useAppState() {
     setShowNotifications: socket.setShowNotifications,
     announcements: socket.announcements,
     setAnnouncements: socket.setAnnouncements,
+    meetings: socket.meetings,
+    setMeetings: socket.setMeetings,
 
     // Meta
     dbError: hr.dbError || taskState.dbTaskError,
