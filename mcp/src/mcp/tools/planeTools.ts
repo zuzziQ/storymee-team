@@ -710,7 +710,7 @@ case "breakdown_issue": {
       }
 
       const breakdownData = await breakdownRes.json() as any;
-      const generatedList = breakdownData.subtasks || [];
+      const generatedList = breakdownData.data?.subtasks || breakdownData.subtasks || [];
       
       if (!Array.isArray(generatedList) || generatedList.length === 0) {
         throw new McpError(ErrorCode.InternalError, "AI không trả về danh sách công việc con nào.");
