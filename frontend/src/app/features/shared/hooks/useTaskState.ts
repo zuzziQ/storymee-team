@@ -46,6 +46,7 @@ export function useTaskState() {
             description: issue.description || '',
             assignee: issue.Assignee ? issue.Assignee.fullName : 'Chưa phân công',
             assigneeId: issue.assigneeId || null,
+            createdAt: issue.createdAt || new Date().toISOString(),
             priority: (issue.priority.charAt(0).toUpperCase() + issue.priority.slice(1)),
             status: mappedStatus,
             deadline: issue.targetDate ? issue.targetDate.split('T')[0] : '',

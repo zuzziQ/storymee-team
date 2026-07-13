@@ -48,6 +48,7 @@ export interface Task {
   parentTaskId?: string;
   outputSuggested?: string;
   assigneeId?: string | null;
+  createdAt?: string;
   // Review / Output Submission fields
   outputContent?: string;
   outputUrls?: string[];

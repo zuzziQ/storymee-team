@@ -85,18 +85,28 @@ export default function TaskDetailModal({
       const stored = localStorage.getItem(storageKey);
       if (stored) {
         try {
-          setActivities(JSON.parse(stored));
+          const parsed = JSON.parse(stored);
+          if (parsed.length > 0 && parsed[parsed.length - 1].id === 'init' && parsed[parsed.length - 1].timestamp.includes('09:00')) {
+             const createdAtStr = task.createdAt || new Date().toISOString();
+             const createdDate = new Date(createdAtStr);
+             parsed[parsed.length - 1].timestamp = `${String(createdDate.getDate()).padStart(2, '0')}/${String(createdDate.getMonth() + 1).padStart(2, '0')} ${String(createdDate.getHours()).padStart(2, '0')}:${String(createdDate.getMinutes()).padStart(2, '0')}`;
+             localStorage.setItem(storageKey, JSON.stringify(parsed));
+          }
+          setActivities(parsed);
           return;
         } catch {}
       }
       
-      const dateStr = task.deadline || new Date().toISOString().split('T')[0];
+      const createdAtStr = task.createdAt || new Date().toISOString();
+      const createdDate = new Date(createdAtStr);
+      const timeStr = `${String(createdDate.getDate()).padStart(2, '0')}/${String(createdDate.getMonth() + 1).padStart(2, '0')} ${String(createdDate.getHours()).padStart(2, '0')}:${String(createdDate.getMinutes()).padStart(2, '0')}`;
+      
       const initialLog = [
         {
           id: 'init',
           user: 'Hệ thống',
           action: 'Công việc được khởi tạo trên hệ thống.',
-          timestamp: `${dateStr} 09:00`
+          timestamp: timeStr
         }
       ];
       setActivities(initialLog);
@@ -706,8 +716,34 @@ export default function TaskDetailModal({
                       style={{ width: '100%', minHeight: 60, padding: '10px', fontSize: 12, borderRadius: 8, resize: 'vertical' }}
                     />
                   </div>
+
+                  {/* Task Output Submitted */}
+                  {(task.outputContent || (task.outputUrls && task.outputUrls.length > 0)) && (
+                    <div style={{ background: 'rgba(34, 197, 94, 0.05)', border: '1px solid rgba(34, 197, 94, 0.2)', padding: 14, borderRadius: 10, marginTop: 12 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 10, color: '#4ade80' }}>✅ Output đã nộp</span>
+                      {task.outputContent && (
+                        <div style={{ fontSize: 12, color: '#fafafa', background: 'rgba(0,0,0,0.2)', padding: '10px 12px', borderRadius: 8, whiteSpace: 'pre-wrap', marginBottom: 10 }}>
+                          {task.outputContent}
+                        </div>
+                      )}
+                      {task.outputUrls && task.outputUrls.length > 0 && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          {task.outputUrls.map((u, i) => (
+                            <a key={i} href={u} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: '#818cf8', display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <span>🔗</span> {u}
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                      {task.submittedAt && (
+                        <div style={{ fontSize: 10, color: '#71717a', marginTop: 10 }}>
+                          Nộp lúc: {new Date(task.submittedAt).toLocaleString('vi-VN')}
+                        </div>
+                      )}
+                    </div>
+                  )}
                   
-                  <div style={{ borderBottom: '1px solid var(--border)', margin: '4px 0' }} />
+                  <div style={{ borderBottom: '1px solid var(--border)', margin: '16px 0 4px 0' }} />
 
                   {/* Attachments Section */}
                   <div>
