@@ -267,4 +267,6 @@ export interface Meeting {
   attendees?: any;
   meetLink?: string;
   status: string;
+  documents?: any[];
+  outputUrls?: any[];
 }

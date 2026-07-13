@@ -124,7 +124,8 @@ export const API_ROUTES = {
         LEAVE_REQUESTS: '/hr/leave-requests',
         SUBTASKS: '/hr/subtasks',
         TASKS: '/hr/tasks',
-        PROJECTS: '/hr/projects'
+        PROJECTS: '/hr/projects',
+        MEETINGS: '/hr/meetings'
     },
     PLANE: {
         ISSUES: '/plane/issues',

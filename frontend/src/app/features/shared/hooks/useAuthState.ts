@@ -60,7 +60,8 @@ export function useAuthState() {
         remoteLimit: myMember.remoteLimit,
         remoteUsed: myMember.remoteUsed,
         salaryGross: myMember.salaryGross,
-        dependentCount: myMember.dependentCount
+        dependentCount: myMember.dependentCount,
+        isActive: myMember.isActive
       });
       alert('🎉 Đã cập nhật hồ sơ thành công lên Database!');
     } catch (err) {

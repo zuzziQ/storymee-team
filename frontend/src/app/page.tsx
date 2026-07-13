@@ -11,6 +11,7 @@ import AiChatSidebar from './features/chat/AiChatSidebar';
 import { ChatWidgetContent } from './features/chat/components/ChatWidgetContent';
 import TaskDetailModal from './features/shared/components/TaskDetailModal';
 import FullPageChatTab from './features/chat/FullPageChatTab';
+import MeetingsTab from './features/meetings/MeetingsTab';
 import SidebarNav from './features/shared/components/SidebarNav';
 import HeaderBar from './features/shared/components/HeaderBar';
 import AddProjectModal from './features/shared/components/AddProjectModal';
@@ -22,6 +23,7 @@ const TABS = [
   { id: 'kanban', label: 'Kanban' },
   { id: 'chat', label: 'Trợ lý AI' },
   { id: 'hr', label: 'Nhân sự' },
+  { id: 'meetings', label: 'Lịch họp' },
   { id: 'omnirouter', label: 'OmniRouter' },
 ];
 
@@ -363,6 +365,11 @@ export default function StorymeeTeamPage() {
               logs={routingLogs}
               stats={tokenStats}
             />
+          )}
+
+          {/* ===== LỊCH HỌP ===== */}
+          {tab === 'meetings' && (
+            <MeetingsTab meetings={meetings} setMeetings={setMeetings} />
           )}
 
           {/* ===== WORKLOAD ===== */}

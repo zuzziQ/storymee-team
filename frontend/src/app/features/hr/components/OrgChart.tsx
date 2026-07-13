@@ -106,7 +106,7 @@ export default function OrgChart({
 
       {hrProfileView === 'chart' && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20, padding: '20px 0', overflowX: 'auto', width: '100%' }}>
-          {teamMembers.filter(m => (m?.email || '').toLowerCase() === 'kimngan151091@gmail.com' && (hrSearchQuery === '' || m.name.toLowerCase().includes(hrSearchQuery.toLowerCase()))).map(m => {
+          {teamMembers.filter(m => m.isActive !== false && (m?.email || '').toLowerCase() === 'kimngan151091@gmail.com' && (hrSearchQuery === '' || m.name.toLowerCase().includes(hrSearchQuery.toLowerCase()))).map(m => {
             const isSelected = selectedMemberId === m.id;
             return (
               <div
@@ -148,7 +148,7 @@ export default function OrgChart({
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 30, width: '100%', maxWidth: 900, position: 'relative' }}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
-              {teamMembers.filter(m => (m?.email || '').toLowerCase() === 'lehuyducanh.vn@gmail.com' && (hrSearchQuery === '' || m.name.toLowerCase().includes(hrSearchQuery.toLowerCase()))).map(m => {
+              {teamMembers.filter(m => m.isActive !== false && (m?.email || '').toLowerCase() === 'lehuyducanh.vn@gmail.com' && (hrSearchQuery === '' || m.name.toLowerCase().includes(hrSearchQuery.toLowerCase()))).map(m => {
                 const isSelected = selectedMemberId === m.id;
                 return (
                   <div
@@ -179,7 +179,7 @@ export default function OrgChart({
               <div style={{ width: 1, height: 14, background: 'var(--border)' }} />
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}>
-                {teamMembers.filter(m => ['zuzzivn@gmail.com', 'phqhuong.0510@gmail.com'].includes((m?.email || '').toLowerCase()) && (hrSearchQuery === '' || m.name.toLowerCase().includes(hrSearchQuery.toLowerCase()))).map(m => {
+                {teamMembers.filter(m => m.isActive !== false && ['zuzzivn@gmail.com', 'phqhuong.0510@gmail.com'].includes((m?.email || '').toLowerCase()) && (hrSearchQuery === '' || m.name.toLowerCase().includes(hrSearchQuery.toLowerCase()))).map(m => {
                   const isSelected = selectedMemberId === m.id;
                   return (
                     <div
@@ -209,7 +209,7 @@ export default function OrgChart({
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
-              {teamMembers.filter(m => (m?.email || '').toLowerCase() === 'thanhtutran08@gmail.com' && (hrSearchQuery === '' || m.name.toLowerCase().includes(hrSearchQuery.toLowerCase()))).map(m => {
+              {teamMembers.filter(m => m.isActive !== false && (m?.email || '').toLowerCase() === 'thanhtutran08@gmail.com' && (hrSearchQuery === '' || m.name.toLowerCase().includes(hrSearchQuery.toLowerCase()))).map(m => {
                 const isSelected = selectedMemberId === m.id;
                 return (
                   <div
@@ -240,7 +240,7 @@ export default function OrgChart({
               <div style={{ width: 1, height: 14, background: 'var(--border)' }} />
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}>
-                {teamMembers.filter(m => ['jeantran.creative@gmail.com', 'nguyenductrungdung.2005@gmail.com', 'huongiiiang@gmail.com', 'daulinh110124@gmail.com', 'lanthao1792003@gmail.com'].includes((m?.email || '').toLowerCase()) && (hrSearchQuery === '' || m.name.toLowerCase().includes(hrSearchQuery.toLowerCase()))).map(m => {
+                {teamMembers.filter(m => m.isActive !== false && ['jeantran.creative@gmail.com', 'nguyenductrungdung.2005@gmail.com', 'huongiiiang@gmail.com', 'daulinh110124@gmail.com', 'lanthao1792003@gmail.com'].includes((m?.email || '').toLowerCase()) && (hrSearchQuery === '' || m.name.toLowerCase().includes(hrSearchQuery.toLowerCase()))).map(m => {
                   const isSelected = selectedMemberId === m.id;
                   return (
                     <div
@@ -289,6 +289,7 @@ export default function OrgChart({
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 14 }}>
           {teamMembers
             .filter(m => {
+              if (m.isActive === false && !isAdmin) return false;
               const matchesSearch = m.name.toLowerCase().includes(hrSearchQuery.toLowerCase()) || m.role.toLowerCase().includes(hrSearchQuery.toLowerCase());
               let matchesDept = true;
               if (hrDeptFilter !== 'all') {
@@ -315,12 +316,14 @@ export default function OrgChart({
                     boxShadow: isSelected ? '0 0 10px rgba(167, 139, 250, 0.2)' : 'none'
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, opacity: m.isActive === false ? 0.5 : 1 }}>
                     <div className='avatar' style={{ background: m.color + '25', color: m.color, width: 36, height: 36, fontSize: 12, fontWeight: 700, border: '2px solid ' + m.color + '40' }}>
                       {getInitials(m.name)}
                     </div>
                     <div>
-                      <div style={{ fontWeight: 600, fontSize: 13, color: '#fafafa' }}>{m.name}</div>
+                      <div style={{ fontWeight: 600, fontSize: 13, color: '#fafafa' }}>
+                        {m.name} {m.isActive === false && <span style={{ color: '#ef4444', fontSize: 10, marginLeft: 4 }}>(Đã nghỉ)</span>}
+                      </div>
                       <div style={{ fontSize: 10, color: '#71717a' }}>{m.role}</div>
                     </div>
                   </div>
