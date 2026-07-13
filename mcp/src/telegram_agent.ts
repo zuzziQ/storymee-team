@@ -239,7 +239,7 @@ export async function sendMessage(chatId: number, text: string, replyMarkup?: an
   
   let finalMarkup = replyMarkup;
   if (!finalMarkup) {
-    finalMarkup = isGroup ? KEYBOARD_REMOVE : KEYBOARD_MAIN;
+    finalMarkup = KEYBOARD_MAIN;
   }
   
   try {
