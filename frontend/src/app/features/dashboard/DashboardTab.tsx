@@ -190,46 +190,113 @@ export default function DashboardTab({
               </div>
             </div>
 
-            {/* My Tasks List */}
+            
+            {/* My Tasks List (Dynamic categorization) */}
             {(() => {
-              const myWorkspaceTasks = tasks.filter(t => {
-                const isMe = t.assignee === activeUser.name;
-                let isTime = true;
-                if (timeFilter === 'week') isTime = t.deadline <= '2026-07-05';
-                else if (timeFilter === 'next-week') isTime = t.deadline > '2026-07-05' && t.deadline <= '2026-07-12';
-                return isMe && isTime;
+              const now = new Date();
+              // Calculate start and end of week (Monday to Sunday)
+              const dayOfWeek = now.getDay(); // 0 is Sunday, 1 is Monday
+              const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+              
+              const startOfWeek = new Date(now);
+              startOfWeek.setDate(now.getDate() + diffToMonday);
+              startOfWeek.setHours(0,0,0,0);
+              
+              const endOfWeek = new Date(startOfWeek);
+              endOfWeek.setDate(startOfWeek.getDate() + 6);
+              endOfWeek.setHours(23,59,59,999);
+
+              const todayStr = now.toISOString().split('T')[0];
+              const sowStr = startOfWeek.toISOString().split('T')[0];
+              const eowStr = endOfWeek.toISOString().split('T')[0];
+
+              // Filter tasks based on overviewSubTab
+              // If 'all' or 'mine', show my tasks. If 'team' (wait, the left column is only shown if 'all' or 'mine', but let's allow 'team' viewing all tasks in the left if we want? No, left column is "Góc của tôi" or all tasks if we want. Let's just show My Tasks if 'mine', and ALL tasks if 'team' or 'all' but in the left column? No, left column says "👤 Góc của tôi".)
+              // Actually, user wants "phần graph tiến trình của team, của tôi như cũ" which means keeping Left for Me, Right for Team.
+              const targetTasks = tasks.filter(t => t.assignee === activeUser.name);
+
+              const overdue: Task[] = [];
+              const today: Task[] = [];
+              const thisWeek: Task[] = [];
+              const upcoming: Task[] = [];
+
+              targetTasks.forEach(t => {
+                if (t.status === 'Done') return; // Skip done tasks
+                if (!t.deadline) {
+                  upcoming.push(t);
+                  return;
+                }
+                
+                if (t.deadline < todayStr) {
+                  overdue.push(t);
+                } else if (t.deadline === todayStr) {
+                  today.push(t);
+                } else if (t.deadline >= sowStr && t.deadline <= eowStr) {
+                  thisWeek.push(t);
+                } else {
+                  upcoming.push(t);
+                }
               });
+
+              // Sort by deadline
+              const sortByDeadline = (a: Task, b: Task) => (a.deadline || '9999').localeCompare(b.deadline || '9999');
+              overdue.sort(sortByDeadline);
+              today.sort(sortByDeadline);
+              thisWeek.sort(sortByDeadline);
+              upcoming.sort(sortByDeadline);
+
+              const renderGroup = (title: string, list: Task[], color: string, icon: string) => {
+                if (list.length === 0) return null;
+                return (
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: color, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      {icon} {title} ({list.length})
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {list.map(t => (
+                        <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: 'var(--bg-muted)', borderRadius: 8, border: '1px solid var(--border)', justifyContent: 'space-between' }}>
+                          <span style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0 }} className={getPriorityDot(t.priority)} />
+                          <span style={{ flex: 1, fontSize: 12, color: '#fafafa', fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} onClick={() => setSelectedTask(t)}>
+                            {t.title}
+                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                            {overviewSubTab !== 'mine' && (
+                              <div className="avatar" style={{ width: 18, height: 18, fontSize: 8, background: 'rgba(255,255,255,0.1)', color: '#fafafa' }}>
+                                {t.assignee.substring(0,2).toUpperCase()}
+                              </div>
+                            )}
+                            <span className={`badge ${getStatusClass(t.status)}`} style={{ fontSize: 9, padding: '2px 6px' }}>{t.status}</span>
+                            <span style={{ fontSize: 10, color: t.deadline < todayStr ? '#ef4444' : '#71717a', width: 45, textAlign: 'right' }}>
+                              {t.deadline ? t.deadline.split('-').reverse().slice(0,2).join('/') : '---'}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              };
+
+              const hasAny = overdue.length > 0 || today.length > 0 || thisWeek.length > 0 || upcoming.length > 0;
 
               return (
                 <div className="glass" style={{ padding: '20px' }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 14 }}>Nhiệm vụ cần tập trung trong kỳ lọc</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {myWorkspaceTasks.map(t => (
-                        <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: 'var(--bg-muted)', borderRadius: 8, border: '1px solid var(--border)', justifyContent: 'space-between' }}>
-                        <span style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0 }} className={getPriorityDot(t.priority)} />
-                        <span style={{ fontSize: 10, color: '#52525b', fontFamily: 'monospace', width: 45 }}>{t.id}</span>
-                        <span 
-                          onClick={() => setSelectedTask(t)}
-                          style={{ flex: 1, fontSize: 12, color: '#fafafa', fontWeight: 500, cursor: 'pointer' }}
-                        >
-                          {t.title}
-                        </span>
-                        
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <span className={`badge ${getStatusClass(t.status)}`} style={{ fontSize: 9, padding: '2px 6px' }}>{t.status}</span>
-                          <span style={{ fontSize: 10, color: t.deadline <= '2026-07-02' ? '#ef4444' : '#71717a', display: 'flex', alignItems: 'center', gap: 3 }}>
-                            <Clock size={10} /> {t.deadline.split('-').reverse().slice(0,2).join('/')}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                    
-                    {myWorkspaceTasks.length === 0 && (
-                      <div style={{ textAlign: 'center', color: '#52525b', padding: '30px 0', fontSize: 12 }}>
-                        Tuyệt vời! Bạn không có nhiệm vụ nào tồn đọng trong khoảng thời gian này 🎉
-                      </div>
-                    )}
+                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 14 }}>
+                    {'Nhiệm vụ của tôi'}
                   </div>
+                  
+                  {!hasAny ? (
+                    <div style={{ textAlign: 'center', color: '#52525b', padding: '30px 0', fontSize: 12 }}>
+                      Tuyệt vời! Không có nhiệm vụ nào tồn đọng 🎉
+                    </div>
+                  ) : (
+                    <div>
+                      {renderGroup('Quá hạn', overdue, '#ef4444', '⚠️')}
+                      {renderGroup('Hôm nay', today, '#f59e0b', '🔥')}
+                      {renderGroup('Trong tuần này', thisWeek, '#3b82f6', '📅')}
+                      {renderGroup('Sắp tới / Chưa hẹn ngày', upcoming, '#8b5cf6', '⏳')}
+                    </div>
+                  )}
                 </div>
               );
             })()}

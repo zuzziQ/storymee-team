@@ -35,6 +35,7 @@ export interface Announcement {
   sender: string;
   date: string;
   readBy: string[];
+  targetUserId?: string;
 }
 export interface Task {
   id: string; title: string; description: string; assignee: string;

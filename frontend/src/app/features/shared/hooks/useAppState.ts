@@ -22,7 +22,7 @@ import { useState as useReactState } from 'react';
 
 export function useAppState() {
   const [tab, setTab] = useReactState<string>('kanban');
-  const [overviewSubTab, setOverviewSubTab] = useReactState<'workload' | 'kpi' | 'efficiency'>('workload');
+  const [overviewSubTab, setOverviewSubTab] = useReactState<'all' | 'mine' | 'team'>('all');
   const auth = useAuthState();
   const hr = useHrState();
   const taskState = useTaskState();

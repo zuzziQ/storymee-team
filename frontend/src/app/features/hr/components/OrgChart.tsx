@@ -397,14 +397,14 @@ export default function OrgChart({
                 onClick={() => {
                   if (setTeamMembers && newMember.name) {
                     const added = {
-                      id: 'user-' + Date.now(),
-                      name: newMember.name || '',
-                      role: newMember.role || '',
-                      email: newMember.email || '',
-                      color: newMember.color || '#10b981',
+                      id: 'new-' + Date.now(),
+                      name: newMember.name,
+                      role: newMember.role,
+                      email: newMember.email,
+                      color: newMember.color,
                       skills: newMember.skills || [],
                       telegramUsername: newMember.telegramUsername || ''
-                    };
+                    } as any;
                     setTeamMembers(prev => [...prev, added]);
                     setShowAddModal(false);
                     setNewMember({ name: '', role: 'Nhân sự mới', email: '', color: '#10b981', skills: [], telegramUsername: '' });
