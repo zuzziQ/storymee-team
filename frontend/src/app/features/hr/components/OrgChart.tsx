@@ -375,6 +375,19 @@ export default function OrgChart({
                 />
               </div>
               <div>
+                <label style={{ fontSize: 11, color: '#a1a1aa', display: 'block', marginBottom: 4 }}>Hình thức làm việc</label>
+                <select
+                  className="input-dark"
+                  value={newMember.workArrangement || 'office'}
+                  onChange={e => setNewMember({ ...newMember, workArrangement: e.target.value })}
+                  style={{ width: '100%', padding: '8px 12px', fontSize: 12, borderRadius: 8, marginBottom: 12 }}
+                >
+                  <option value="office">Full-time (Tại văn phòng)</option>
+                  <option value="remote">Làm từ xa (Remote)</option>
+                  <option value="freelance">Tự do (Freelance)</option>
+                </select>
+              </div>
+              <div>
                 <label style={{ fontSize: 11, color: '#a1a1aa', display: 'block', marginBottom: 4 }}>Màu đại diện</label>
                 <input
                   type="color"
@@ -403,7 +416,9 @@ export default function OrgChart({
                       email: newMember.email,
                       color: newMember.color,
                       skills: newMember.skills || [],
-                      telegramUsername: newMember.telegramUsername || ''
+                      telegramUsername: newMember.telegramUsername || '',
+                      workArrangement: newMember.workArrangement || 'office',
+                      isActive: true
                     } as any;
                     setTeamMembers(prev => [...prev, added]);
                     setShowAddModal(false);

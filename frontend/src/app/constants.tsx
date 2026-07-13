@@ -70,6 +70,7 @@ export interface TeamMember {
   phone?: string;
   telegramChatId?: number;
   planeMemberId?: string;
+  isActive?: boolean;
 }
 export interface ChatMessage { id: string; sender: 'user' | 'ai'; text: string; }
 export interface DraftTask {
@@ -168,14 +169,6 @@ export const ANNOUNCEMENTS_DEFAULT: Announcement[] = [
     date: '2026-06-29',
     readBy: []
   }
-];
-
-export const BURNDOWN = [
-  { day: 'T2', ideal: 80, actual: 80 }, { day: 'T3', ideal: 70, actual: 74 },
-  { day: 'T4', ideal: 60, actual: 65 }, { day: 'T5', ideal: 50, actual: 58 },
-  { day: 'T6', ideal: 40, actual: 42 }, { day: 'T7', ideal: 30, actual: 38 },
-  { day: 'CN', ideal: 20, actual: 31 }, { day: 'T2*', ideal: 10, actual: null },
-  { day: 'T3*', ideal: 0, actual: null },
 ];
 
 // Helper hiển thị chữ in đậm **text** thành HTML span

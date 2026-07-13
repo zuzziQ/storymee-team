@@ -5,7 +5,7 @@ import {
   CartesianGrid
 } from 'recharts';
 import {
-  Task, TeamMember, Announcement, BURNDOWN,
+  Task, TeamMember, Announcement,
   getPriorityDot, getStatusClass
 } from '../../constants';
 
@@ -116,9 +116,9 @@ export default function DashboardTab({
                 cursor: 'pointer'
               }}
             >
-              <option value="sprint">📅 Cả Sprint 1 (25/06 – 09/07)</option>
-              <option value="week">📅 Tuần này (Đến 05/07)</option>
-              <option value="next-week">📅 Tuần sau (06/07 – 12/07)</option>
+              <option value="sprint">📅 Cả Sprint hiện tại</option>
+              <option value="week">📅 Tuần này</option>
+              <option value="next-week">📅 Tuần sau</option>
             </select>
           </div>
         </div>
@@ -350,27 +350,90 @@ export default function DashboardTab({
               </div>
             </div>
 
-            {/* Burndown Chart with simple explanation */}
-            <div className="glass" style={{ padding: '20px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <TrendingUp size={14} color="#6366f1" /> Biểu đồ Tiến độ Cháy việc (Đốt Task)
-              </div>
+
+            {/* Burndown Chart with dynamic computation */}
+            {(() => {
+              // We compute the burndown for the current week (Monday -> Sunday)
+              const now = new Date();
+              const day = now.getDay();
+              const diffToMon = day === 0 ? -6 : 1 - day;
+              const startOfWeek = new Date(now);
+              startOfWeek.setDate(now.getDate() + diffToMon);
+              startOfWeek.setHours(0,0,0,0);
               
-              <ResponsiveContainer width="100%" height={150}>
-                <LineChart data={BURNDOWN} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                  <XAxis dataKey="day" tick={{ fill: '#71717a', fontSize: 10 }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fill: '#71717a', fontSize: 10 }} axisLine={false} tickLine={false} />
-                  <Tooltip contentStyle={{ background: '#18181b', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, fontSize: 12 }} />
-                  <Line type="monotone" dataKey="ideal" stroke="#3f3f46" strokeDasharray="4 4" dot={false} strokeWidth={1.5} name="Lý tưởng" />
-                  <Line type="monotone" dataKey="actual" stroke="#6366f1" dot={{ fill: '#6366f1', r: 3 }} strokeWidth={2} connectNulls={false} name="Thực tế" />
-                </LineChart>
-              </ResponsiveContainer>
+              const endOfWeek = new Date(startOfWeek);
+              endOfWeek.setDate(startOfWeek.getDate() + 6);
+              endOfWeek.setHours(23,59,59,999);
               
-              <div style={{ fontSize: 10, color: '#71717a', lineHeight: 1.4, background: 'rgba(255,255,255,0.02)', padding: 10, borderRadius: 8, border: '1px solid rgba(255,255,255,0.04)' }}>
-                💡 **Giải thích đơn giản:** Đường đứt nét màu xám thể hiện tiến độ chuẩn lý thuyết. Đường màu tím thể hiện tiến độ đốt task thực tế của team. Nếu đường màu tím **nằm dưới** đường đứt nét, nghĩa là team đang chạy nhanh hơn kế hoạch!
-              </div>
-            </div>
+              const sowStr = startOfWeek.toISOString().split('T')[0];
+              const eowStr = endOfWeek.toISOString().split('T')[0];
+              const todayStr = now.toISOString().split('T')[0];
+
+              // Tasks in this sprint/week
+              // Assume tasks array contains all tasks. We only care about tasks that have a deadline in this week OR were completed this week.
+              const weekTasks = tasks.filter(t => {
+                if (t.deadline >= sowStr && t.deadline <= eowStr) return true;
+                // If it was reviewed this week, count it
+                if (t.status === 'Done' && t.reviewedAt) {
+                  const reviewedDate = t.reviewedAt.split('T')[0];
+                  if (reviewedDate >= sowStr && reviewedDate <= eowStr) return true;
+                }
+                return false;
+              });
+
+              // Total ideal hours = sum of all weekTasks estimates
+              const totalEstimate = weekTasks.reduce((sum, t) => sum + (t.estimate || 0), 0);
+
+              const daysOfWeek = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+              let remainingActual = totalEstimate;
+
+              const dynamicBurndown = daysOfWeek.map((dayLabel, i) => {
+                const currentDate = new Date(startOfWeek);
+                currentDate.setDate(startOfWeek.getDate() + i);
+                const currentStr = currentDate.toISOString().split('T')[0];
+                
+                // Ideal line linearly goes down
+                const ideal = Math.max(0, totalEstimate - (totalEstimate / 6) * i);
+                
+                let actual = null;
+                if (currentStr <= todayStr) {
+                  // To find remaining actual at the END of this day:
+                  // Subtract tasks that were completed ON OR BEFORE this day
+                  const completedEstimate = weekTasks.filter(t => {
+                    if (t.status !== 'Done') return false;
+                    const rd = t.reviewedAt ? t.reviewedAt.split('T')[0] : '1970-01-01';
+                    return rd <= currentStr;
+                  }).reduce((sum, t) => sum + (t.estimate || 0), 0);
+                  
+                  actual = Math.max(0, totalEstimate - completedEstimate);
+                }
+
+                return { day: dayLabel, ideal: Math.round(ideal * 10) / 10, actual: actual !== null ? Math.round(actual * 10) / 10 : null };
+              });
+
+              return (
+                <div className="glass" style={{ padding: '20px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <TrendingUp size={14} color="#6366f1" /> Biểu đồ Tiến độ Cháy việc thực tế
+                  </div>
+                  
+                  <ResponsiveContainer width="100%" height={150}>
+                    <LineChart data={dynamicBurndown} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                      <XAxis dataKey="day" tick={{ fill: '#71717a', fontSize: 10 }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fill: '#71717a', fontSize: 10 }} axisLine={false} tickLine={false} />
+                      <Tooltip contentStyle={{ background: '#18181b', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, fontSize: 12 }} />
+                      <Line type="monotone" dataKey="ideal" stroke="#3f3f46" strokeDasharray="4 4" dot={false} strokeWidth={1.5} name="Lý tưởng (h)" />
+                      <Line type="monotone" dataKey="actual" stroke="#6366f1" dot={{ fill: '#6366f1', r: 3 }} strokeWidth={2} connectNulls={false} name="Thực tế (h)" />
+                    </LineChart>
+                  </ResponsiveContainer>
+                  
+                  <div style={{ fontSize: 10, color: '#71717a', lineHeight: 1.4, background: 'rgba(255,255,255,0.02)', padding: 10, borderRadius: 8, border: '1px solid rgba(255,255,255,0.04)' }}>
+                    💡 **Giải thích đơn giản:** Đường đứt nét màu xám thể hiện tiến độ chuẩn lý thuyết. Đường màu tím thể hiện tiến độ đốt task thực tế của team dựa vào tổng Estimate. Nếu đường màu tím **nằm dưới** đường đứt nét, nghĩa là team đang chạy nhanh hơn kế hoạch!
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Workload Overload warnings */}
             {(() => {
