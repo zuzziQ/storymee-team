@@ -588,6 +588,8 @@ async function setupBotCommands() {
           { command: "portal", description: "Đăng nhập nhanh vào Web Portal" },
           { command: "dang_ky", description: "Đăng ký Nghỉ phép / Làm Remote" },
           { command: "cong_viec", description: "Xem danh sách công việc của tôi" },
+          { command: "lichhop", description: "Quản lý và nhắc lịch họp" },
+          { command: "thongbao", description: "Gửi thông báo toàn hệ thống (Admin)" },
           { command: "check", description: "Quét deadline quá hạn realtime (Admin)" },
           { command: "check_all", description: "Báo cáo trạng thái toàn bộ nhân viên" },
           { command: "team_status", description: "Báo cáo chấm công hôm nay" },

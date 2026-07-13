@@ -483,7 +483,7 @@ export default function TaskDetailModal({
               {[
                 { id: 'subtasks', label: `📌 Subtasks (${subtasks.length})` },
                 { id: 'notes', label: `💬 Bình luận (${notes.length})` },
-                { id: 'attachments', label: `📎 Tài liệu & Kết quả (${attachments.length})` },
+                { id: 'resources', label: `📎 Tài liệu & Kết quả (${attachments.length})` },
                 { id: 'activities', label: '⏳ Lịch sử' }
               ].map(sec => (
                 <button
