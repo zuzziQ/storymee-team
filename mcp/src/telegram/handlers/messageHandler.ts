@@ -641,17 +641,31 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
       const issuesRes = await apiClient.get(API_ROUTES.PLANE.ISSUES) as any;
       const rawTasks: any[] = issuesRes?.data || [];
       
-      // Flatten parent + subIssues
-      const allIssues: any[] = [];
+      // Reconstruct hierarchy from flat Plane issues
+      const parentMap = new Map<string, any>();
+      const topLevelIssues: any[] = [];
+      
+      // Store all issues in map
       rawTasks.forEach((t: any) => {
-        allIssues.push(t);
-        (t.subIssues || []).forEach((sub: any) => {
-          allIssues.push({ ...sub, Project: sub.Project || t.Project });
-        });
+        t.subIssues = [];
+        parentMap.set(t.id, t);
       });
       
-      // Lấy issues của member này
-      const myIssues = allIssues.filter((t: any) => t.assigneeId === member.id);
+      // Build hierarchy
+      rawTasks.forEach((t: any) => {
+        if (t.parentId && parentMap.has(t.parentId)) {
+          parentMap.get(t.parentId).subIssues.push(t);
+        } else {
+          topLevelIssues.push(t);
+        }
+      });
+      
+      // Lấy issues của member này (Bao gồm parent task member phụ trách, HOẶC parent task có subtask do member phụ trách)
+      const myIssues = topLevelIssues.filter((t: any) => {
+          const isAssigned = t.assigneeId === member.id;
+          const hasAssignedSub = t.subIssues.some((sub: any) => sub.assigneeId === member.id);
+          return isAssigned || hasAssignedSub;
+      });
       
       const formattedText = formatMyIssuesDM(myIssues, member.fullName);
       await sendMessage(chatId, formattedText);

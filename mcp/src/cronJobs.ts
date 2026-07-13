@@ -10,16 +10,25 @@ import {
   type TeamReportData
 } from "./telegram/formatters/issueFormatter";
 
-/** Flatten parent issues + subIssues thành flat array */
-function flattenIssues(rawTasks: any[]): any[] {
-  const all: any[] = [];
+/** Xây dựng cấu trúc cây cha-con từ flat array của Plane API */
+function buildHierarchy(rawTasks: any[]): any[] {
+  const parentMap = new Map<string, any>();
+  const topLevelIssues: any[] = [];
+  
   rawTasks.forEach((t: any) => {
-    all.push(t);
-    (t.subIssues || []).forEach((sub: any) => {
-      all.push({ ...sub, Project: sub.Project || t.Project });
-    });
+    t.subIssues = [];
+    parentMap.set(t.id, t);
   });
-  return all;
+  
+  rawTasks.forEach((t: any) => {
+    if (t.parentId && parentMap.has(t.parentId)) {
+      parentMap.get(t.parentId).subIssues.push(t);
+    } else {
+      topLevelIssues.push(t);
+    }
+  });
+  
+  return topLevelIssues;
 }
 
 /** Fetch tất cả data cần thiết */
@@ -33,7 +42,7 @@ async function fetchAllData(apiClient: CoreApiClient) {
   const members: any[] = membersRes?.data || [];
   const rawTasks: any[] = tasksRes?.data || [];
   const attendance: any[] = attendanceRes?.data || [];
-  const allIssues = flattenIssues(rawTasks);
+  const allIssues = buildHierarchy(rawTasks);
   const todayStr = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }))
     .toISOString().split('T')[0];
 
@@ -82,7 +91,11 @@ export function startCronJobs(
         if (!m.telegramChatId) continue;
         const chatId = Number(m.telegramChatId);
 
-        const myIssues = allIssues.filter((t: any) => t.assigneeId === m.id);
+        const myIssues = allIssues.filter((t: any) => {
+          const isAssigned = t.assigneeId === m.id;
+          const hasAssignedSub = t.subIssues.some((sub: any) => sub.assigneeId === m.id);
+          return isAssigned || hasAssignedSub;
+        });
         const activeIssues = myIssues.filter((t: any) => !isDoneGroup(t.State?.group || 'unstarted'));
 
         if (activeIssues.length === 0) {
@@ -170,7 +183,11 @@ export function startCronJobs(
         if (!m.telegramChatId) continue;
         const chatId = Number(m.telegramChatId);
 
-        const myIssues = allIssues.filter((t: any) => t.assigneeId === m.id);
+        const myIssues = allIssues.filter((t: any) => {
+          const isAssigned = t.assigneeId === m.id;
+          const hasAssignedSub = t.subIssues.some((sub: any) => sub.assigneeId === m.id);
+          return isAssigned || hasAssignedSub;
+        });
         const doneToday = myIssues.filter((t: any) => {
           const g = t.State?.group || 'unstarted';
           return g === 'completed' && t.updatedAt?.startsWith(todayStr);
