@@ -106,7 +106,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 export async function executeMcpTool(
   name: string,
   args: any,
-  user: any
+  user: any,
+  username?: string
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
   const isBoss = ["kimngan151091@gmail.com", "lehuyducanh.vn@gmail.com", "zuzzivn@gmail.com"].includes(user.email.toLowerCase());
   const members = await getTeamMembersCache();
@@ -117,7 +118,7 @@ export async function executeMcpTool(
       const attendanceNames = ATTENDANCE_TOOLS_SCHEMA.map(t => t.name);
 
       if (planeNames.includes(name)) {
-        return executePlaneTool(toolName, args, user, isBoss, apiClient, members);
+        return executePlaneTool(toolName, args, user, isBoss, apiClient, members, username);
       }
       if (hrNames.includes(name)) {
         return executeHrTool(toolName, args, user, isBoss, apiClient, members);

@@ -1,6 +1,7 @@
 import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
 import { CoreApiClient, API_ROUTES } from "@storymee/api-client";
 import { fetchAxios } from "../../fetchAxios";
+import { pendingOutputByUsername } from "../../sessionStore";
 
 export const PLANE_TOOLS_SCHEMA = [
   {
@@ -201,7 +202,7 @@ function findIssueHelper(dbTasks: any[], taskIdStr: string): any {
 }
 
 
-export async function executePlaneTool(name: string, args: any, user: any, isBoss: boolean, apiClient: CoreApiClient, members: any[]): Promise<{ content: Array<{ type: string; text: string }> }> {
+export async function executePlaneTool(name: string, args: any, user: any, isBoss: boolean, apiClient: CoreApiClient, members: any[], username?: string): Promise<{ content: Array<{ type: string; text: string }> }> {
 
   switch (name) {
 case "get_my_issues": {
@@ -474,10 +475,19 @@ case "update_issue_state": {
         );
         if (inReviewState) {
           await apiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${foundIssue.id}`, { stateId: inReviewState.id });
+          // Đánh dấu cần thu thập output
+          if (username) {
+            pendingOutputByUsername.set(username.toLowerCase().replace(/^@/, ''), {
+              issueId: foundIssue.id,
+              issueShortId: foundIssue.shortId || issue_id,
+              issueTitle: foundIssue.title,
+              memberId: user.id,
+            });
+          }
           return {
             content: [{
               type: "text",
-              text: `ℹ️ Theo quy trình mới, công việc đã được chuyển sang **In Review** thay vì Done.\n\nAdmin sẽ xem xét kết quả của bạn và xác nhận hoàn thành. Hãy vào website nộp kết quả để Admin duyệt nhé!`
+              text: `IN_REVIEW_REDIRECT:${foundIssue.id}:${foundIssue.shortId || issue_id}:${foundIssue.title}`
             }]
           };
         }
@@ -572,10 +582,19 @@ case "update_issue": {
       if (status && (status.toLowerCase() === 'done' || status.toLowerCase() === 'completed') && !isBoss) {
         // Tự động chuyển sang in_review thay vì block
         await apiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${foundSubtask.id}`, { status: 'in_review' });
+        // Đánh dấu cần thu thập output
+        if (username) {
+          pendingOutputByUsername.set(username.toLowerCase().replace(/^@/, ''), {
+            issueId: foundSubtask.id,
+            issueShortId: foundSubtask.shortId || task_id,
+            issueTitle: foundSubtask.title,
+            memberId: user.id,
+          });
+        }
         return {
           content: [{
             type: "text",
-            text: `ℹ️ Theo quy trình mới, công việc đã được chuyển sang **In Review** thay vì Done.\n\nAdmin sẽ xem xét kết quả và xác nhận. Hãy vào website nộp kết quả để Admin duyệt nhé!`
+            text: `IN_REVIEW_REDIRECT:${foundSubtask.id}:${foundSubtask.shortId || task_id}:${foundSubtask.title}`
           }]
         };
       }

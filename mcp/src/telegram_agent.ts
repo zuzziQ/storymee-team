@@ -640,7 +640,8 @@ export async function startTelegramPolling() {
   app.post('/worker/v1/telegram/webhook', async (req, reply) => {
     try {
       const update = req.body as any;
-      if (update.message && update.message.text) {
+      if (update.message) {
+        // Xu ly ca text, photo, document, video
         await handleTelegramMessage(update.message);
       } else if (update.callback_query) {
         await handleCallbackQuery(update.callback_query);

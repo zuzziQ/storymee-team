@@ -8,6 +8,7 @@ import {
 } from '../../telegram_agent';
 import { executeMcpTool } from '../../index';
 import { formatMyIssuesDM, isDoneGroup, parseIssue } from '../formatters/issueFormatter';
+import { outputSessions, pendingOutputByUsername } from '../../sessionStore';
 import * as dotenv from "dotenv";
 
 dotenv.config();
@@ -18,14 +19,51 @@ const WEB_PORTAL_URL = process.env.WEB_PORTAL_URL || "https://dev-hub.storymee.c
 const OMNIROUTER_API_URL = process.env.OMNIROUTER_API_URL || "https://dev-hub.storymee.com/api/ai/chat";
 const apiClient = new CoreApiClient({ baseURL: CORE_API_URL + '/internal/v1/team', enforceApiPrefix: false });
 
-export async function handleTelegramMessage(message: {
-  chat: { id: number };
-  from: { username: string; first_name: string };
-  text: string;
-}) {
+async function getTelegramFileUrl(fileId: string): Promise<string | null> {
+  try {
+    const res = await fetchAxios(`${TELEGRAM_API}/getFile?file_id=${fileId}`);
+    const data = await res.json() as any;
+    if (data.ok && data.result?.file_path) {
+      return `https://api.telegram.org/file/bot${process.env.TELEGRAM_BOT_TOKEN}/${data.result.file_path}`;
+    }
+  } catch (e) { console.error('[getFile] error:', e); }
+  return null;
+}
+
+async function finalizeOutputSession(chatId: number, session: any, member: any) {
+  if (!session) return;
+  outputSessions.delete(chatId);
+  const outputContent = session.texts.join('\n') || '(khong co output)';
+  const outputUrls = session.urls;
+  try {
+    await apiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${session.issueId}`, {
+      outputContent,
+      outputUrls,
+      submittedById: session.memberId,
+    });
+  } catch (e) { console.error('[finalizeOutputSession] PATCH error:', e); }
+  const ADMIN_EMAILS = ['kimngan151091@gmail.com', 'lehuyducanh.vn@gmail.com', 'zuzzivn@gmail.com'];
+  try {
+    const allMembersForNotify = await getCachedMembers();
+    const admins = allMembersForNotify.filter((m: any) => ADMIN_EMAILS.includes((m.email || '').toLowerCase()) && m.telegramChatId);
+    const urlsText = outputUrls.length > 0 ? `\n*Files/Links:*\n${outputUrls.join('\n')}` : '';
+    const notifyText = `KET QUA CAN DUYET:\n- Task: *${session.issueShortId}* -- ${session.issueTitle}\n- Nguoi nop: *${member.fullName}*\n\nNoi dung:\n${outputContent}${urlsText}`;
+    for (const admin of admins) {
+      await sendMessage(Number(admin.telegramChatId), notifyText, {
+        inline_keyboard: [[
+          { text: 'Duyet (Done)', callback_data: `review_approve:${session.issueId}` },
+          { text: 'Tu choi', callback_data: `review_reject:${session.issueId}` }
+        ]]
+      });
+    }
+  } catch (e) { console.error('[finalizeOutputSession] notify admin error:', e); }
+  await sendMessage(chatId, `Da gui ket qua task *${session.issueShortId}* cho Admin duyet.\nBan se nhan thong bao khi Admin xac nhan.`, KEYBOARD_MAIN);
+}
+
+export async function handleTelegramMessage(message: any) {
   const chatId = message.chat.id;
-  const username = message.from.username;
-  let text = (message.text || "").replace(/@storymeebot/gi, "").trim();
+  const username = message.from?.username;
+  let text = ((message.text || message.caption) || "").replace(/@storymeebot/gi, "").trim();
   const isGroup = chatId < 0;
 
   // Hỗ trợ lệnh /ai trong group để bypass Privacy Mode
@@ -151,6 +189,84 @@ export async function handleTelegramMessage(message: {
     }
   }
 
+  // C0. Kich hoat output session neu planeTools da danh dau pending
+  if (!isGroup) {
+    const uname = (username || '').toLowerCase().replace(/^@/, '');
+    if (uname && pendingOutputByUsername.has(uname)) {
+      const pending = pendingOutputByUsername.get(uname)!;
+      pendingOutputByUsername.delete(uname);
+      outputSessions.set(chatId, {
+        issueId: pending.issueId,
+        issueShortId: pending.issueShortId,
+        issueTitle: pending.issueTitle,
+        memberId: pending.memberId,
+        texts: [],
+        urls: [],
+        startedAt: new Date(),
+      });
+      await sendMessage(chatId,
+        `Task *${pending.issueShortId}* da chuyen sang In Review.\n\nVui long nop ket qua cong viec:\n- Goi ta van ban mo ta\n- Gui link (Google Drive, Figma, Github,...)\n- Gui anh chup man hinh truc tiep vao day\n- Hoac chon khong co output`,
+        {
+          inline_keyboard: [
+            [{ text: 'Khong co output', callback_data: `submit_no_output:${pending.issueId}:${pending.issueShortId}` }],
+            [{ text: 'Hoan tat nop ket qua', callback_data: `submit_output_done:${pending.issueId}:${pending.issueShortId}` }],
+          ]
+        }
+      );
+      return;
+    }
+  }
+
+  // C1. Xu ly khi dang trong output session
+  const activeSession = !isGroup ? outputSessions.get(chatId) : undefined;
+  if (activeSession) {
+    // /done_output hoac tuong tu
+    if (lowerText === '/done_output' || lowerText === 'xong' || lowerText === 'done output') {
+      await finalizeOutputSession(chatId, activeSession, member);
+      return;
+    }
+    // Khong co output
+    const NO_OUTPUT_KEYWORDS = ['khong co output', 'ko co output', 'không có output', 'no output', 'khong co ket qua', 'no result'];
+    if (NO_OUTPUT_KEYWORDS.some(k => lowerText.includes(k))) {
+      activeSession.texts.push('(Nhan su xac nhan khong co output/ket qua cu the)');
+      await finalizeOutputSession(chatId, activeSession, member);
+      return;
+    }
+    // Nhan anh/video/document
+    let collectedFile = false;
+    if (message.photo && message.photo.length > 0) {
+      const largestPhoto = message.photo[message.photo.length - 1];
+      const url = await getTelegramFileUrl(largestPhoto.file_id);
+      if (url) { activeSession.urls.push(url); collectedFile = true; }
+    } else if (message.document?.file_id) {
+      const url = await getTelegramFileUrl(message.document.file_id);
+      if (url) { activeSession.urls.push(url); collectedFile = true; }
+    } else if (message.video?.file_id) {
+      const url = await getTelegramFileUrl(message.video.file_id);
+      if (url) { activeSession.urls.push(url); collectedFile = true; }
+    }
+    // Thu thap text & link tu text
+    if (text) {
+      const urlPattern = /https?:\/\/[^\s]+/g;
+      const linksInText = text.match(urlPattern) || [];
+      activeSession.urls.push(...linksInText);
+      const textWithoutUrls = text.replace(urlPattern, '').trim();
+      if (textWithoutUrls) activeSession.texts.push(textWithoutUrls);
+    }
+    if (text || collectedFile) {
+      const count = activeSession.texts.length + activeSession.urls.length;
+      await sendMessage(chatId,
+        `Da ghi nhan (${count} muc). Tiep tuc gui them hoac nhan "Hoan tat nop ket qua".`,
+        {
+          inline_keyboard: [
+            [{ text: 'Hoan tat nop ket qua', callback_data: `submit_output_done:${activeSession.issueId}:${activeSession.issueShortId}` }]
+          ]
+        }
+      );
+    }
+    return;
+  }
+
   // C. Intercept Global Commands & Buttons để Hủy Session (Tránh kẹt Form)
   const GLOBAL_COMMANDS = [
     "/start", "/check", "/team_status", "trạng thái checkin", 
@@ -172,6 +288,34 @@ export async function handleTelegramMessage(message: {
 
   if (lowerText === "/cancel" || lowerText === "hủy" || lowerText === "cancel" || lowerText === "huy") {
     await sendMessage(chatId, "✅ Đã hủy thao tác hiện tại.", KEYBOARD_MAIN);
+    return;
+  }
+
+  // Xu ly reject reason cho admin tu choi task
+  const fSession = userFormSession[chatId];
+  if (fSession?.step === 'await_reject_reason' && text) {
+    const { issueId, adminId } = fSession;
+    delete userFormSession[chatId];
+    try {
+      await apiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${issueId}`, {
+        status: 'working', // chuyen ve In Progress
+        reviewNote: text,
+        reviewedById: adminId,
+      });
+      // Notify assignee
+      try {
+        const issuesRes = (await apiClient.get(API_ROUTES.PLANE.ISSUES)) as any;
+        const issue = (issuesRes.data || []).find((i: any) => i.id === issueId);
+        if (issue?.Assignee?.telegramChatId) {
+          await sendMessage(Number(issue.Assignee.telegramChatId),
+            `Task *${issue.shortId || issueId}* (${issue.title}) bi tu choi.\nLy do: ${text}\nVui long lam lai va nop ket qua.`
+          );
+        }
+      } catch (e) {}
+      await sendMessage(chatId, `Da tu choi va thong bao cho nhan su. Task chuyen ve In Progress.`);
+    } catch (e) {
+      await sendMessage(chatId, `Loi khi tu choi task.`);
+    }
     return;
   }
 

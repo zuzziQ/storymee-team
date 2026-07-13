@@ -413,7 +413,7 @@ async function handleCallbackQuery(callbackQuery: any) {
           estimate: estimateVal || undefined,
           priority: payload.priority || undefined,
           deadline: payload.deadline || undefined
-        }, actionMember);
+        }, actionMember, username);
 
         try {
           await fetchAxios(`${TELEGRAM_API}/editMessageText`, {
@@ -439,7 +439,7 @@ async function handleCallbackQuery(callbackQuery: any) {
               assignee: t.assignee || undefined,
               priority: t.priority || undefined,
               deadline: t.deadline || undefined
-            }, actionMember);
+            }, actionMember, username);
             results.push(`✅ ${t.id}`);
           } catch (e: any) {
             results.push(`❌ ${t.id}: ${e.message || 'Lỗi'}`);
@@ -798,11 +798,120 @@ async function handleCallbackQuery(callbackQuery: any) {
       });
     } catch (e) {}
 
-  } else if (data.startsWith("approve_leave:") || data.startsWith("reject_leave:")) {
+
+  } else if (data.startsWith('submit_output_done:') || data.startsWith('submit_no_output:')) {
+    // Nhan su bam nut hoan tat hoac khong co output
+    const parts = data.split(':');
+    const issueId = parts[1];
+    const issueShortId = parts[2] || issueId;
+    const { outputSessions } = await import('../../sessionStore');
+    const { finalizeOutputSession }: any = await import('./messageHandler').catch(() => null) || {};
+    const session = outputSessions.get(chatId);
+    if (data.startsWith('submit_no_output:') || !session) {
+      // Tao session rong neu khong co
+      const noOutputSession = session || {
+        issueId, issueShortId, issueTitle: issueShortId,
+        memberId: member.id, texts: ['(Nhan su xac nhan khong co output)'], urls: [], startedAt: new Date()
+      };
+      if (!session) outputSessions.set(chatId, noOutputSession as any);
+      const activeSession = outputSessions.get(chatId)!;
+      // PATCH DB
+      try {
+        await apiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${issueId}`, {
+          outputContent: activeSession.texts.join('\n') || '(khong co output)',
+          outputUrls: activeSession.urls,
+          submittedById: member.id,
+        });
+      } catch (e) { console.error('[submit_no_output] PATCH error:', e); }
+      outputSessions.delete(chatId);
+      // Notify admin
+      const ADMIN_EMAILS = ['kimngan151091@gmail.com', 'lehuyducanh.vn@gmail.com', 'zuzzivn@gmail.com'];
+      const admins = allMembers.filter((m: any) => ADMIN_EMAILS.includes((m.email || '').toLowerCase()) && m.telegramChatId);
+      for (const admin of admins) {
+        await sendMessage(Number(admin.telegramChatId),
+          `KET QUA CAN DUYET:\n- Task: *${issueShortId}*\n- Nguoi nop: *${member.fullName}*\n- Output: (Khong co output cu the)`,
+          { inline_keyboard: [[
+            { text: 'Duyet (Done)', callback_data: `review_approve:${issueId}` },
+            { text: 'Tu choi', callback_data: `review_reject:${issueId}` }
+          ]]}
+        );
+      }
+      await sendMessage(chatId, `Da gui cho Admin duyet. Ban se nhan thong bao khi co ket qua.`, KEYBOARD_MAIN);
+    } else {
+      // submit_output_done voi session co san
+      // Inline finalize
+      outputSessions.delete(chatId);
+      const outputContent = session.texts.join('\n') || '(khong co text)';
+      const outputUrls = session.urls;
+      try {
+        await apiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${session.issueId}`, {
+          outputContent, outputUrls, submittedById: member.id,
+        });
+      } catch (e) { console.error('[submit_output_done] PATCH error:', e); }
+      const ADMIN_EMAILS = ['kimngan151091@gmail.com', 'lehuyducanh.vn@gmail.com', 'zuzzivn@gmail.com'];
+      const admins = allMembers.filter((m: any) => ADMIN_EMAILS.includes((m.email || '').toLowerCase()) && m.telegramChatId);
+      const urlsText = outputUrls.length > 0 ? `\nFiles/Links:\n${outputUrls.join('\n')}` : '';
+      for (const admin of admins) {
+        await sendMessage(Number(admin.telegramChatId),
+          `KET QUA CAN DUYET:\n- Task: *${session.issueShortId}*\n- Nguoi nop: *${member.fullName}*\n\nNoi dung:\n${outputContent}${urlsText}`,
+          { inline_keyboard: [[
+            { text: 'Duyet (Done)', callback_data: `review_approve:${session.issueId}` },
+            { text: 'Tu choi', callback_data: `review_reject:${session.issueId}` }
+          ]]}
+        );
+      }
+      await sendMessage(chatId, `Da gui ket qua cho Admin duyet. Ban se nhan thong bao khi co ket qua.`, KEYBOARD_MAIN);
+    }
+
+  } else if (data.startsWith('review_approve:') || data.startsWith('review_reject:')) {
+    const ADMIN_EMAILS = ['kimngan151091@gmail.com', 'lehuyducanh.vn@gmail.com', 'zuzzivn@gmail.com'];
+    const isAdmin = ADMIN_EMAILS.includes((member.email || '').toLowerCase());
+    if (!isAdmin) { await sendMessage(chatId, 'Ban khong co quyen duyet task.'); return; }
+    const issueId = data.split(':')[1];
+    const isApprove = data.startsWith('review_approve:');
+
+    if (isApprove) {
+      try {
+        await apiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${issueId}`, {
+          status: 'done',
+          reviewNote: 'Da duoc Admin duyet',
+          reviewedById: member.id,
+        });
+        // Notify assignee
+        try {
+          const issues = (await apiClient.get(API_ROUTES.PLANE.ISSUES)) as any;
+          const issue = (issues.data || []).find((i: any) => i.id === issueId);
+          if (issue?.Assignee?.telegramChatId) {
+            await sendMessage(Number(issue.Assignee.telegramChatId),
+              `Task *${issue.shortId || issueId}* (${issue.title}) da duoc Admin *${member.fullName}* DUYET XONG. Task chuyen sang Done!`
+            );
+          }
+        } catch (e) {}
+        await sendMessage(chatId, `Da duyet task thanh Done.`);
+        // Update message text
+        try {
+          await fetchAxios(`${TELEGRAM_API}/editMessageText`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: chatId, message_id: messageId,
+              text: `${callbackQuery.message?.text}\n\nDA DUYET boi ${member.fullName}`,
+              parse_mode: 'Markdown'
+            })
+          });
+        } catch (e) {}
+      } catch (e) { await sendMessage(chatId, 'Loi duyet task.'); }
+    } else {
+      // Tu choi: hoi ly do
+      const { userFormSession } = await import('../../telegram_agent');
+      userFormSession[chatId] = { step: 'await_reject_reason', issueId, adminId: member.id };
+      await sendMessage(chatId, `Nhap ly do tu choi (se gui cho nhan su):`);
+    }
+
+  } else if (data.startsWith('approve_leave:') || data.startsWith('reject_leave:')) {
     // 4. Xử lý Admin phê duyệt hoặc từ chối đơn
     const isAdmin = ['kimngan151091@gmail.com', 'lehuyducanh.vn@gmail.com', 'zuzzivn@gmail.com'].includes(member.email.toLowerCase());
     if (!isAdmin) {
-      await sendMessage(chatId, "⚠️ Quyền hạn không đủ! Bạn không có quyền phê duyệt đơn xin nghỉ phép này.");
+      await sendMessage(chatId, "Chi Admin moi co quyen phe duyet don xin nghi phep.");
       return;
     }
 
@@ -813,8 +922,8 @@ async function handleCallbackQuery(callbackQuery: any) {
       const statusParam = action === "approve" ? "approved" : "rejected";
       try {
           const resJson = await apiClient.post(`${API_ROUTES.HR.LEAVE_REQUESTS}/${requestId}/approve`, { status: statusParam }) as any;
-          const actionStr = action === "approve" ? "Đã Phê duyệt" : "Đã Từ chối";
-          const emoji = action === "approve" ? "✅" : "❌";
+          const actionStr = action === "approve" ? "Da Phe duyet" : "Da Tu choi";
+          const emoji = action === "approve" ? "OK" : "X";
 
           try {
             await fetchAxios(`${TELEGRAM_API}/editMessageText`, {
@@ -823,19 +932,20 @@ async function handleCallbackQuery(callbackQuery: any) {
               body: JSON.stringify({
                 chat_id: chatId,
                 message_id: messageId,
-                text: `${callbackQuery.message?.text}\n\n${emoji} *KẾT QUẢ:* Admin *${member.fullName}* đã *${actionStr}* đơn xin nghỉ phép này.`,
+                text: `${callbackQuery.message?.text}\n\n${emoji} KET QUA: Admin ${member.fullName} da ${actionStr} don xin nghi phep nay.`,
                 parse_mode: "Markdown"
               })
             });
           } catch (e) {}
 
         } catch (err: any) {
-          await sendMessage(chatId, "❌ Lỗi: Cổng HR Service phản hồi thất bại khi thực thi duyệt phép.");
+          await sendMessage(chatId, "Loi: Cong HR Service phan hoi that bai khi thuc thi duyet phep.");
           throw err;
         }
     } catch (err) {
-      console.error("Lỗi gọi API duyệt phép:", err);
+      console.error("Loi goi API duyet phep:", err);
     }
   }
 }
 export { handleCallbackQuery };
+
