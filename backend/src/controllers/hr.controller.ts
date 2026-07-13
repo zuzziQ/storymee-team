@@ -26,7 +26,7 @@ export class HrController {
       fullName, telegramUsername, telegramChatId, planeMemberId, email, role, skills, 
       bankName, bankAccount, phone, lettaConversationId,
       workArrangement, annualLeaveLimit, annualLeaveUsed, remoteLimit, remoteUsed, 
-      salaryGross, dependentCount 
+      salaryGross, dependentCount, isActive
     } = req.body;
     if (!fullName || !email) {
       reply.code(400).send({
@@ -55,6 +55,7 @@ export class HrController {
       remoteUsed: remoteUsed !== undefined ? Number(remoteUsed) : undefined,
       salaryGross: salaryGross !== undefined ? Number(salaryGross) : undefined,
       dependentCount: dependentCount !== undefined ? Number(dependentCount) : undefined,
+      isActive: isActive !== undefined ? Boolean(isActive) : undefined,
     });
 
     reply.code(200).send({
