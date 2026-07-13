@@ -724,18 +724,21 @@ case "breakdown_issue": {
         subIdx++;
 
         try {
-            await apiClient.post(API_ROUTES.HR.SUBTASKS, {
-                      title: `[${task_id}] ${item.title}`,
-                      estimatedHours: 2, // Mặc định 2 giờ mỗi subtask
-                      priority: matchedSubtask.priority || "medium",
-                      assigneeId: matchedSubtask.assigneeId,
-                      parentTaskId: matchedSubtask.projectId,
-                      status: "pending",
-                      planeTaskId: subtaskIdStr
-                    });
-          } catch (err: any) {
-            throw err;
-          }
+            const resJson = await apiClient.post(API_ROUTES.PLANE.ISSUES, {
+                title: item.title,
+                projectId: matchedSubtask.projectId,
+                description: `Tạo tự động từ kết quả phân rã của công việc mẹ [${task_id}].`,
+                assigneeId: matchedSubtask.assigneeId || undefined,
+                priority: matchedSubtask.priority || "medium",
+                parentId: matchedSubtask.id
+            }) as any;
+            
+            if (resJson.success === false) {
+                throw new Error(resJson.message || "Lỗi tạo subtask.");
+            }
+        } catch (err: any) {
+            throw new McpError(ErrorCode.InternalError, "Lỗi tạo subtask: " + err.message);
+        }
       }
 
       return {
