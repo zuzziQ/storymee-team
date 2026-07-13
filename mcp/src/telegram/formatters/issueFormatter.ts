@@ -146,7 +146,7 @@ export function formatMyIssuesDM(issues: any[], memberName: string): string {
 
   if (others.length > 0) {
     msg += `📌 *KHÁC (${others.length}):*\n`;
-    others.slice(0, 5).forEach(f => { msg += formatIssueBlock(f, false); });
+    others.slice(0, 5).forEach(f => { msg += formatIssueBlock(f, true); });
     if (others.length > 5) msg += `   _(và ${others.length - 5} task khác)_\n`;
   }
 
