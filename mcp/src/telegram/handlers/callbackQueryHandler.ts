@@ -61,6 +61,33 @@ async function handleCallbackQuery(callbackQuery: any) {
   }
 
   // Handle Group Commands
+
+  if (data === 'meeting_list') {
+    try {
+      const res = await apiClient.get('/meetings') as any;
+      const meetings = res?.data || [];
+      if (meetings.length === 0) {
+        await sendMessage(chatId, "Không có lịch họp nào sắp tới.");
+        return;
+      }
+      let msg = "📅 *CÁC LỊCH HỌP SẮP TỚI*\n\n";
+      meetings.slice(0, 5).forEach((m: any) => {
+        const d = new Date(m.startTime);
+        msg += `• *${m.title}*\n  ⏰ ${d.toLocaleTimeString()} - ${d.toLocaleDateString()}\n  🎤 Host: ${m.host?.fullName || 'N/A'}\n\n`;
+      });
+      await sendMessage(chatId, msg);
+    } catch (e) {
+      await sendMessage(chatId, "Lỗi khi lấy danh sách lịch họp.");
+    }
+    return;
+  }
+
+  if (data === 'meeting_create') {
+    userFormSession[chatId] = { step: 'await_meeting_title', memberId: member.id };
+    await sendMessage(chatId, "Vui lòng nhập tên cuộc họp:\n(Gõ /cancel để hủy)");
+    return;
+  }
+
   if (data === "group_cmd:check_team") {
     // Simulate user typing /check_team to trigger the report logic
     await handleTelegramMessage({
