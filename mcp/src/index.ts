@@ -20,6 +20,7 @@ dotenv.config();
 
 
 import { startTelegramPolling } from './telegram_agent';
+import { startCronJobs } from './cronJobs';
 
 const CORE_API_URL = process.env.CORE_API_URL || "http://localhost:5100";
 let apiClient = new CoreApiClient({ 
@@ -309,6 +310,13 @@ async function main() {
     console.error("Telegram Webhook/Polling started successfully.");
   } catch (err: any) {
     console.error("Failed to start Telegram Bot:", err.message);
+  }
+
+  // Khởi chạy Cron Jobs (báo cáo tự động)
+  try {
+    startCronJobs(apiClient, sendMessage);
+  } catch (err: any) {
+    console.error("Failed to start Cron Jobs:", err.message);
   }
 }
 

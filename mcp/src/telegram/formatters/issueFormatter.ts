@@ -3,6 +3,14 @@
  * Dùng thống nhất cho: cronJobs, messageHandler, planeTools
  */
 
+/** Escape ký tự đặc biệt trong Markdown mô tả tiêu đề task */
+function esc(text: string): string {
+  if (!text) return '';
+  // Escape * và _ nằm trong free text (không phải bold/italic cố ý)
+  // Chỉ cần thoát các ký tự gây lỗi parse khi nằm giữa nội dung
+  return text.replace(/([_*`\[\]])/g, '\\$1');
+}
+
 export interface FormattedIssue {
   shortId: string;
   title: string;
@@ -74,10 +82,10 @@ export function formatIssueBlock(f: FormattedIssue, showSubs = true): string {
   else if (f.stateGroup === 'backlog') emoji = '🔘';
 
   const dlText = f.deadline !== 'Chưa đặt'
-    ? (f.isOverdue ? ` | 📅 ${f.deadline} ⚠️ *QUÁ HẠN*` : ` | 📅 ${f.deadline}`)
+    ? (f.isOverdue ? ` | 📅 ${f.deadline} ⚠️ QUÁ HẠN` : ` | 📅 ${f.deadline}`)
     : '';
 
-  let block = `${emoji} *${f.shortId}*: ${f.title}\n`;
+  let block = `${emoji} *${f.shortId}*: ${esc(f.title)}\n`;
   block += `   \`${f.stateName}\`${dlText}\n`;
 
   if (showSubs && f.subIssues.length > 0) {
@@ -90,7 +98,7 @@ export function formatIssueBlock(f: FormattedIssue, showSubs = true): string {
       const g = s.State?.group || 'unstarted';
       const isDone = g === 'completed' || g === 'cancelled';
       const sTitle = s.title.length > 30 ? s.title.substring(0, 30) + '…' : s.title;
-      return `${isDone ? '✅' : '⬜'} ${sTitle}`;
+      return `${isDone ? '✅' : '⬜'} ${esc(sTitle)}`;
     }).join(', ');
     const more = total > 4 ? ` +${total - 4}` : '';
     block += `   ↳ [${done}/${total}] ${subList}${more}\n`;
