@@ -64,7 +64,7 @@ async function handleCallbackQuery(callbackQuery: any) {
 
   if (data === 'meeting_list') {
     try {
-      const res = await apiClient.get('/meetings') as any;
+      const res = await apiClient.get('/hr/meetings') as any;
       const meetings = res?.data || [];
       if (meetings.length === 0) {
         await sendMessage(chatId, "Không có lịch họp nào sắp tới.");

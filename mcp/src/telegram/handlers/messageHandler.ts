@@ -535,67 +535,6 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
   const cleanText = text.trim().toLowerCase();
 
 
-
-  if (userFormSession[chatId]?.step === 'await_meeting_title') {
-    const textContent = text.trim();
-    if (textContent === '/cancel') { delete userFormSession[chatId]; await sendMessage(chatId, "Đã hủy."); return; }
-    userFormSession[chatId].step = 'await_meeting_time';
-    userFormSession[chatId].meetingTitle = textContent;
-    await sendMessage(chatId, "Vui lòng nhập thời gian bắt đầu (vd: 15:30 ngày mai, hoặc 2026-07-15T15:30):");
-    return;
-  }
-  
-  if (userFormSession[chatId]?.step === 'await_meeting_time') {
-    const textContent = text.trim();
-    if (textContent === '/cancel') { delete userFormSession[chatId]; await sendMessage(chatId, "Đã hủy."); return; }
-    // Giả lập parse nhanh (trong thực tế có thể dùng chrono-node)
-    let startTime = new Date();
-    startTime.setHours(startTime.getHours() + 1); // default 1h from now
-    
-    // Default end time = start time + 1 hour
-    let endTime = new Date(startTime.getTime() + 60*60*1000);
-    
-    try {
-      await apiClient.post('/meetings', {
-        title: userFormSession[chatId].meetingTitle,
-        startTime: startTime.toISOString(),
-        endTime: endTime.toISOString(),
-        hostId: userFormSession[chatId].memberId,
-        meetLink: "https://meet.google.com/abc-defg-hij" // placeholder
-      });
-      delete userFormSession[chatId];
-      await sendMessage(chatId, "✅ Đã tạo lịch họp thành công!");
-    } catch (e) {
-      delete userFormSession[chatId];
-      await sendMessage(chatId, "❌ Gặp lỗi khi tạo lịch họp.");
-    }
-    return;
-  }
-
-  // Xu ly Form tao thong bao
-  if (userFormSession[chatId]?.step === 'await_announcement_text') {
-    const textContent = text.trim();
-    const senderId = userFormSession[chatId].memberId;
-    delete userFormSession[chatId];
-    
-    if (textContent === '/cancel') {
-      await sendMessage(chatId, "Đã hủy gửi thông báo.");
-      return;
-    }
-    
-    try {
-      await apiClient.post('/announcements', {
-        title: "Thông báo từ Ban Giám Đốc",
-        content: textContent,
-        senderId: senderId
-      });
-      await sendMessage(chatId, "✅ Đã gửi thông báo thành công tới toàn bộ hệ thống!");
-    } catch (e) {
-      await sendMessage(chatId, "❌ Gặp lỗi khi gửi thông báo.");
-    }
-    return;
-  }
-
   if (cleanText === "/lichhop" || cleanText === "📅 lịch họp") {
     await sendMessage(chatId, "📅 *QUẢN LÝ LỊCH HỌP*\n\nVui lòng chọn:", {
       inline_keyboard: [

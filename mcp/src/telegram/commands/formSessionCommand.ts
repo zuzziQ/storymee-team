@@ -367,6 +367,60 @@ export const formSessionCommand: TelegramCommand = {
       return true;
     }
     
+    
+    if (session.step === 'await_meeting_title') {
+      const textContent = text.trim();
+      if (textContent === '/cancel') { delete userFormSession[chatId]; await fetchAxios(`${TELEGRAM_API}/sendMessage`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: chatId, text: "Đã hủy." }) }); return true; }
+      userFormSession[chatId].step = 'await_meeting_time';
+      userFormSession[chatId].meetingTitle = textContent;
+      await fetchAxios(`${TELEGRAM_API}/sendMessage`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: chatId, text: "Vui lòng nhập thời gian bắt đầu (vd: 15:30 ngày mai, hoặc 2026-07-15T15:30):" }) });
+      return true;
+    }
+    
+    if (session.step === 'await_meeting_time') {
+      const textContent = text.trim();
+      if (textContent === '/cancel') { delete userFormSession[chatId]; await fetchAxios(`${TELEGRAM_API}/sendMessage`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: chatId, text: "Đã hủy." }) }); return true; }
+      let startTime = new Date();
+      startTime.setHours(startTime.getHours() + 1);
+      let endTime = new Date(startTime.getTime() + 60*60*1000);
+      try {
+        await apiClient.post('/hr/meetings', {
+          title: userFormSession[chatId].meetingTitle,
+          startTime: startTime.toISOString(),
+          endTime: endTime.toISOString(),
+          hostId: userFormSession[chatId].memberId,
+          meetLink: "https://meet.google.com/abc-defg-hij"
+        });
+        delete userFormSession[chatId];
+        await fetchAxios(`${TELEGRAM_API}/sendMessage`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: chatId, text: "✅ Đã tạo lịch họp thành công!" }) });
+      } catch (e) {
+        delete userFormSession[chatId];
+        await fetchAxios(`${TELEGRAM_API}/sendMessage`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: chatId, text: "❌ Gặp lỗi khi tạo lịch họp." }) });
+      }
+      return true;
+    }
+
+    if (session.step === 'await_announcement_text') {
+      const textContent = text.trim();
+      const senderId = userFormSession[chatId].memberId;
+      delete userFormSession[chatId];
+      if (textContent === '/cancel') {
+        await fetchAxios(`${TELEGRAM_API}/sendMessage`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: chatId, text: "Đã hủy gửi thông báo." }) });
+        return true;
+      }
+      try {
+        await apiClient.post('/hr/announcements', {
+          title: "Thông báo từ Ban Giám Đốc",
+          content: textContent,
+          senderId: senderId
+        });
+        await fetchAxios(`${TELEGRAM_API}/sendMessage`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: chatId, text: "✅ Đã gửi thông báo thành công tới toàn bộ hệ thống!" }) });
+      } catch (e) {
+        await fetchAxios(`${TELEGRAM_API}/sendMessage`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: chatId, text: "❌ Gặp lỗi khi gửi thông báo." }) });
+      }
+      return true;
+    }
+
     // Nếu có session nhưng chưa cover hết các step, mặc định return true để chặn chat tự do
     return true;
   }
