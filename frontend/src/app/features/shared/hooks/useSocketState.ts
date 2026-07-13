@@ -18,8 +18,8 @@ export function useSocketState(
   const fetchServerMeetings = async () => {
     try {
       const res = await coreApiClient.get('/hr/meetings');
-      if (res.data?.status === 'success') {
-        setMeetings(res.data.data);
+      if (res?.status === 'success') {
+        setMeetings(res.data);
       }
     } catch (err) {
       console.error('Lỗi fetch meetings:', err);
@@ -45,8 +45,8 @@ export function useSocketState(
     const checkUpcomingMeetings = async () => {
       try {
         const res = await coreApiClient.get('/hr/meetings');
-        if (res.data?.status !== 'success') return;
-        const allMeetings: Meeting[] = res.data.data;
+        if (res?.status !== 'success') return;
+        const allMeetings: Meeting[] = res.data;
         setMeetings(allMeetings);
 
         const nowMs = Date.now();
