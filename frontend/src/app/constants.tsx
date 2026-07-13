@@ -46,6 +46,13 @@ export interface Task {
   dbId?: string;
   parentTaskId?: string;
   outputSuggested?: string;
+  assigneeId?: string | null;
+  // Review / Output Submission fields
+  outputContent?: string;
+  outputUrls?: string[];
+  submittedAt?: string | null;
+  reviewNote?: string;
+  reviewedAt?: string | null;
 }
 export interface TeamMember {
   id: string; name: string; role: string; skills: string[];

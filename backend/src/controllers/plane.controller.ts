@@ -216,11 +216,16 @@ export class PlaneController {
                     priority: data.priority,
                     estimateHours: data.estimateHours !== undefined ? parseFloat(data.estimateHours) : undefined,
                     targetDate: data.targetDate ? new Date(data.targetDate) : undefined,
-                    startDate: data.startDate ? new Date(data.startDate) : undefined
+                    startDate: data.startDate ? new Date(data.startDate) : undefined,
+                    // Lưu output khi nhân sự nộp review
+                    ...(data.outputContent !== undefined && { outputContent: data.outputContent }),
+                    ...(data.outputUrls !== undefined && { outputUrls: data.outputUrls }),
+                    ...(data.submittedById !== undefined && {
+                        submittedById: data.submittedById,
+                        submittedAt: new Date(),
+                    }),
                 },
-                include: {
-                    State: true
-                }
+                include: { State: true, Assignee: true, Project: true }
             });
 
             // Publish NATS event
@@ -230,6 +235,26 @@ export class PlaneController {
                     const { StringCodec } = require('nats');
                     const sc = StringCodec();
                     fastify.nats.publish('core.team.issue.updated', sc.encode(JSON.stringify(updated)));
+
+                    // Nếu chuyển sang In Review — notify admins
+                    const isInReview = (data.status === 'in_review' || data.status === 'in review');
+                    if (isInReview) {
+                        // Fetch admins có telegramChatId
+                        const admins = await prisma.teamMember.findMany({
+                            where: {
+                                telegramChatId: { not: null },
+                                OR: [
+                                    { role: { contains: 'Founder' } },
+                                    { role: { contains: 'Quản lý' } },
+                                    { role: { contains: 'IT Admin' } },
+                                ]
+                            }
+                        });
+                        fastify.nats.publish('core.team.task.submitted_for_review', sc.encode(JSON.stringify({
+                            issue: updated,
+                            admins: admins.map((a: any) => ({ id: a.id, telegramChatId: a.telegramChatId?.toString(), fullName: a.fullName })),
+                        })));
+                    }
                 } catch (e) {
                     console.error('Failed to publish NATS event', e);
                 }
@@ -237,6 +262,96 @@ export class PlaneController {
             
             return reply.send({ success: true, data: updated });
         } catch (error: any) {
+            return reply.status(500).send({ success: false, message: error.message });
+        }
+    }
+
+    /** Admin duyệt hoặc từ chối task — POST /plane/issues/:id/review */
+    static async reviewIssue(req: FastifyRequest, reply: FastifyReply) {
+        try {
+            const { id } = req.params as { id: string };
+            const { decision, reviewerId, reviewNote } = req.body as {
+                decision: 'approve' | 'reject';
+                reviewerId: string;
+                reviewNote?: string;
+            };
+
+            if (!decision || !reviewerId) {
+                return reply.status(400).send({ success: false, message: 'Missing decision or reviewerId' });
+            }
+
+            // Kiểm tra quyền admin
+            const reviewer = await prisma.teamMember.findUnique({ where: { id: reviewerId } });
+            const isAdmin = reviewer?.role?.includes('Founder') ||
+                reviewer?.role?.includes('Quản lý') ||
+                reviewer?.role?.includes('IT Admin');
+            if (!isAdmin) {
+                return reply.status(403).send({ success: false, message: 'Không có quyền phê duyệt' });
+            }
+
+            // Lấy issue hiện tại
+            const issue = await prisma.plIssue.findUnique({
+                where: { id },
+                include: { Project: { include: { states: true } }, Assignee: true }
+            });
+            if (!issue) return reply.status(404).send({ success: false, message: 'Không tìm thấy task' });
+
+            const states = issue.Project?.states || [];
+            let newStateId: string | undefined;
+            let natsEvent: string;
+
+            if (decision === 'approve') {
+                const doneState = states.find((s: any) => s.group === 'completed') ||
+                    await prisma.plState.findFirst({ where: { projectId: issue.projectId, group: 'completed' } });
+                newStateId = doneState?.id;
+                natsEvent = 'core.team.task.review_approved';
+            } else {
+                const inProgressState = states.find((s: any) => s.group === 'started' && s.name.toLowerCase().includes('progress')) ||
+                    states.find((s: any) => s.group === 'started') ||
+                    await prisma.plState.findFirst({ where: { projectId: issue.projectId, group: 'started' } });
+                newStateId = inProgressState?.id;
+                natsEvent = 'core.team.task.review_rejected';
+            }
+
+            if (!newStateId) {
+                return reply.status(500).send({ success: false, message: 'Không tìm thấy trạng thái phù hợp' });
+            }
+
+            const updated = await prisma.plIssue.update({
+                where: { id },
+                data: {
+                    stateId: newStateId,
+                    reviewNote: reviewNote || null,
+                    reviewedAt: new Date(),
+                    reviewedById: reviewerId,
+                },
+                include: { State: true, Assignee: true }
+            });
+
+            // Publish NATS để Telegram bot notify assignee
+            const fastify: any = req.server;
+            if (fastify.nats) {
+                try {
+                    const { StringCodec } = require('nats');
+                    const sc = StringCodec();
+                    fastify.nats.publish(natsEvent, sc.encode(JSON.stringify({
+                        issue: updated,
+                        reviewer: { fullName: reviewer.fullName, id: reviewer.id },
+                        reviewNote: reviewNote || '',
+                        assignee: issue.Assignee,
+                    })));
+                } catch (e) {
+                    console.error('NATS publish error:', e);
+                }
+            }
+
+            return reply.send({
+                success: true,
+                message: decision === 'approve' ? 'Đã duyệt task, chuyển sang Done.' : 'Đã từ chối, trả về In Progress.',
+                data: updated
+            });
+        } catch (error: any) {
+            console.error('reviewIssue error:', error);
             return reply.status(500).send({ success: false, message: error.message });
         }
     }

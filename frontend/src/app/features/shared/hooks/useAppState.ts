@@ -87,6 +87,12 @@ export function useAppState() {
   const handleRequestArchive = (task: { id: string; dbId?: string }, reason: string) =>
     taskState.handleRequestArchive(task, reason, fetchDbData);
 
+  const handleSubmitForReview = (task: any, content: string, urls: string[], submitterId: string, onRefresh: () => void) =>
+    taskState.handleSubmitForReview(task, content, urls, submitterId, onRefresh || fetchDbData);
+
+  const handleReviewDecision = (taskId: string, taskDbId: string, decision: 'approve' | 'reject', reviewerId: string, note: string, onRefresh: () => void) =>
+    taskState.handleReviewDecision(taskId, taskDbId, decision, reviewerId, note, onRefresh || fetchDbData);
+
   const handleAddProject = () => projectState.handleAddProject(fetchDbData);
   const handleDeleteProject = (id: string) => projectState.handleDeleteProject(id, fetchDbData);
   const handleAnalyzeProject = (id: string) =>
@@ -170,6 +176,9 @@ export function useAppState() {
     handleUpdateSubtaskState,
     handleArchiveTaskDirect,
     handleRequestArchive,
+    handleSubmitForReview,
+    handleReviewDecision,
+    fetchDbData,
 
     // Projects
     projects: projectState.projects,

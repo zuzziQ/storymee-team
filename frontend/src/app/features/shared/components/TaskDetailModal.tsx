@@ -8,6 +8,7 @@ import {
 } from '../../../constants';
 import { coreApiClient } from '../../../../lib/apiClient';
 import { API_ROUTES } from '@/lib/apiClient';
+import TaskReviewPanel from './TaskReviewPanel';
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL === '/api' || process.env.NEXT_PUBLIC_API_URL === '/' || (process.env.NEXT_PUBLIC_API_URL || '').includes('//hub.storymee.com') || !process.env.NEXT_PUBLIC_API_URL ? 'https://dev-hub.storymee.com' : process.env.NEXT_PUBLIC_API_URL) || 'http://localhost:4500';
 
@@ -31,7 +32,11 @@ export default function TaskDetailModal({
   teamMembers,
   projects,
   onAddRoutingLog,
-  omniConfig
+  omniConfig,
+  activeUser,
+  onSubmitForReview,
+  onReviewDecision,
+  onRefresh,
 }: {
   task: Task;
   onClose: () => void;
@@ -41,6 +46,10 @@ export default function TaskDetailModal({
   projects: Project[];
   onAddRoutingLog?: (log: any, sentTokens: number) => void;
   omniConfig?: any;
+  activeUser?: any;
+  onSubmitForReview?: (task: Task, content: string, urls: string[], submitterId: string, onRefresh: () => void) => Promise<void>;
+  onReviewDecision?: (taskId: string, taskDbId: string, decision: 'approve' | 'reject', reviewerId: string, note: string, onRefresh: () => void) => Promise<void>;
+  onRefresh?: () => void;
 }) {
   const [subtasks, setSubtasks] = useState<SubTask[]>(task.subtasks);
   const [aiLoading, setAiLoading] = useState(false);
@@ -52,6 +61,15 @@ export default function TaskDetailModal({
   const [activeSection, setActiveSection] = useState<'subtasks' | 'notes' | 'resources' | 'activities'>('subtasks');
   const [taskDescription, setTaskDescription] = useState(task.description || '');
   const [taskOutput, setTaskOutput] = useState(task.outputSuggested || '');
+  const [showSubmitPanel, setShowSubmitPanel] = useState(false);
+
+  // Admin check: role chứa Founder, Quản lý, hoặc IT Admin
+  const isAdmin = !!(activeUser?.role && (
+    activeUser.role.includes('Founder') ||
+    activeUser.role.includes('Quản lý') ||
+    activeUser.role.includes('IT Admin')
+  ));
+  const isInReview = task.status === 'In Review';
   
   const [notes, setNotes] = useState<Note[]>([
     { id: 'n1', text: 'Cần review lại với team trước khi submit.', author: task.assignee, time: '29/06 08:30' }
@@ -407,44 +425,42 @@ export default function TaskDetailModal({
           </div>
 
           {/* Status Pipeline Step Tracker */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(255, 255, 255, 0.02)', padding: '5px 8px', borderRadius: 8, border: '1px solid rgba(255, 255, 255, 0.04)', width: 'fit-content' }}>
-            {(['Backlog', 'Todo', 'In Progress', 'In Review', 'Done'] as TaskStatus[]).map((status, index, arr) => {
-              const isActive = task.status === status;
-              const isPassed = arr.indexOf(task.status) >= index;
-              return (
-                <React.Fragment key={status}>
-                  <button
-                    onClick={() => handleTaskUpdate({ status })}
-                    style={{
-                      padding: '5px 10px',
-                      fontSize: '11px',
-                      fontWeight: 600,
-                      borderRadius: '6px',
-                      border: 'none',
-                      background: isActive 
-                        ? 'linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)' 
-                        : 'transparent',
-                      color: isActive 
-                        ? '#ffffff' 
-                        : isPassed 
-                          ? '#22c55e' 
-                          : '#71717a',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 4
-                    }}
-                  >
-                    {isPassed && !isActive && <Check size={11} color="#22c55e" />}
-                    {status}
-                  </button>
-                  {index < arr.length - 1 && (
-                    <span style={{ color: '#3f3f46', fontSize: '11px', userSelect: 'none' }}>➔</span>
-                  )}
-                </React.Fragment>
-              );
-            })}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(255, 255, 255, 0.02)', padding: '5px 8px', borderRadius: 8, border: '1px solid rgba(255, 255, 255, 0.04)', width: 'fit-content' }}>
+              {(['Backlog', 'Todo', 'In Progress', 'In Review', 'Done'] as TaskStatus[]).map((status, index, arr) => {
+                const isActive = task.status === status;
+                const isPassed = arr.indexOf(task.status) >= index;
+                const isBlocked = task.status === 'In Review' && status === 'Done' && !isAdmin;
+                return (
+                  <React.Fragment key={status}>
+                    <button
+                      onClick={() => {
+                        if (isBlocked) { alert('⚠️ Chỉ Admin mới có thể duyệt task sang Done.'); return; }
+                        if (status === 'In Review' && task.status === 'In Progress') { setShowSubmitPanel(true); return; }
+                        handleTaskUpdate({ status });
+                      }}
+                      style={{ padding: '5px 10px', fontSize: '11px', fontWeight: 600, borderRadius: '6px', border: 'none', background: isActive ? 'linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)' : 'transparent', color: isActive ? '#ffffff' : isPassed ? '#22c55e' : isBlocked ? '#52525b' : '#71717a', cursor: isBlocked ? 'not-allowed' : 'pointer', transition: 'all 0.15s', display: 'flex', alignItems: 'center', gap: 4 }}
+                    >
+                      {isPassed && !isActive && <Check size={11} color="#22c55e" />}
+                      {isBlocked && '🔒'} {status}
+                    </button>
+                    {index < arr.length - 1 && (<span style={{ color: '#3f3f46', fontSize: '11px', userSelect: 'none' }}>➔</span>)}
+                  </React.Fragment>
+                );
+              })}
+            </div>
+
+            <TaskReviewPanel
+              task={task}
+              isAdmin={isAdmin}
+              activeUser={activeUser}
+              onSubmitForReview={onSubmitForReview}
+              onReviewDecision={onReviewDecision}
+              onRefresh={onRefresh}
+              onClose={onClose}
+              showSubmitPanel={showSubmitPanel}
+              onOpenSubmitPanel={setShowSubmitPanel}
+            />
           </div>
         </div>
 

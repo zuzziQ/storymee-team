@@ -10,6 +10,7 @@ const planeRoutes: FastifyPluginAsync = async (fastify) => {
     fastify.get('/issues', PlaneController.getIssues);
     fastify.post('/issues', PlaneController.createIssue);
     fastify.patch('/issues/:id', PlaneController.updateIssue);
+    fastify.post('/issues/:id/review', PlaneController.reviewIssue); // Admin duyệt task
 };
 
 export default planeRoutes;

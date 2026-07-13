@@ -45,6 +45,7 @@ export function useTaskState() {
             title: issue.title,
             description: issue.description || '',
             assignee: issue.Assignee ? issue.Assignee.fullName : 'Chưa phân công',
+            assigneeId: issue.assigneeId || null,
             priority: (issue.priority.charAt(0).toUpperCase() + issue.priority.slice(1)),
             status: mappedStatus,
             deadline: issue.targetDate ? issue.targetDate.split('T')[0] : '',
@@ -52,6 +53,12 @@ export function useTaskState() {
             parentTaskId: null,
             projectId: issue.projectId || 'default_no_project',
             outputSuggested: '',
+            // Review fields
+            outputContent: issue.outputContent || '',
+            outputUrls: Array.isArray(issue.outputUrls) ? issue.outputUrls : [],
+            submittedAt: issue.submittedAt || null,
+            reviewNote: issue.reviewNote || '',
+            reviewedAt: issue.reviewedAt || null,
             subtasks
           };
         });
@@ -193,6 +200,61 @@ export function useTaskState() {
     }
   };
 
+  /** Nộp output và chuyển task sang "In Review" — nhân sự gọi */
+  const handleSubmitForReview = async (
+    task: Task,
+    outputContent: string,
+    outputUrls: string[], // array of URL strings
+    submitterId: string,
+    onRefresh: () => void
+  ) => {
+    const dbId = task.dbId || task.id;
+    try {
+      await coreApiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${dbId}`, {
+        status: 'in_review',
+        outputContent,
+        outputUrls,
+        submittedById: submitterId,
+      });
+      setTasks(prev => prev.map(t =>
+        t.id === task.id
+          ? { ...t, status: 'In Review' as any, outputContent, outputUrls, submittedAt: new Date().toISOString() }
+          : t
+      ));
+      onRefresh();
+    } catch (err) {
+      console.error('Lỗi nộp output:', err);
+      throw err;
+    }
+  };
+
+  /** Admin duyệt hoặc từ chối task */
+  const handleReviewDecision = async (
+    taskId: string,
+    taskDbId: string,
+    decision: 'approve' | 'reject',
+    reviewerId: string,
+    reviewNote: string,
+    onRefresh: () => void
+  ) => {
+    try {
+      await coreApiClient.post(`${API_ROUTES.PLANE.ISSUES}/${taskDbId}/review`, {
+        decision,
+        reviewerId,
+        reviewNote,
+      });
+      if (decision === 'approve') {
+        setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: 'Done' as any } : t));
+      } else {
+        setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: 'In Progress' as any, reviewNote } : t));
+      }
+      onRefresh();
+    } catch (err) {
+      console.error('Lỗi duyệt task:', err);
+      throw err;
+    }
+  };
+
   return {
     tasks,
     setTasks,
@@ -204,5 +266,7 @@ export function useTaskState() {
     handleUpdateSubtaskState,
     handleArchiveTaskDirect,
     handleRequestArchive,
+    handleSubmitForReview,
+    handleReviewDecision,
   };
 }

@@ -108,6 +108,9 @@ export default function StorymeeTeamPage() {
     handleAnalyzeProject,
     handleArchiveTaskDirect,
     handleRequestArchive,
+    handleSubmitForReview,
+    handleReviewDecision,
+    fetchDbData,
     handleCheckoutOffice,
     appNotifications,
     setAppNotifications,
@@ -453,6 +456,10 @@ export default function StorymeeTeamPage() {
               compressedTokens: Math.round(prev.compressedTokens + saved)
             }));
           }}
+          activeUser={activeUser}
+          onSubmitForReview={handleSubmitForReview}
+          onReviewDecision={handleReviewDecision}
+          onRefresh={fetchDbData}
         />
       )}
 
