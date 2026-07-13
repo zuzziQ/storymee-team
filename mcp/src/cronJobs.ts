@@ -31,6 +31,35 @@ function buildHierarchy(rawTasks: any[]): any[] {
   return topLevelIssues;
 }
 
+/** Lấy lịch họp trong ngày hôm nay */
+async function fetchTodayMeetings(apiClient: CoreApiClient): Promise<any[]> {
+  try {
+    const res = await apiClient.get('/hr/meetings') as any;
+    const meetings: any[] = res?.data || [];
+    const nowVN = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
+    const todayStr = nowVN.toISOString().split('T')[0];
+    return meetings.filter((m: any) => {
+      const startDate = new Date(m.startTime || m.start_time || m.createdAt);
+      return startDate.toISOString().split('T')[0] === todayStr;
+    }).sort((a: any, b: any) => {
+      return new Date(a.startTime || a.start_time).getTime() - new Date(b.startTime || b.start_time).getTime();
+    });
+  } catch {
+    return [];
+  }
+}
+
+/** Format block lịch họp cho báo cáo */
+function formatMeetingBlock(m: any): string {
+  const start = new Date(m.startTime || m.start_time);
+  const timeStr = start.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Ho_Chi_Minh' });
+  const title = m.title || 'Cuộc họp';
+  const host = m.host?.fullName || m.hostName || '';
+  const location = m.location ? ` 📍 ${m.location}` : '';
+  const hostStr = host ? ` (Host: ${host})` : '';
+  return `📅 *${timeStr}* — ${title}${hostStr}${location}\n`;
+}
+
 /** Fetch tất cả data cần thiết */
 async function fetchAllData(apiClient: CoreApiClient) {
   const [membersRes, tasksRes, attendanceRes] = await Promise.all([
@@ -69,8 +98,18 @@ export function startCronJobs(
     }
     try {
       console.log("[Cron 9h Nhóm] Đang tạo báo cáo đầu ngày...");
-      const data = await fetchAllData(apiClient);
-      const msg = formatGroupMorningReport(data as TeamReportData);
+      const [data, todayMeetings] = await Promise.all([
+        fetchAllData(apiClient),
+        fetchTodayMeetings(apiClient),
+      ]);
+      let msg = '';
+      // Phần lịch họp đưa lên đầu nếu có
+      if (todayMeetings.length > 0) {
+        msg += `📆 *LỊCH HỌP HÔM NAY (${todayMeetings.length} cuộc):*\n`;
+        todayMeetings.forEach((m: any) => { msg += formatMeetingBlock(m); });
+        msg += '\n';
+      }
+      msg += formatGroupMorningReport(data as TeamReportData);
       await sendMessage(GROUP_ID, msg);
       console.log("[Cron 9h Nhóm] ✅ Đã gửi báo cáo đầu ngày vào nhóm.");
     } catch (err) {
@@ -112,8 +151,19 @@ export function startCronJobs(
         const inProgress = parsed.filter(f => !f.isOverdue && !f.isDueToday && f.stateGroup === 'started');
         const others = parsed.filter(f => !f.isOverdue && !f.isDueToday && f.stateGroup !== 'started');
 
+        // Fetch lịch họp hôm nay
+        const todayMeetings = await fetchTodayMeetings(apiClient);
+
         let msg = `☀️ *BÁO CÁO ĐẦU NGÀY (8h30)*\n`;
-        msg += `Chào *${m.fullName}*! Dưới đây là công việc cần tập trung hôm nay:\n`;
+        msg += `Chào *${m.fullName}*! Dưới đây là công việc cần tập trung hôm nay:\n\n`;
+
+        // Lịch họp đặt LÊN ĐẦU
+        if (todayMeetings.length > 0) {
+          msg += `📆 *LỊCH HỌP HÔM NAY (${todayMeetings.length} cuộc):*\n`;
+          todayMeetings.forEach((mtg: any) => { msg += formatMeetingBlock(mtg); });
+          msg += '\n';
+        }
+
         msg += `📊 Tổng: *${activeIssues.length} task* đang mở\n\n`;
 
         if (overdue.length > 0) {
@@ -227,9 +277,67 @@ export function startCronJobs(
     }
   }, { timezone: "Asia/Ho_Chi_Minh" });
 
-  console.log("✅ Đã đăng ký 4 Cron Jobs:");
-  console.log("   • 8:30 sáng → DM cá nhân: nhắc việc đầu ngày (có subtask)");
-  console.log("   • 9:00 sáng → Nhóm: tổng kết đầu ngày toàn team");
+  // ─────────────────────────────────────────────────────────────────────────
+  // CRON 5: Mỗi phút → Kiểm tra meeting nào sắp bắt đầu trong 15 phút
+  // ─────────────────────────────────────────────────────────────────────────
+  // Dùng Set để tránh gửi trùng lặp trong cùng phút
+  const notifiedMeetingIds = new Set<string>();
+
+  cron.schedule('* * * * *', async () => {
+    try {
+      const nowVN = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
+      const in15min = new Date(nowVN.getTime() + 15 * 60 * 1000);
+      const meetings = await fetchTodayMeetings(apiClient);
+
+      for (const m of meetings) {
+        const startTime = new Date(m.startTime || m.start_time);
+        const diffMs = startTime.getTime() - nowVN.getTime();
+        const diffMin = Math.floor(diffMs / 60000);
+
+        // Chỉ nhắc khi còn 14–16 phút (cron 1-phút có thể sai +/-1)
+        if (diffMin >= 14 && diffMin <= 16 && !notifiedMeetingIds.has(m.id)) {
+          notifiedMeetingIds.add(m.id);
+          const title = m.title || 'Cuộc họp';
+          const timeStr = startTime.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Ho_Chi_Minh' });
+          const notifMsg = `⏰ *NHẮC LỊCH HỌP*\n\n📅 *${title}*\nSẽ bắt đầu lúc *${timeStr}* (còn 15 phút)\n\nVui lòng chuẩn bị!`;
+
+          // Gửi vào nhóm
+          if (GROUP_ID) {
+            await sendMessage(GROUP_ID, notifMsg);
+          }
+
+          // Gửi DM cho tất cả thành viên có telegramChatId
+          const membersRes = await apiClient.get(API_ROUTES.HR.TEAM_MEMBERS) as any;
+          const members: any[] = membersRes?.data || [];
+          for (const member of members) {
+            if (member.telegramChatId) {
+              try {
+                await sendMessage(Number(member.telegramChatId), notifMsg);
+              } catch {}
+            }
+          }
+          console.log(`[Cron Meeting] ✅ Đã gửi nhắc: "${title}" lúc ${timeStr}`);
+        }
+      }
+      // Xóa meeting đã qua để tránh bộ nhớ tăng mãi
+      notifiedMeetingIds.forEach(id => {
+        const m = meetings.find((x: any) => x.id === id);
+        if (m) {
+          const start = new Date(m.startTime || m.start_time);
+          if (start.getTime() < nowVN.getTime() - 30 * 60 * 1000) {
+            notifiedMeetingIds.delete(id);
+          }
+        }
+      });
+    } catch (err) {
+      // Silent - tránh spam log
+    }
+  }, { timezone: "Asia/Ho_Chi_Minh" });
+
+  console.log("✅ Đã đăng ký 5 Cron Jobs:");
+  console.log("   • 8:30 sáng → DM cá nhân: nhắc việc đầu ngày + lịch họp");
+  console.log("   • 9:00 sáng → Nhóm: tổng kết đầu ngày + lịch họp");
   console.log("   • 17:00 chiều → Nhóm: tổng kết cuối ngày");
-  console.log("   • 17:30 chiều → DM cá nhân: nhắc tiến độ cuối ngày (có subtask)");
+  console.log("   • 17:30 chiều → DM cá nhân: nhắc tiến độ cuối ngày");
+  console.log("   • */1 phút → Nhắc meeting 15 phút trước khi bắt đầu");
 }

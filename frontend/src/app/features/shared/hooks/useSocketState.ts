@@ -37,6 +37,49 @@ export function useSocketState(
     }
   };
 
+  // Poll meetings mỗi 30 giây và push notification khi sắp tới
+  useEffect(() => {
+    if (!authReady || !activeUser) return;
+    const notifiedIds = new Set<string>();
+
+    const checkUpcomingMeetings = async () => {
+      try {
+        const res = await coreApiClient.get('/hr/meetings');
+        if (res.data?.status !== 'success') return;
+        const allMeetings: Meeting[] = res.data.data;
+        setMeetings(allMeetings);
+
+        const nowMs = Date.now();
+        allMeetings.forEach((m: any) => {
+          const startMs = new Date(m.startTime || m.start_time || m.createdAt).getTime();
+          const diffMin = Math.floor((startMs - nowMs) / 60000);
+          // Nhắc khi còn 14–16 phút, chỉ nhắc 1 lần
+          if (diffMin >= 14 && diffMin <= 16 && !notifiedIds.has(m.id)) {
+            notifiedIds.add(m.id);
+            const timeStr = new Date(startMs).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+            setAppNotifications(prev => {
+              const updated = [{
+                id: Date.now(),
+                title: '📅 Lịch họp sắp bắt đầu',
+                message: `"${m.title || 'Cuộc họp'}" bắt đầu lúc ${timeStr} — còn 15 phút`,
+                type: 'meeting',
+                timestamp: new Date(),
+                read: false,
+              }, ...prev];
+              localStorage.setItem('storymee_app_notifications', JSON.stringify(updated));
+              return updated;
+            });
+            setShowNotifications(true);
+          }
+        });
+      } catch {}
+    };
+
+    checkUpcomingMeetings();
+    const interval = setInterval(checkUpcomingMeetings, 60_000); // mỗi 60 giây
+    return () => clearInterval(interval);
+  }, [authReady, activeUser]);
+
   useEffect(() => {
     if (!authReady || !activeUser) return;
 
