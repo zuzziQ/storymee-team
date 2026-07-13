@@ -7,6 +7,7 @@ import {
   calculateWorkingHours, checkRealtimeOverdueDeadlines 
 } from '../../telegram_agent';
 import { executeMcpTool } from '../../index';
+import { formatMyIssuesDM, isDoneGroup, parseIssue } from '../formatters/issueFormatter';
 import * as dotenv from "dotenv";
 
 dotenv.config();
@@ -491,15 +492,27 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
   if (cleanText === "📝 công việc của tôi" || cleanText === "/cong_viec") {
     await sendMessage(chatId, "🔍 Đang truy vấn danh sách công việc của bạn...");
     try {
-      const result = await executeMcpTool("get_my_issues", { employee_name: member.fullName }, member);
-      const text = result.content[0].text;
+      // Fetch trực tiếp từ API để có đầy đủ subIssues
+      const allMembers = await getCachedMembers();
+      const issuesRes = await apiClient.get(API_ROUTES.PLANE.ISSUES) as any;
+      const rawTasks: any[] = issuesRes?.data || [];
       
-      // Chỉ thay tiêu đề, giữ nguyên format compact từ MCP tool
-      const formattedText = text.replace(/Danh sách task của [^:]+:/i, `📋 *CÔNG VIỆC CỦA BẠN:*`);
+      // Flatten parent + subIssues
+      const allIssues: any[] = [];
+      rawTasks.forEach((t: any) => {
+        allIssues.push(t);
+        (t.subIssues || []).forEach((sub: any) => {
+          allIssues.push({ ...sub, Project: sub.Project || t.Project });
+        });
+      });
       
+      // Lấy issues của member này
+      const myIssues = allIssues.filter((t: any) => t.assigneeId === member.id);
+      
+      const formattedText = formatMyIssuesDM(myIssues, member.fullName);
       await sendMessage(chatId, formattedText);
     } catch (e: any) {
-      console.error("Lỗi fetch task qua MCP:", e);
+      console.error("Lỗi fetch task:", e);
       await sendMessage(chatId, "❌ Gặp lỗi khi truy vấn danh sách công việc.");
     }
     return;

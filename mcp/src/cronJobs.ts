@@ -1,168 +1,218 @@
 import cron from "node-cron";
 import { CoreApiClient, API_ROUTES } from "@storymee/api-client";
+import {
+  parseIssue,
+  isDoneGroup,
+  formatIssueBlock,
+  formatMyIssuesDM,
+  formatGroupMorningReport,
+  formatGroupEveningReport,
+  type TeamReportData
+} from "./telegram/formatters/issueFormatter";
 
-/**
- * Hàm chuẩn hóa status từ State DB object
- * API trả về State: { group: "started"|"completed"|"unstarted"|"backlog"|"cancelled", name: "In Progress"|... }
- */
-function getStatusFromState(state: { group: string; name: string } | null | undefined): string {
-  if (!state) return 'pending';
-  const g = state.group;
-  const n = state.name.toLowerCase();
-  if (g === 'backlog') return 'backlog';
-  if (n === 'in review' || n === 'in_review') return 'in_review';
-  if (g === 'started') return 'working';
-  if (g === 'completed') return 'done';
-  if (g === 'cancelled') return 'cancelled';
-  return 'pending'; // unstarted = Todo
+/** Flatten parent issues + subIssues thành flat array */
+function flattenIssues(rawTasks: any[]): any[] {
+  const all: any[] = [];
+  rawTasks.forEach((t: any) => {
+    all.push(t);
+    (t.subIssues || []).forEach((sub: any) => {
+      all.push({ ...sub, Project: sub.Project || t.Project });
+    });
+  });
+  return all;
 }
 
-function isDoneStatus(state: any): boolean {
-  const status = getStatusFromState(state);
-  return status === 'done' || status === 'cancelled';
+/** Fetch tất cả data cần thiết */
+async function fetchAllData(apiClient: CoreApiClient) {
+  const [membersRes, tasksRes, attendanceRes] = await Promise.all([
+    apiClient.get(API_ROUTES.HR.TEAM_MEMBERS) as Promise<any>,
+    apiClient.get(API_ROUTES.PLANE.ISSUES) as Promise<any>,
+    apiClient.get(API_ROUTES.HR.ATTENDANCE) as Promise<any>,
+  ]);
+
+  const members: any[] = membersRes?.data || [];
+  const rawTasks: any[] = tasksRes?.data || [];
+  const attendance: any[] = attendanceRes?.data || [];
+  const allIssues = flattenIssues(rawTasks);
+  const todayStr = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }))
+    .toISOString().split('T')[0];
+
+  return { members, rawTasks, allIssues, attendance, todayStr };
 }
 
-export function startCronJobs(apiClient: CoreApiClient, sendMessage: (chatId: number, text: string, replyMarkup?: any) => Promise<void>) {
-  console.log("🕒 Khởi động hệ thống Report tự động (Cron Jobs)...");
+export function startCronJobs(
+  apiClient: CoreApiClient,
+  sendMessage: (chatId: number, text: string, replyMarkup?: any) => Promise<void>
+) {
+  console.log("🕒 Khởi động hệ thống Report tự động (Cron Jobs v2)...");
 
-  // Cron buổi sáng 8:30 (Thứ 2 - Thứ 7)
+  const GROUP_ID = process.env.TELEGRAM_GROUP_ID
+    ? Number(process.env.TELEGRAM_GROUP_ID)
+    : null;
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // CRON 1: 9:00 sáng → Gửi nhóm: Tổng kết đầu ngày (Thứ 2 - Thứ 7)
+  // ─────────────────────────────────────────────────────────────────────────
+  cron.schedule('0 9 * * 1-6', async () => {
+    if (!GROUP_ID) {
+      console.log("[Cron 9h Nhóm] TELEGRAM_GROUP_ID chưa cấu hình, bỏ qua.");
+      return;
+    }
+    try {
+      console.log("[Cron 9h Nhóm] Đang tạo báo cáo đầu ngày...");
+      const data = await fetchAllData(apiClient);
+      const msg = formatGroupMorningReport(data as TeamReportData);
+      await sendMessage(GROUP_ID, msg);
+      console.log("[Cron 9h Nhóm] ✅ Đã gửi báo cáo đầu ngày vào nhóm.");
+    } catch (err) {
+      console.error("[Cron 9h Nhóm] Lỗi:", err);
+    }
+  }, { timezone: "Asia/Ho_Chi_Minh" });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // CRON 2: 8:30 sáng → Gửi DM cá nhân: Nhắc việc đầu ngày (Thứ 2 - Thứ 7)
+  // ─────────────────────────────────────────────────────────────────────────
   cron.schedule('30 8 * * 1-6', async () => {
     try {
-      console.log("Chạy Cron buổi sáng: 8:30");
-      const res = await apiClient.get(API_ROUTES.HR.TEAM_MEMBERS) as any;
-      const members = res.data || [];
-      const todayStr = new Date().toISOString().split('T')[0];
-      
-      const tasksRes = await apiClient.get(API_ROUTES.PLANE.ISSUES) as any;
-      // allTasks bao gồm cả parent issues + subIssues (API flatten hoặc nested)
-      const rawTasks = tasksRes.data || [];
-      
-      // Flatten: lấy cả parent và subIssues
-      const allTasks: any[] = [];
-      rawTasks.forEach((t: any) => {
-        allTasks.push(t);
-        (t.subIssues || []).forEach((sub: any) => allTasks.push(sub)); // API field là subIssues
-      });
-
-      console.log(`[Cron Sáng] Tìm thấy ${members.length} thành viên, ${allTasks.length} tasks`);
+      console.log("[Cron 8h30 DM] Đang gửi nhắc nhở đầu ngày cho từng thành viên...");
+      const { members, allIssues, todayStr } = await fetchAllData(apiClient);
+      console.log(`[Cron 8h30 DM] ${members.length} thành viên, ${allIssues.length} issues`);
 
       for (const m of members) {
         if (!m.telegramChatId) continue;
-        
-        // Filter task chưa done, assignee là member này
-        const myTasks = allTasks.filter((t: any) =>
-          t.assigneeId === m.id && !isDoneStatus(t.State)
-        );
-        // Deadline hôm nay dùng targetDate (không phải deadline)
-        const todayTasks = myTasks.filter((t: any) =>
-          t.targetDate && t.targetDate.startsWith(todayStr)
-        );
-        
-        let msg = `🌅 *Báo cáo đầu ngày (8h30): ${m.fullName}*\n\n`;
-        msg += `👉 Hệ thống tự động nhắc nhở đầu ngày cho ${m.fullName}. `;
-        
-        if (myTasks.length > 0) {
-          msg += `Số task cần làm: ${myTasks.length}.\n\n`;
-          if (todayTasks.length > 0) {
-            msg += `📋 *Nhiệm vụ deadline hôm nay (${todayStr}):*\n`;
-            todayTasks.slice(0, 5).forEach((t: any, idx: number) => {
-              const projIdent = typeof t.Project === 'string' ? t.Project : (t.Project?.identifier || '');
-              const taskId = projIdent && t.sequenceId ? `${projIdent}-${t.sequenceId}` : t.id.substring(0, 8);
-              msg += `${idx + 1}. *${taskId}*: ${t.title}\n`;
-            });
-            if (todayTasks.length > 5) msg += `... và ${todayTasks.length - 5} task khác\n`;
-          } else {
-            msg += `📋 *${myTasks.length} task đang mở* (không có deadline hôm nay):\n`;
-            myTasks.slice(0, 3).forEach((t: any, idx: number) => {
-              const projIdent = typeof t.Project === 'string' ? t.Project : (t.Project?.identifier || '');
-              const taskId = projIdent && t.sequenceId ? `${projIdent}-${t.sequenceId}` : t.id.substring(0, 8);
-              msg += `${idx + 1}. *${taskId}*: ${t.title}\n`;
-            });
-            if (myTasks.length > 3) msg += `... và ${myTasks.length - 3} task khác\n`;
-          }
-        } else {
-          msg += `Chưa có task nào được giao. Chúc một ngày làm việc hiệu quả!\n`;
+        const chatId = Number(m.telegramChatId);
+
+        const myIssues = allIssues.filter((t: any) => t.assigneeId === m.id);
+        const activeIssues = myIssues.filter((t: any) => !isDoneGroup(t.State?.group || 'unstarted'));
+
+        if (activeIssues.length === 0) {
+          await sendMessage(chatId,
+            `☀️ *BÁO CÁO ĐẦU NGÀY (8h30)*\n\nChào *${m.fullName}*! Hôm nay bạn không có công việc nào đang mở. Chúc một ngày mới tràn đầy năng lượng! 🎉`,
+            { inline_keyboard: [[{ text: "🌅 Vào ca (Check-in)", callback_data: "attendance_direct:present" }]] }
+          );
+          continue;
         }
-        
-        const replyMarkup = {
-          inline_keyboard: [
-            [{ text: "🌅 Vào ca (Check-in)", callback_data: `attendance_direct:present` }]
-          ]
-        };
-        await sendMessage(Number(m.telegramChatId), msg, replyMarkup);
+
+        const parsed = activeIssues.map((i: any) => parseIssue(i, members));
+        const overdue = parsed.filter(f => f.isOverdue);
+        const dueToday = parsed.filter(f => f.isDueToday);
+        const inProgress = parsed.filter(f => !f.isOverdue && !f.isDueToday && f.stateGroup === 'started');
+        const others = parsed.filter(f => !f.isOverdue && !f.isDueToday && f.stateGroup !== 'started');
+
+        let msg = `☀️ *BÁO CÁO ĐẦU NGÀY (8h30)*\n`;
+        msg += `Chào *${m.fullName}*! Dưới đây là công việc cần tập trung hôm nay:\n`;
+        msg += `📊 Tổng: *${activeIssues.length} task* đang mở\n\n`;
+
+        if (overdue.length > 0) {
+          msg += `🚨 *QUÁ HẠN — cần xử lý ngay (${overdue.length}):*\n`;
+          overdue.forEach(f => { msg += formatIssueBlock(f, true); });
+          msg += '\n';
+        }
+
+        if (dueToday.length > 0) {
+          msg += `⏰ *DEADLINE HÔM NAY (${dueToday.length}):*\n`;
+          dueToday.forEach(f => { msg += formatIssueBlock(f, true); });
+          msg += '\n';
+        }
+
+        if (inProgress.length > 0) {
+          msg += `🟡 *ĐANG TIẾN HÀNH (${inProgress.length}):*\n`;
+          inProgress.forEach(f => { msg += formatIssueBlock(f, true); });
+          msg += '\n';
+        }
+
+        if (others.length > 0) {
+          msg += `📌 *CÔNG VIỆC KHÁC (${others.length}):*\n`;
+          others.slice(0, 4).forEach(f => { msg += formatIssueBlock(f, false); });
+          if (others.length > 4) msg += `   _(và ${others.length - 4} task khác)_\n`;
+        }
+
+        msg += `\n💪 Chúc bạn một ngày làm việc hiệu quả!`;
+
+        await sendMessage(chatId, msg, {
+          inline_keyboard: [[{ text: "🌅 Vào ca (Check-in)", callback_data: "attendance_direct:present" }]]
+        });
       }
+      console.log("[Cron 8h30 DM] ✅ Đã gửi xong báo cáo đầu ngày cho tất cả thành viên.");
     } catch (err) {
-      console.error("Lỗi chạy Cron sáng:", err);
+      console.error("[Cron 8h30 DM] Lỗi:", err);
     }
   }, { timezone: "Asia/Ho_Chi_Minh" });
 
-  // Cron buổi chiều 17:00 (Thứ 2 - Thứ 7)
+  // ─────────────────────────────────────────────────────────────────────────
+  // CRON 3: 17:00 chiều → Gửi nhóm: Tổng kết cuối ngày (Thứ 2 - Thứ 7)
+  // ─────────────────────────────────────────────────────────────────────────
   cron.schedule('0 17 * * 1-6', async () => {
+    if (!GROUP_ID) {
+      console.log("[Cron 17h Nhóm] TELEGRAM_GROUP_ID chưa cấu hình, bỏ qua.");
+      return;
+    }
     try {
-      console.log("Chạy Cron buổi chiều: 17:00");
-      const res = await apiClient.get(API_ROUTES.HR.TEAM_MEMBERS) as any;
-      const members = res.data || [];
-      
-      const tasksRes = await apiClient.get(API_ROUTES.PLANE.ISSUES) as any;
-      const rawTasks = tasksRes.data || [];
-      const todayStr = new Date().toISOString().split('T')[0];
-
-      // Flatten parent + subIssues
-      const allTasks: any[] = [];
-      rawTasks.forEach((t: any) => {
-        allTasks.push(t);
-        (t.subIssues || []).forEach((sub: any) => allTasks.push(sub));
-      });
-
-      console.log(`[Cron Chiều] Tìm thấy ${members.length} thành viên, ${allTasks.length} tasks`);
-      
-      for (const m of members) {
-        if (!m.telegramChatId) continue;
-        
-        const myTasks = allTasks.filter((t: any) => t.assigneeId === m.id);
-        
-        // Task done hôm nay: State.group === 'completed' và updatedAt hôm nay
-        const doneTodayTasks = myTasks.filter((t: any) =>
-          isDoneStatus(t.State) && t.updatedAt && t.updatedAt.startsWith(todayStr)
-        );
-        // Task còn mở: không phải done, không phải cancelled
-        const openTasks = myTasks.filter((t: any) => !isDoneStatus(t.State));
-        
-        let msg = `🌇 *Nhắc tiến độ cuối ngày (17h00): ${m.fullName}*\n\n`;
-        msg += `Hệ thống nhắc nhở cập nhật trạng thái cuối ngày cho ${m.fullName}.\n\n`;
-        
-        if (doneTodayTasks.length > 0) {
-          msg += `✅ *Đã hoàn thành hôm nay: ${doneTodayTasks.length} task*\n`;
-          doneTodayTasks.slice(0, 3).forEach((t: any, idx: number) => {
-            msg += `${idx + 1}. ~~${t.title}~~\n`;
-          });
-          msg += `\n`;
-        }
-        
-        if (openTasks.length > 0) {
-          msg += `⏳ *Còn ${openTasks.length} task đang mở:*\n`;
-          openTasks.slice(0, 5).forEach((t: any, idx: number) => {
-            const projIdent = typeof t.Project === 'string' ? t.Project : (t.Project?.identifier || '');
-            const taskId = projIdent && t.sequenceId ? `${projIdent}-${t.sequenceId}` : t.id.substring(0, 8);
-            const stateName = t.State?.name || 'Todo';
-            msg += `${idx + 1}. *${taskId}*: ${t.title} _(${stateName})_\n`;
-          });
-          if (openTasks.length > 5) msg += `... và ${openTasks.length - 5} task khác\n`;
-        } else {
-          msg += `🎉 Tuyệt vời! Không còn task nào đang mở.\n`;
-        }
-        
-        msg += `\n🕒 Đã đến giờ nghỉ ngơi, nhớ *Check-out* trước khi về nhé!`;
-        
-        const replyMarkup = {
-          inline_keyboard: [
-            [{ text: "🚪 Tan ca (Check-out)", callback_data: `attendance_direct:checkout` }]
-          ]
-        };
-        await sendMessage(Number(m.telegramChatId), msg, replyMarkup);
-      }
+      console.log("[Cron 17h Nhóm] Đang tạo báo cáo cuối ngày...");
+      const data = await fetchAllData(apiClient);
+      const msg = formatGroupEveningReport(data as TeamReportData);
+      await sendMessage(GROUP_ID, msg);
+      console.log("[Cron 17h Nhóm] ✅ Đã gửi báo cáo cuối ngày vào nhóm.");
     } catch (err) {
-      console.error("Lỗi chạy Cron chiều:", err);
+      console.error("[Cron 17h Nhóm] Lỗi:", err);
     }
   }, { timezone: "Asia/Ho_Chi_Minh" });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // CRON 4: 17:30 chiều → Gửi DM cá nhân: Nhắc tiến độ cuối ngày (Thứ 2 - Thứ 7)
+  // ─────────────────────────────────────────────────────────────────────────
+  cron.schedule('30 17 * * 1-6', async () => {
+    try {
+      console.log("[Cron 17h30 DM] Đang gửi tổng kết cuối ngày cho từng thành viên...");
+      const { members, allIssues, todayStr } = await fetchAllData(apiClient);
+
+      for (const m of members) {
+        if (!m.telegramChatId) continue;
+        const chatId = Number(m.telegramChatId);
+
+        const myIssues = allIssues.filter((t: any) => t.assigneeId === m.id);
+        const doneToday = myIssues.filter((t: any) => {
+          const g = t.State?.group || 'unstarted';
+          return g === 'completed' && t.updatedAt?.startsWith(todayStr);
+        });
+        const stillOpen = myIssues.filter((t: any) => !isDoneGroup(t.State?.group || 'unstarted'));
+        const openParsed = stillOpen.map((i: any) => parseIssue(i, members));
+
+        let msg = `🌇 *TỔNG KẾT CUỐI NGÀY (17h30)*\n`;
+        msg += `Chào *${m.fullName}*! Dưới đây là tóm tắt ngày làm việc của bạn:\n\n`;
+
+        if (doneToday.length > 0) {
+          msg += `✅ *ĐÃ HOÀN THÀNH HÔM NAY (${doneToday.length}):*\n`;
+          doneToday.slice(0, 4).forEach((t: any) => {
+            const f = parseIssue(t, members);
+            msg += `🟢 *${f.shortId}*: ${t.title}\n`;
+          });
+          msg += '\n';
+        }
+
+        if (stillOpen.length > 0) {
+          msg += `⏳ *CÒN MỞ (${stillOpen.length} task):*\n`;
+          openParsed.slice(0, 5).forEach(f => { msg += formatIssueBlock(f, true); });
+          if (stillOpen.length > 5) msg += `   _(và ${stillOpen.length - 5} task khác)_\n`;
+        } else {
+          msg += `🎉 Tuyệt vời! Bạn đã hoàn thành tất cả công việc hôm nay!\n`;
+        }
+
+        msg += `\n🕐 Nhớ *Check-out* trước khi về nhé! Chúc buổi tối vui vẻ 🌙`;
+
+        await sendMessage(chatId, msg, {
+          inline_keyboard: [[{ text: "🚪 Tan ca (Check-out)", callback_data: "attendance_direct:checkout" }]]
+        });
+      }
+      console.log("[Cron 17h30 DM] ✅ Đã gửi tổng kết cuối ngày cho tất cả thành viên.");
+    } catch (err) {
+      console.error("[Cron 17h30 DM] Lỗi:", err);
+    }
+  }, { timezone: "Asia/Ho_Chi_Minh" });
+
+  console.log("✅ Đã đăng ký 4 Cron Jobs:");
+  console.log("   • 8:30 sáng → DM cá nhân: nhắc việc đầu ngày (có subtask)");
+  console.log("   • 9:00 sáng → Nhóm: tổng kết đầu ngày toàn team");
+  console.log("   • 17:00 chiều → Nhóm: tổng kết cuối ngày");
+  console.log("   • 17:30 chiều → DM cá nhân: nhắc tiến độ cuối ngày (có subtask)");
 }
