@@ -388,12 +388,13 @@ export const formSessionCommand: TelegramCommand = {
           title: userFormSession[chatId].meetingTitle,
           startTime: startTime.toISOString(),
           endTime: endTime.toISOString(),
-          hostId: userFormSession[chatId].memberId,
+          hostId: ctx.member.id,
           meetLink: "https://meet.google.com/abc-defg-hij"
         });
         delete userFormSession[chatId];
         await fetchAxios(`${TELEGRAM_API}/sendMessage`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: chatId, text: "✅ Đã tạo lịch họp thành công!" }) });
       } catch (e) {
+        console.error("CREATE MEETING ERROR:", e);
         delete userFormSession[chatId];
         await fetchAxios(`${TELEGRAM_API}/sendMessage`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: chatId, text: "❌ Gặp lỗi khi tạo lịch họp." }) });
       }
