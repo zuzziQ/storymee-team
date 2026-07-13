@@ -55,8 +55,8 @@ export default function HeaderBar({
   appNotifications = [],
   setAppNotifications
 }: HeaderBarProps) {
-  const relevantAnnouncements = announcements.filter(a => !a.targetUserId || a.targetUserId === activeUser.id);
-  const unreadAnnouncements = relevantAnnouncements.filter(a => !a.readBy.includes(activeUser.id));
+  const relevantAnnouncements = announcements.filter(a => !a.targetUserId || a.targetUserId === activeUser?.id);
+  const unreadAnnouncements = relevantAnnouncements.filter(a => !(a.readBy || []).includes(activeUser?.id || ''));
 
   // Determine today's attendance status for active user
   const todayStr = new Date().toISOString().split('T')[0];
