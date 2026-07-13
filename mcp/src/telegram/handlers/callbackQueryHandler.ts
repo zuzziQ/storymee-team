@@ -83,7 +83,11 @@ async function handleCallbackQuery(callbackQuery: any) {
   }
 
   if (data === 'meeting_create') {
-    userFormSession[chatId] = { step: 'await_meeting_title', memberId: member.id };
+    userFormSession[chatId] = {
+      step: 'await_meeting_title',
+      type: 'meeting_create',
+      memberId: member?.id
+    };
     await sendMessage(chatId, "Vui lòng nhập tên cuộc họp:\n(Gõ /cancel để hủy)");
     return;
   }
