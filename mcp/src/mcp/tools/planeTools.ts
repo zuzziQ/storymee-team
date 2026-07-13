@@ -468,7 +468,19 @@ case "update_issue_state": {
       }
 
       if (targetState.group === 'completed' && !isBoss) {
-        throw new McpError(ErrorCode.InvalidRequest, "TỪ CHỐI TRUY CẬP: Theo quy trình mới, bạn không thể tự chuyển task sang Done. Vui lòng báo AI chuyển trạng thái sang 'In Review' hoặc lên website nộp kết quả để Admin duyệt.");
+        // Tìm state 'In Review' trong project
+        const inReviewState = parentProject.states.find((s: any) =>
+          s.name.toLowerCase() === 'in review' || s.name.toLowerCase() === 'inreview'
+        );
+        if (inReviewState) {
+          await apiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${foundIssue.id}`, { stateId: inReviewState.id });
+          return {
+            content: [{
+              type: "text",
+              text: `ℹ️ Theo quy trình mới, công việc đã được chuyển sang **In Review** thay vì Done.\n\nAdmin sẽ xem xét kết quả của bạn và xác nhận hoàn thành. Hãy vào website nộp kết quả để Admin duyệt nhé!`
+            }]
+          };
+        }
       }
 
       try {
@@ -558,7 +570,14 @@ case "update_issue": {
       }
 
       if (status && (status.toLowerCase() === 'done' || status.toLowerCase() === 'completed') && !isBoss) {
-        throw new McpError(ErrorCode.InvalidRequest, "TỪ CHỐI TRUY CẬP: Theo quy trình mới, bạn không thể tự chuyển task sang Done. Vui lòng báo AI chuyển trạng thái sang 'In Review' hoặc lên website nộp kết quả để Admin duyệt.");
+        // Tự động chuyển sang in_review thay vì block
+        await apiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${foundSubtask.id}`, { status: 'in_review' });
+        return {
+          content: [{
+            type: "text",
+            text: `ℹ️ Theo quy trình mới, công việc đã được chuyển sang **In Review** thay vì Done.\n\nAdmin sẽ xem xét kết quả và xác nhận. Hãy vào website nộp kết quả để Admin duyệt nhé!`
+          }]
+        };
       }
 
       try {

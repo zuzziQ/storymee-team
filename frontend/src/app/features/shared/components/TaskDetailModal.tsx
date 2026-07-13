@@ -921,7 +921,9 @@ export default function TaskDetailModal({
                 onChange={e => {
                   const val = e.target.value as any;
                   if (val === 'Done' && !isAdmin) {
-                    alert("⚠️ THEO QUY TRÌNH MỚI: Bạn không thể đổi trực tiếp sang Done.\n\nHãy đổi sang 'In Review' hoặc click 'In Review' ở trên cùng để nộp kết quả cho Admin duyệt.");
+                    // Tự động chuyển sang In Review thay vì block
+                    handleTaskUpdate({ status: 'In Review' });
+                    setTimeout(() => alert('ℹ️ Đã chuyển sang "In Review".\nVui lòng nộp kết quả trong tab bên trái để Admin duyệt.'), 100);
                     return;
                   }
                   handleTaskUpdate({ status: val });

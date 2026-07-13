@@ -180,7 +180,9 @@ export default function KanbanTab({
     const targetTask = filteredTasks.find(t => t.id === draggingId);
     if (targetTask) {
       if (col === 'Done' && !isAdmin) {
-        alert("⚠️ THEO QUY TRÌNH MỚI: Bạn không thể kéo task trực tiếp sang Done.\n\nHãy kéo sang 'In Review' hoặc click vào task để nộp kết quả cho Admin duyệt.");
+        // Tự động chuyển sang In Review thay vì block
+        onUpdateTask({ ...targetTask, status: 'In Review' });
+        setTimeout(() => alert('ℹ️ Công việc đã được chuyển sang "In Review".\nVui lòng click vào task để nộp kết quả. Admin sẽ xem xét và xác nhận Done cho bạn.'), 100);
       } else {
         onUpdateTask({ ...targetTask, status: col });
       }
