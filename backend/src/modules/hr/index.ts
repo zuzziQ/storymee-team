@@ -39,5 +39,10 @@ fastify.post('/tasks/:taskId/request-archive', HrController.requestArchiveTask);
 fastify.post('/tasks/:taskId/request', HrTaskController.requestApproval);
 fastify.post('/tasks/:taskId/approve', HrTaskController.approveApproval);
 
+fastify.get('/meetings', MeetingController.getMeetings);
+fastify.post('/meetings', MeetingController.createMeeting);
+fastify.get('/announcements', AnnouncementController.getAnnouncements);
+fastify.post('/announcements', AnnouncementController.createAnnouncement);
+
 };
 export default plugin;
