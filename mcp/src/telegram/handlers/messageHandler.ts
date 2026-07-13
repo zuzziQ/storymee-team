@@ -77,7 +77,7 @@ export async function handleTelegramMessage(message: any) {
   }
 
   // Trong group chat, chỉ xử lý nếu bắt đầu bằng /ai hoặc các lệnh hệ thống (vd: /checkin, /register)
-  if (isGroup && !isAiCommand && !text.startsWith('/')) {
+  if (isGroup && !isAiCommand && !text.startsWith('/') && !userFormSession[chatId]) {
     return; // Bỏ qua tin nhắn thường trong group
   }
 
