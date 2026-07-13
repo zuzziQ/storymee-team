@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Announcement, TeamMember } from '../../../constants';
+import { Announcement, TeamMember, Meeting } from '../../../constants';
 import { io } from 'socket.io-client';
 import { fetchAxios } from '@/lib/fetchAxios';
+import { coreApiClient } from '@/lib/apiClient';
 
 export function useSocketState(
   authReady: boolean,
@@ -11,15 +12,25 @@ export function useSocketState(
   const [appNotifications, setAppNotifications] = useState<any[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [meetings, setMeetings] = useState<Meeting[]>([]);
+
+
+  const fetchServerMeetings = async () => {
+    try {
+      const res = await coreApiClient.get('/meetings');
+      if (res.data?.status === 'success') {
+        setMeetings(res.data.data);
+      }
+    } catch (err) {
+      console.error('Lỗi fetch meetings:', err);
+    }
+  };
 
   const fetchServerAnnouncements = async () => {
     try {
-      const res = await fetchAxios('/api/ai/announcements');
-      if (res.ok) {
-        const json = await res.json();
-        if ((json.status === 'success' || json.success === true) && Array.isArray(json.data)) {
-          setAnnouncements(json.data);
-        }
+      const res = await coreApiClient.get('/announcements');
+      if (res.data?.status === 'success') {
+        setAnnouncements(res.data.data);
       }
     } catch (err) {
       console.error('Lỗi fetch announcements:', err);
@@ -36,6 +47,9 @@ export function useSocketState(
         try { setAppNotifications(JSON.parse(savedNotifs)); } catch {}
       }
     }
+
+    fetchServerAnnouncements();
+    fetchServerMeetings();
 
     const socket = io('/internal/v1/team/socket.io', {
       path: '/internal/v1/team/socket.io',

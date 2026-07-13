@@ -254,3 +254,16 @@ export function calculateNetSalary(gross: number, dependents: number) {
     allowance
   };
 }
+
+export interface Meeting {
+  id: string;
+  title: string;
+  description?: string;
+  startTime: string;
+  endTime: string;
+  hostId: string;
+  host?: TeamMember;
+  attendees?: any;
+  meetLink?: string;
+  status: string;
+}

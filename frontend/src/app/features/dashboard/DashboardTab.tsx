@@ -1,11 +1,11 @@
 import React from 'react';
-import { Clock, Users, TrendingUp } from 'lucide-react';
+import { Clock, Users, TrendingUp, Calendar } from 'lucide-react';
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
   CartesianGrid
 } from 'recharts';
 import {
-  Task, TeamMember, Announcement,
+  Task, TeamMember, Announcement, Meeting,
   getPriorityDot, getStatusClass
 } from '../../constants';
 
@@ -20,6 +20,7 @@ interface DashboardTabProps {
   filteredTasks: Task[];
   leavesPending: any[];
   announcements: Announcement[];
+  meetings?: Meeting[];
   attendanceList: any[];
   setSelectedTask: (task: Task) => void;
   setTab: (tab: string) => void;
@@ -36,6 +37,7 @@ export default function DashboardTab({
   filteredTasks,
   leavesPending,
   announcements,
+  meetings = [],
   attendanceList,
   setSelectedTask,
   setTab
