@@ -335,11 +335,16 @@ case "create_issue": {
         );
       }
 
-      let targetUser = user;
+      let targetUser: any = user;
       if (assignee) {
-        targetUser = members.find((m: any) => m.fullName.toLowerCase() === assignee.toLowerCase());
-        if (!targetUser) {
-          throw new McpError(ErrorCode.InvalidParams, `Không tìm thấy nhân sự ${assignee} trong hệ thống.`);
+        const lowerAssignee = assignee.toLowerCase();
+        if (lowerAssignee === 'chưa phân công' || lowerAssignee === 'none' || lowerAssignee === 'unassigned') {
+          targetUser = null;
+        } else {
+          targetUser = members.find((m: any) => m.fullName.toLowerCase() === lowerAssignee);
+          if (!targetUser) {
+            throw new McpError(ErrorCode.InvalidParams, `Không tìm thấy nhân sự ${assignee} trong hệ thống.`);
+          }
         }
       }
 
@@ -402,7 +407,7 @@ case "create_issue": {
                     title,
                     projectId: finalProjectId,
                     description: "Tạo tự động qua Model Context Protocol (MCP)",
-                    assigneeId: targetUser.id,
+                    assigneeId: targetUser ? targetUser.id : undefined,
                     priority: priority ? priority.toLowerCase() : "medium",
                     targetDate: target_date || undefined,
                     parentId: actualParentId || undefined
@@ -417,11 +422,12 @@ case "create_issue": {
       
       const newIssue = resJson.data;
       const newId = newIssue?.id || "N/A";
+      const assigneeText = targetUser ? targetUser.fullName : 'Chưa phân công';
 
       return {
         content: [{
           type: "text",
-          text: `Đã tạo công việc thành công! ✓\n• **ID**: ${newId}\n• **Tiêu đề**: ${title}\n• **Người thực hiện**: ${targetUser.fullName}\n• **Hạn chót**: ${target_date || 'None'}`
+          text: `Đã tạo công việc thành công! ✓\n• **ID**: ${newId}\n• **Tiêu đề**: ${title}\n• **Người thực hiện**: ${assigneeText}\n• **Hạn chót**: ${target_date || 'None'}`
         }]
       };
     }
