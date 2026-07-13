@@ -467,6 +467,10 @@ case "update_issue_state": {
         throw new McpError(ErrorCode.InvalidParams, `Trạng thái ${state} không tồn tại trong dự án này. Các trạng thái hợp lệ: ${parentProject.states.map((s:any) => s.name).join(", ")}`);
       }
 
+      if (targetState.group === 'completed' && !isBoss) {
+        throw new McpError(ErrorCode.InvalidRequest, "TỪ CHỐI TRUY CẬP: Theo quy trình mới, bạn không thể tự chuyển task sang Done. Vui lòng báo AI chuyển trạng thái sang 'In Review' hoặc lên website nộp kết quả để Admin duyệt.");
+      }
+
       try {
             await apiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${foundIssue.id}`, { stateId: targetState.id });
           } catch (err: any) {
@@ -551,6 +555,10 @@ case "update_issue": {
       if (assignee) {
         const targetMem = members.find((m: any) => m.fullName.toLowerCase().includes(assignee.toLowerCase()));
         if (targetMem) assigneeId = targetMem.id;
+      }
+
+      if (status && (status.toLowerCase() === 'done' || status.toLowerCase() === 'completed') && !isBoss) {
+        throw new McpError(ErrorCode.InvalidRequest, "TỪ CHỐI TRUY CẬP: Theo quy trình mới, bạn không thể tự chuyển task sang Done. Vui lòng báo AI chuyển trạng thái sang 'In Review' hoặc lên website nộp kết quả để Admin duyệt.");
       }
 
       try {

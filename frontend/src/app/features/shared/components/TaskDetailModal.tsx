@@ -918,7 +918,14 @@ export default function TaskDetailModal({
               <span style={{ fontSize: 10, color: '#71717a', textTransform: 'uppercase', fontWeight: 600 }}>Trạng thái</span>
               <select
                 value={task.status}
-                onChange={e => handleTaskUpdate({ status: e.target.value as any })}
+                onChange={e => {
+                  const val = e.target.value as any;
+                  if (val === 'Done' && !isAdmin) {
+                    alert("⚠️ THEO QUY TRÌNH MỚI: Bạn không thể đổi trực tiếp sang Done.\n\nHãy đổi sang 'In Review' hoặc click 'In Review' ở trên cùng để nộp kết quả cho Admin duyệt.");
+                    return;
+                  }
+                  handleTaskUpdate({ status: val });
+                }}
                 style={{
                   background: 'var(--bg-muted)',
                   border: '1px solid var(--border)',

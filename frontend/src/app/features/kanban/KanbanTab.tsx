@@ -179,7 +179,11 @@ export default function KanbanTab({
     if (!draggingId) return;
     const targetTask = filteredTasks.find(t => t.id === draggingId);
     if (targetTask) {
-      onUpdateTask({ ...targetTask, status: col });
+      if (col === 'Done' && !isAdmin) {
+        alert("⚠️ THEO QUY TRÌNH MỚI: Bạn không thể kéo task trực tiếp sang Done.\n\nHãy kéo sang 'In Review' hoặc click vào task để nộp kết quả cho Admin duyệt.");
+      } else {
+        onUpdateTask({ ...targetTask, status: col });
+      }
     }
     setDraggingId(null);
     setDragOverCol(null);
