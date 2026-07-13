@@ -63,10 +63,9 @@ export default function TaskDetailModal({
   const [taskOutput, setTaskOutput] = useState(task.outputSuggested || '');
   const [showSubmitPanel, setShowSubmitPanel] = useState(false);
 
-  // Admin check: role chứa Founder, Quản lý, hoặc IT Admin
+  // Admin check: role chứa Founder hoặc IT Admin
   const isAdmin = !!(activeUser?.role && (
     activeUser.role.includes('Founder') ||
-    activeUser.role.includes('Quản lý') ||
     activeUser.role.includes('IT Admin')
   ));
   const isInReview = task.status === 'In Review';

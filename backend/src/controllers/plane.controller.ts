@@ -245,7 +245,6 @@ export class PlaneController {
                                 telegramChatId: { not: null },
                                 OR: [
                                     { role: { contains: 'Founder' } },
-                                    { role: { contains: 'Quản lý' } },
                                     { role: { contains: 'IT Admin' } },
                                 ]
                             }
@@ -283,7 +282,6 @@ export class PlaneController {
             // Kiểm tra quyền admin
             const reviewer = await prisma.teamMember.findUnique({ where: { id: reviewerId } });
             const isAdmin = reviewer?.role?.includes('Founder') ||
-                reviewer?.role?.includes('Quản lý') ||
                 reviewer?.role?.includes('IT Admin');
             if (!isAdmin) {
                 return reply.status(403).send({ success: false, message: 'Không có quyền phê duyệt' });
