@@ -160,49 +160,84 @@ export class PlaneController {
             const { id } = req.params as { id: string };
             const data = req.body as any;
 
+            const issue = await prisma.plIssue.findUnique({ 
+                where: { id }, 
+                include: { 
+                    Project: { include: { states: true } },
+                    Parent: { include: { Project: { include: { states: true } } } },
+                    State: true
+                } 
+            });
+            
+            if (!issue) {
+                return reply.status(404).send({ success: false, message: 'Issue not found' });
+            }
+
+            let finalProjectId = data.projectId || issue.projectId;
             let finalStateId = data.stateId;
-            if (data.status && !finalStateId) {
-                const issue = await prisma.plIssue.findUnique({ 
-                    where: { id }, 
-                    include: { 
-                        Project: { include: { states: true } },
-                        Parent: { include: { Project: { include: { states: true } } } }
-                    } 
+            let finalStateObj = null;
+            
+            const isProjectChanged = data.projectId && data.projectId !== issue.projectId;
+
+            // Fetch target project states if project is changed
+            let availableStates = issue.Project?.states || issue.Parent?.Project?.states;
+            if (isProjectChanged) {
+                const newProject = await prisma.plProject.findUnique({
+                    where: { id: data.projectId },
+                    include: { states: true }
                 });
+                if (newProject) {
+                    availableStates = newProject.states;
+                }
+            }
+
+            if (!availableStates || availableStates.length === 0) {
+                availableStates = await prisma.plState.findMany({ where: { projectId: finalProjectId }});
+            }
+
+            // Map Status to State
+            if (data.status) {
+                const statusLower = data.status.toLowerCase();
+                finalStateObj = availableStates.find((s: any) => 
+                    s.name.toLowerCase() === statusLower || 
+                    ((statusLower === 'in review' || statusLower === 'in_review') && s.name.toLowerCase() === 'in review')
+                );
                 
-                let availableStates = issue?.Project?.states || issue?.Parent?.Project?.states;
-                if (!availableStates || availableStates.length === 0) {
-                    availableStates = await prisma.plState.findMany(); // Fallback to all states in DB
-                }
-
-                if (availableStates && availableStates.length > 0) {
-                    const statusLower = data.status.toLowerCase();
-                    let stateObj = availableStates.find((s: any) => 
-                        s.name.toLowerCase() === statusLower || 
-                        ((statusLower === 'in review' || statusLower === 'in_review') && s.name.toLowerCase() === 'in review')
+                if (!finalStateObj) {
+                    finalStateObj = availableStates.find((s: any) => 
+                        ((statusLower === 'backlog') && s.group === 'backlog') ||
+                        ((statusLower === 'todo' || statusLower === 'pending') && s.group === 'unstarted') ||
+                        ((statusLower === 'in progress' || statusLower === 'in_progress' || statusLower === 'working') && s.group === 'started') ||
+                        ((statusLower === 'done' || statusLower === 'completed') && s.group === 'completed') ||
+                        ((statusLower === 'cancelled' || statusLower === 'canceled') && s.group === 'cancelled')
                     );
-                    
-                    if (!stateObj) {
-                        stateObj = availableStates.find((s: any) => 
-                            ((statusLower === 'backlog') && s.group === 'backlog') ||
-                            ((statusLower === 'todo' || statusLower === 'pending') && s.group === 'unstarted') ||
-                            ((statusLower === 'in progress' || statusLower === 'in_progress' || statusLower === 'working') && s.group === 'started') ||
-                            ((statusLower === 'done' || statusLower === 'completed') && s.group === 'completed') ||
-                            ((statusLower === 'cancelled' || statusLower === 'canceled') && s.group === 'cancelled')
-                        );
-                    }
-
-                    if (!stateObj && (statusLower === 'in review' || statusLower === 'in_review')) {
-                        const projectId = issue?.projectId || issue?.Parent?.projectId;
-                        if (projectId) {
-                            stateObj = await prisma.plState.create({
-                                data: { name: 'In Review', group: 'started', projectId: projectId, color: '#8b5cf6', sequence: 4 }
-                            });
-                        }
-                    }
-
-                    if (stateObj) finalStateId = stateObj.id;
                 }
+                
+                // create 'In Review' state if not exists
+                if (!finalStateObj && (statusLower === 'in review' || statusLower === 'in_review')) {
+                    if (finalProjectId) {
+                        finalStateObj = await prisma.plState.create({
+                            data: { name: 'In Review', group: 'started', projectId: finalProjectId, color: '#8b5cf6', sequence: 4 }
+                        });
+                    }
+                }
+            } 
+            
+            // Handle project change but no status provided -> map old state to new project's equivalent state
+            if (isProjectChanged && !data.status && !data.stateId) {
+                const oldStateGroup = issue.State?.group || 'unstarted';
+                const oldStateName = issue.State?.name || 'Todo';
+                
+                finalStateObj = availableStates.find((s: any) => s.name === oldStateName) || 
+                                availableStates.find((s: any) => s.group === oldStateGroup) ||
+                                availableStates[0];
+            }
+
+            if (finalStateObj) {
+                finalStateId = finalStateObj.id;
+            } else if (isProjectChanged && !finalStateId) {
+                // Last resort fallback
+                finalStateId = availableStates[0]?.id;
             }
 
             const updated = await prisma.plIssue.update({
@@ -210,14 +245,14 @@ export class PlaneController {
                 data: {
                     title: data.title,
                     description: data.description,
-                    stateId: finalStateId,
+                    ...(finalStateId && { stateId: finalStateId }),
+                    ...(data.projectId && { projectId: data.projectId }),
                     assigneeId: data.assigneeId,
                     parentId: data.parentId,
                     priority: data.priority,
                     estimateHours: data.estimateHours !== undefined ? parseFloat(data.estimateHours) : undefined,
                     targetDate: data.targetDate ? new Date(data.targetDate) : undefined,
                     startDate: data.startDate ? new Date(data.startDate) : undefined,
-                    // Lưu output khi nhân sự nộp review
                     ...(data.outputContent !== undefined && { outputContent: data.outputContent }),
                     ...(data.outputUrls !== undefined && { outputUrls: data.outputUrls }),
                     ...(data.submittedById !== undefined && {
@@ -239,7 +274,6 @@ export class PlaneController {
                     // Nếu chuyển sang In Review — notify admins
                     const isInReview = (data.status === 'in_review' || data.status === 'in review');
                     if (isInReview) {
-                        // Fetch admins có telegramChatId
                         const admins = await prisma.teamMember.findMany({
                             where: {
                                 telegramChatId: { not: null },

@@ -98,7 +98,8 @@ export function useTaskState() {
         assigneeId: matchedMember ? matchedMember.id : undefined,
         priority: task.priority ? task.priority.toLowerCase() : undefined,
         targetDate: isoTargetDate,
-        estimateHours: task.estimate || undefined
+        estimateHours: task.estimate || undefined,
+        projectId: task.projectId || undefined
       });
       onRefresh();
     } catch (err) {

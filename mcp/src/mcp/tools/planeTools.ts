@@ -78,7 +78,8 @@ export const PLANE_TOOLS_SCHEMA = [
         assignee: { type: "string", description: "Tên người phụ trách mới (tùy chọn)" },
         estimate: { type: "number", description: "Ước tính thời gian mới (giờ, tùy chọn)" },
         priority: { type: "string", enum: ["Low", "Medium", "High"], description: "Độ ưu tiên mới (tùy chọn)" },
-        deadline: { type: "string", description: "Hạn chót mới định dạng YYYY-MM-DD hoặc ISO string (tùy chọn)" }
+        deadline: { type: "string", description: "Hạn chót mới định dạng YYYY-MM-DD hoặc ISO string (tùy chọn)" },
+        project_name: { type: "string", description: "Tên dự án mới muốn chuyển task sang (tùy chọn)" }
       },
       required: ["task_id"]
     }
@@ -554,7 +555,7 @@ case "assign_issue": {
       };
     }
 case "update_issue": {
-      const { task_id, status, assignee, estimate, priority, deadline } = args as any;
+      const { task_id, status, assignee, estimate, priority, deadline, project_name } = args as any;
 
       let tasksData;
           try {
@@ -605,13 +606,29 @@ case "update_issue": {
         };
       }
 
+      let projectId = undefined;
+      if (project_name) {
+        let projectsData;
+        try {
+          projectsData = (await apiClient.get(API_ROUTES.PLANE.PROJECTS)) as any;
+        } catch(e) {}
+        const dbProjects = projectsData?.data || [];
+        const targetProj = dbProjects.find((p: any) => p.name.toLowerCase().includes(project_name.toLowerCase()) || (p.identifier && p.identifier.toLowerCase() === project_name.toLowerCase()));
+        if (targetProj) {
+          projectId = targetProj.id;
+        } else {
+          throw new McpError(ErrorCode.InvalidParams, `Không tìm thấy dự án nào có tên chứa "${project_name}".`);
+        }
+      }
+
       try {
             await apiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${foundSubtask.id}`, {
                     status: status ? status : undefined,
                     assigneeId: assigneeId,
                     priority: priority ? priority.toLowerCase() : undefined,
                     targetDate: deadline || undefined,
-                    estimateHours: estimate || undefined
+                    estimateHours: estimate || undefined,
+                    projectId: projectId
                   });
           } catch (err: any) {
             throw new McpError(ErrorCode.InternalError, "Lỗi cập nhật task tại Core API.");
