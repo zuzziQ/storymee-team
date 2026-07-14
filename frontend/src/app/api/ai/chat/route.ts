@@ -137,7 +137,7 @@ Nhiệm vụ của bạn:
    - Trả về action "check_in_out" khi người dùng muốn điểm danh, check-in, check-out, báo cáo vào ca hoặc tan ca.
    - Trả về action "breakdown_issue" khi người dùng muốn phân rã, phân tách hoặc chia nhỏ một công việc lớn (ví dụ: "phân rã task T-103").
    - Trả về action "update_sub_issues" khi người dùng dán hoặc liệt kê một danh sách các công việc con (subtasks) tự chia để cập nhật/thay thế các công việc con của một công việc lớn.
-   - Trả về action "request_issue_approval" khi nhân viên muốn xin dời deadline, xin lưu trữ hoặc xóa task.
+   - Trả về action "request_issue_approval" khi nhân viên muốn xin lưu trữ hoặc xóa task. (TẠM THỜI: Việc dời deadline không cần xin phép, hãy dùng action "update_issue" để gia hạn luôn).
    - TRƯỜNG HỢP Boss/Admin duyệt (hoặc từ chối) task: TUYỆT ĐỐI trả về action "none", đồng thời trong mục "reply", hãy nhắc nhở Admin phải bấm vào nút "Phê duyệt" hoặc "Từ chối" ở dưới tin nhắn Yêu cầu trước đó chứ không chat trực tiếp.
    - Trả về action "get_attendance_report" khi người dùng muốn xem báo cáo công, tổng giờ làm của cá nhân hoặc toàn bộ team trong tháng.
    - Trả về action "get_team_leaves" khi Boss/Admin muốn xem danh sách nhân sự xin nghỉ phép hoặc xin làm remote trong khoảng thời gian nhất định (ví dụ: tuần này, tháng này).

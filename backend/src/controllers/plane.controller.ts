@@ -238,6 +238,15 @@ export class PlaneController {
                         });
                     }
                 }
+                
+                // create 'Cancelled' state if not exists
+                if (!finalStateObj && (statusLower === 'cancelled' || statusLower === 'canceled')) {
+                    if (finalProjectId) {
+                        finalStateObj = await prisma.plState.create({
+                            data: { name: 'Cancelled', group: 'cancelled', projectId: finalProjectId, color: '#ef4444', sequence: 5 }
+                        });
+                    }
+                }
             } 
             
             // Handle project change but no status provided -> map old state to new project's equivalent state
