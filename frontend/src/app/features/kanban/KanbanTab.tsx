@@ -105,7 +105,7 @@ function TaskCard({
             )
           )}
           <span style={{ fontSize: 10, color: '#71717a', display: 'flex', alignItems: 'center', gap: 3 }}>
-            <Clock size={10} />{task.deadline}
+            <Clock size={10} />{task.deadline ? task.deadline.replace('T', ' ') : ''}
           </span>
         </div>
       </div>
