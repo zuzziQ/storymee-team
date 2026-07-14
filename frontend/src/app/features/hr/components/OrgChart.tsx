@@ -270,16 +270,33 @@ export default function OrgChart({
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
-              <div className='glass' style={{ padding: '12px 16px', width: 200, display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(255,255,255,0.01)', border: '1px dashed var(--border)', opacity: 0.5 }}>
-                <div className='avatar' style={{ background: 'rgba(255,255,255,0.05)', color: '#52525b', width: 34, height: 34, fontSize: 12 }}>M</div>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: 12, color: '#71717a' }}>Marketing</div>
-                  <div style={{ fontSize: 9, color: '#52525b' }}>Trống</div>
-                </div>
-              </div>
-              <div style={{ fontSize: 10, color: '#52525b', textAlign: 'center', marginTop: 10 }}>
-                (Đang tuyển dụng)
-              </div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>Nhân sự khác</div>
+              {teamMembers.filter(m => m.isActive !== false && !['kimngan151091@gmail.com', 'lehuyducanh.vn@gmail.com', 'zuzzivn@gmail.com', 'phqhuong.0510@gmail.com', 'thanhtutran08@gmail.com', 'jeantran.creative@gmail.com', 'nguyenductrungdung.2005@gmail.com', 'huongiiiang@gmail.com', 'daulinh110124@gmail.com', 'lanthao1792003@gmail.com'].includes((m?.email || '').toLowerCase()) && (hrSearchQuery === '' || m.name.toLowerCase().includes(hrSearchQuery.toLowerCase()))).map(m => {
+                const isSelected = selectedMemberId === m.id;
+                return (
+                  <div
+                    key={m.id}
+                    onClick={() => { if (isAdmin) setSelectedMemberId(m.id); }}
+                    className='glass'
+                    style={{
+                      padding: '12px 16px',
+                      width: 200,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 12,
+                      border: isSelected ? '2px solid #a78bfa' : '1px solid var(--border)',
+                      cursor: isAdmin ? 'pointer' : 'default',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    <div className='avatar' style={{ background: m.color + '25', color: m.color, width: 34, height: 34, fontSize: 12 }}>{getInitials(m.name)}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, fontSize: 12, color: '#fafafa', textOverflow: 'ellipsis', overflow: 'hidden' }}>{m.name}</div>
+                      <div style={{ fontSize: 9, color: '#71717a' }}>{m.role}</div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
