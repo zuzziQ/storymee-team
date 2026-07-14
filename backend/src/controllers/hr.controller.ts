@@ -339,6 +339,8 @@ export class HrController {
     if (updated.status === 'approved' && current.status !== 'approved') {
       const start = new Date(current.startDate);
       const end = new Date(current.endDate);
+      start.setHours(0, 0, 0, 0);
+      end.setHours(0, 0, 0, 0);
       // Tính số ngày (inclusive, min 1)
       const diffDays = Math.max(1, Math.round((end.getTime() - start.getTime()) / (1000 * 3600 * 24)) + 1);
 
@@ -362,6 +364,8 @@ export class HrController {
     if (updated.status === 'rejected' && current.status === 'approved') {
       const start = new Date(current.startDate);
       const end = new Date(current.endDate);
+      start.setHours(0, 0, 0, 0);
+      end.setHours(0, 0, 0, 0);
       const diffDays = Math.max(1, Math.round((end.getTime() - start.getTime()) / (1000 * 3600 * 24)) + 1);
       const member = current.member;
       if (member) {
