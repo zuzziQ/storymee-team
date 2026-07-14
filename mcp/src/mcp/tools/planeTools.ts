@@ -428,7 +428,7 @@ case "create_issue": {
       return {
         content: [{
           type: "text",
-          text: `Đã tạo công việc thành công! ✓\n• **ID**: ${newId}\n• **Tiêu đề**: ${title}\n• **Người thực hiện**: ${assigneeText}\n• **Hạn chót**: ${target_date || 'None'}`
+          text: `Đã tạo công việc thành công! ✓\n• **ID**: ${newId.split('-')[0]}\n• **Tiêu đề**: ${title}\n• **Người thực hiện**: ${assigneeText}\n• **Hạn chót**: ${target_date || 'None'}`
         }]
       };
     }
@@ -443,7 +443,7 @@ case "update_issue_state": {
           }
       const dbIssues = resJson.data || [];
       
-      const foundIssue = dbIssues.find((i: any) => i.id.toLowerCase() === issue_id.toLowerCase());
+      const foundIssue = dbIssues.find((i: any) => i.id.toLowerCase().startsWith(issue_id.toLowerCase()) || i.id.toLowerCase() === issue_id.toLowerCase());
 
       if (!foundIssue) {
         throw new McpError(ErrorCode.InvalidParams, `Không tìm thấy công việc mã ID ${issue_id}.`);
