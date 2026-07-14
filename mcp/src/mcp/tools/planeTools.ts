@@ -428,7 +428,7 @@ case "create_issue": {
       return {
         content: [{
           type: "text",
-          text: `Đã tạo công việc thành công! ✓\n• **ID**: ${newId.split('-')[0]}\n• **Tiêu đề**: ${title}\n• **Người thực hiện**: ${assigneeText}\n• **Hạn chót**: ${target_date || 'None'}`
+          text: `Đã tạo công việc thành công! ✓\n• **ID**: ${(newIssue.Project?.identifier && newIssue.sequenceId) ? `${newIssue.Project.identifier}-${newIssue.sequenceId}` : newId}\n• **Tiêu đề**: ${title}\n• **Người thực hiện**: ${assigneeText}\n• **Hạn chót**: ${target_date || 'None'}`
         }]
       };
     }

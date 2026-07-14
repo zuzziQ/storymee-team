@@ -40,7 +40,7 @@ export function useTaskState() {
           });
 
           return {
-            id: issue.id,
+            id: (issue.Project?.identifier && issue.sequenceId) ? `${issue.Project.identifier}-${issue.sequenceId}` : issue.id,
             dbId: issue.id,
             title: issue.title,
             description: issue.description || '',

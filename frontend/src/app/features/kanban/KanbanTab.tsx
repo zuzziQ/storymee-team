@@ -67,7 +67,7 @@ function TaskCard({
           </div>
 
           <span style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0 }} className={getPriorityDot(task.priority)} />
-          <span style={{ fontSize: 10, color: '#71717a', fontFamily: 'monospace' }}>{task.id.split('-')[0]}</span>
+          <span style={{ fontSize: 10, color: '#71717a', fontFamily: 'monospace' }}>{task.id}</span>
           
           {proj && (
             <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 4, background: proj.color + '15', color: proj.color, border: `1px solid ${proj.color}30`, fontWeight: 500 }} title={proj.name}>
