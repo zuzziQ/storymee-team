@@ -573,7 +573,7 @@ case "update_issue": {
       }
 
       const assigneeName = foundSubtask.Assignee ? foundSubtask.Assignee.fullName : "";
-      if (!isBoss && assigneeName.toLowerCase() !== user.fullName.toLowerCase()) {
+      if (!isBoss && assigneeName !== "" && assigneeName.toLowerCase() !== user.fullName.toLowerCase()) {
         throw new McpError(
           ErrorCode.InvalidRequest,
           `TỪ CHỐI TRUY CẬP: Bạn không được phép cập nhật công việc ${task_id} của người khác.`
@@ -868,12 +868,6 @@ case "request_issue_approval": {
         throw new McpError(ErrorCode.InvalidParams, `Không tìm thấy công việc mã ID ${task_id}.`);
       }
 
-      try {
-        await apiClient.post(`${API_ROUTES.HR.TASKS}/${foundSubtask.id}/request`, { type, reason, newDeadline: new_deadline });
-      } catch (err: any) {
-        throw new McpError(ErrorCode.InternalError, "Lỗi khi gọi API xin duyệt.");
-      }
-
       // Telegram Bot will handle sending notification to Admin. We just need to return success.
       return {
         content: [{
@@ -904,7 +898,13 @@ case "approve_issue_request": {
       }
 
       try {
-        await apiClient.post(`${API_ROUTES.HR.TASKS}/${foundSubtask.id}/approve`, { type, decision, newDeadline: new_deadline });
+        if (decision === 'approve') {
+          if (type === 'archive' || type === 'delete') {
+             await apiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${foundSubtask.id}`, { status: 'cancelled' });
+          } else if (type === 'extend') {
+             await apiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${foundSubtask.id}`, { targetDate: new_deadline || undefined });
+          }
+        }
       } catch (err: any) {
         throw new McpError(ErrorCode.InternalError, "Lỗi khi gọi API duyệt yêu cầu.");
       }

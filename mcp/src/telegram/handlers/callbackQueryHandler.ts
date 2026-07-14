@@ -437,16 +437,16 @@ async function handleCallbackQuery(callbackQuery: any) {
           estimateVal = calculateWorkingHours(now, dDate);
         }
 
-        await executeMcpTool("update_issue", {
-          task_id: payload.id,
-          status: payload.status || undefined,
-          assignee: payload.assignee || undefined,
-          estimate: estimateVal || undefined,
-          priority: payload.priority || undefined,
-          deadline: payload.deadline || undefined
-        }, actionMember, username);
-
         try {
+          await executeMcpTool("update_issue", {
+            task_id: payload.id,
+            status: payload.status || undefined,
+            assignee: payload.assignee || undefined,
+            estimate: estimateVal || undefined,
+            priority: payload.priority || undefined,
+            deadline: payload.deadline || undefined
+          }, actionMember, username);
+
           await fetchAxios(`${TELEGRAM_API}/editMessageText`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -457,7 +457,20 @@ async function handleCallbackQuery(callbackQuery: any) {
               parse_mode: "Markdown"
             })
           });
-        } catch (e) {}
+        } catch (err: any) {
+          const errorMsg = err.message || "Lỗi không xác định";
+          await fetchAxios(`${TELEGRAM_API}/editMessageText`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              chat_id: chatId,
+              message_id: messageId,
+              text: `❌ *Lỗi khi cập nhật:* ${errorMsg}`,
+              parse_mode: "Markdown"
+            })
+          });
+          return;
+        }
       } else if (action === 'update_issues') {
         // Batch update nhiều task cùng lúc (e.g. "STO80-5 và STO80-2 done")
         const taskList: any[] = payload.tasks || (payload.id ? [payload] : []);

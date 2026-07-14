@@ -23,7 +23,7 @@ async function fetchAxios(url, options = {}) {
             data,
             timeout: options.timeout || 60000,
             signal: options.signal,
-            responseType: options.body?.includes('stream') ? 'stream' : undefined
+            responseType: (typeof options.body === 'string' && options.body.includes('stream')) ? 'stream' : undefined
         });
         return {
             ok: res.status >= 200 && res.status < 300,

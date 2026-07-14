@@ -38,6 +38,8 @@ const fetchAxios_1 = require("../../fetchAxios");
 const api_client_1 = require("@storymee/api-client");
 const telegram_agent_1 = require("../../telegram_agent");
 const index_1 = require("../../index");
+const issueFormatter_1 = require("../formatters/issueFormatter");
+const sessionStore_1 = require("../../sessionStore");
 const dotenv = __importStar(require("dotenv"));
 dotenv.config();
 const TELEGRAM_API = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}`;
@@ -45,10 +47,62 @@ const CORE_API_URL = process.env.CORE_API_URL || "http://localhost:5100";
 const WEB_PORTAL_URL = process.env.WEB_PORTAL_URL || "https://dev-hub.storymee.com";
 const OMNIROUTER_API_URL = process.env.OMNIROUTER_API_URL || "https://dev-hub.storymee.com/api/ai/chat";
 const apiClient = new api_client_1.CoreApiClient({ baseURL: CORE_API_URL + '/internal/v1/team', enforceApiPrefix: false });
+async function getTelegramFileUrl(fileId) {
+    try {
+        const res = await (0, fetchAxios_1.fetchAxios)(`${TELEGRAM_API}/getFile?file_id=${fileId}`);
+        const data = await res.json();
+        if (data.ok && data.result?.file_path) {
+            return `https://api.telegram.org/file/bot${process.env.TELEGRAM_BOT_TOKEN}/${data.result.file_path}`;
+        }
+    }
+    catch (e) {
+        console.error('[getFile] error:', e);
+    }
+    return null;
+}
+async function finalizeOutputSession(chatId, session, member) {
+    if (!session)
+        return;
+    sessionStore_1.outputSessions.delete(chatId);
+    const outputContent = session.texts.join('\n') || '(khong co output)';
+    const outputUrls = session.urls;
+    try {
+        await apiClient.patch(`${api_client_1.API_ROUTES.PLANE.ISSUES}/${session.issueId}`, {
+            outputContent,
+            outputUrls,
+            submittedById: session.memberId,
+        });
+    }
+    catch (e) {
+        console.error('[finalizeOutputSession] PATCH error:', e);
+    }
+    const ADMIN_EMAILS = ['kimngan151091@gmail.com', 'lehuyducanh.vn@gmail.com', 'zuzzivn@gmail.com'];
+    try {
+        const allMembersForNotify = await (0, telegram_agent_1.getCachedMembers)();
+        const admins = allMembersForNotify.filter((m) => ADMIN_EMAILS.includes((m.email || '').toLowerCase()) && m.telegramChatId);
+        const urlsText = outputUrls.length > 0 ? `\n*Files/Links:*\n${outputUrls.join('\n')}` : '';
+        const notifyText = `KET QUA CAN DUYET:\n- Task: *${session.issueShortId}* -- ${session.issueTitle}\n- Nguoi nop: *${member.fullName}*\n\nNoi dung:\n${outputContent}${urlsText}`;
+        for (const admin of admins) {
+            await (0, telegram_agent_1.sendMessage)(Number(admin.telegramChatId), notifyText, {
+                inline_keyboard: [[
+                        { text: 'Duyet (Done)', callback_data: `review_approve:${session.issueId}` },
+                        { text: 'Tu choi', callback_data: `review_reject:${session.issueId}` }
+                    ]]
+            });
+        }
+    }
+    catch (e) {
+        console.error('[finalizeOutputSession] notify admin error:', e);
+    }
+    await (0, telegram_agent_1.sendMessage)(chatId, `Da gui ket qua task *${session.issueShortId}* cho Admin duyet.\nBan se nhan thong bao khi Admin xac nhan.`, telegram_agent_1.KEYBOARD_MAIN);
+}
 async function handleTelegramMessage(message) {
     const chatId = message.chat.id;
-    const username = message.from.username;
-    let text = (message.text || "").replace(/@storymeebot/gi, "").trim();
+    const username = message.from?.username;
+    let text = ((message.text || message.caption) || "")
+        .replace(/^(\/[a-zA-Z0-9_]+)@[a-zA-Z0-9_]+/i, '$1')
+        .replace(/^@[a-zA-Z0-9_]+\s*/i, '')
+        .trim();
     const isGroup = chatId < 0;
     // Hỗ trợ lệnh /ai trong group để bypass Privacy Mode
     let isAiCommand = false;
@@ -60,9 +114,24 @@ async function handleTelegramMessage(message) {
         text = "";
         isAiCommand = true;
     }
-    // Trong group chat, chỉ xử lý nếu bắt đầu bằng /ai hoặc các lệnh hệ thống (vd: /checkin, /register)
-    if (isGroup && !isAiCommand && !text.startsWith('/')) {
-        return; // Bỏ qua tin nhắn thường trong group
+    const GLOBAL_COMMANDS = [
+        "/start", "/check", "/team_status", "trạng thái checkin",
+        "/check_all", "/check_team", "📊 trạng thái thành viên",
+        "👤 hồ sơ của tôi", "/ho_so",
+        "/portal", "🌐 mở web portal",
+        "📁 quản lý dự án & task",
+        "🌅 điểm danh (check-in/out)", "/checkin", "/checkout",
+        "📝 đăng ký nghỉ phép / remote", "/dang_ky", "/nghi_phep", "/remote",
+        "📝 công việc của tôi", "/cong_viec",
+        "📊 hỏi quy chế đãi ngộ", "/quy_che",
+        "/cancel", "hủy", "cancel", "huy",
+        "/lichhop", "📅 lịch họp", "/thongbao", "/notify", "/menu"
+    ];
+    // Trong group chat, chỉ xử lý nếu bắt đầu bằng /ai hoặc các lệnh hệ thống
+    if (isGroup && !isAiCommand && !text.startsWith('/') && !telegram_agent_1.userFormSession[chatId]) {
+        if (!GLOBAL_COMMANDS.includes(text.trim().toLowerCase())) {
+            return; // Bỏ qua tin nhắn thường trong group
+        }
     }
     console.log(`[Telegram Msg from @${username} in ${isGroup ? 'Group' : 'Private'} ${chatId}]: ${text}`);
     const lowerText = (text || "").trim().toLowerCase();
@@ -73,11 +142,11 @@ async function handleTelegramMessage(message) {
         return;
     }
     // PRE-FETCH Tasks để tối ưu hoá tốc độ (ẩn độ trễ mạng)
-    const prefetchTasksPromise = apiClient.get("/internal/v1/team/plane/issues").catch(err => {
+    const prefetchTasksPromise = apiClient.get(api_client_1.API_ROUTES.PLANE.ISSUES).catch(err => {
         console.error("Lỗi prefetch tasks:", err);
         return null;
     });
-    const prefetchProjectsPromise = apiClient.get("/internal/v1/team/plane/projects").catch(err => {
+    const prefetchProjectsPromise = apiClient.get(api_client_1.API_ROUTES.PLANE.PROJECTS).catch(err => {
         console.error("Lỗi prefetch projects:", err);
         return null;
     });
@@ -119,19 +188,9 @@ async function handleTelegramMessage(message) {
         }
         return;
     }
-    // Group commands (Inline Keyboard)
+    // Group commands
     if (isGroup && (lowerText === "/menu" || lowerText.startsWith("/menu@"))) {
-        await (0, telegram_agent_1.sendMessage)(chatId, "🤖 *STORYMEE TEAM BOT*\nChọn chức năng quản lý nhóm:", {
-            inline_keyboard: [
-                [
-                    { text: "📊 Báo cáo Tiến độ Team", callback_data: "group_cmd:check_team" },
-                    { text: "🔍 Hỗ trợ AI", callback_data: "group_cmd:ai_help" }
-                ],
-                [
-                    { text: "🌐 Mở Web Quản trị", url: "https://storymee-team.vercel.app/" }
-                ]
-            ]
-        });
+        await (0, telegram_agent_1.sendMessage)(chatId, "🤖 *STORYMEE TEAM BOT*\nĐể sử dụng bot trong nhóm, vui lòng gõ `/` để chọn lệnh hoặc dùng trực tiếp:\n\n/checkin - Điểm danh vào ca\n/checkout - Điểm danh ra về\n/cong_viec - Xem việc của tôi\n/lichhop - Quản lý lịch họp\n/dang_ky - Xin nghỉ phép / remote\n/check_team - Tiến độ công việc nhóm\n/team_status - Trạng thái check-in hôm nay\n/subtask [ID] - Phân rã task bằng AI\n\n_(Lưu ý: Bạn cũng có thể tag bot kèm câu hỏi tiếng Việt để nhờ AI hỗ trợ)_", { remove_keyboard: true });
         return;
     }
     // B. Tự động ghi nhận chat_id vào Postgres nếu chưa có hoặc thay đổi (chỉ lưu cho Private chat)
@@ -139,7 +198,7 @@ async function handleTelegramMessage(message) {
         try {
             console.log(`[Postgres API] Đang cập nhật chat_id ${chatId} cho @${username}...`);
             try {
-                await apiClient.post("/hr/team-members", {
+                await apiClient.post(api_client_1.API_ROUTES.HR.TEAM_MEMBERS, {
                     fullName: member.fullName,
                     email: member.email,
                     telegramUsername: member.telegramUsername,
@@ -161,19 +220,89 @@ async function handleTelegramMessage(message) {
             console.error("Lỗi đồng bộ chat_id lên Postgres API:", err);
         }
     }
+    // C0. Kich hoat output session neu planeTools da danh dau pending
+    if (!isGroup) {
+        const uname = (username || '').toLowerCase().replace(/^@/, '');
+        if (uname && sessionStore_1.pendingOutputByUsername.has(uname)) {
+            const pending = sessionStore_1.pendingOutputByUsername.get(uname);
+            sessionStore_1.pendingOutputByUsername.delete(uname);
+            sessionStore_1.outputSessions.set(chatId, {
+                issueId: pending.issueId,
+                issueShortId: pending.issueShortId,
+                issueTitle: pending.issueTitle,
+                memberId: pending.memberId,
+                texts: [],
+                urls: [],
+                startedAt: new Date(),
+            });
+            await (0, telegram_agent_1.sendMessage)(chatId, `Task *${pending.issueShortId}* da chuyen sang In Review.\n\nVui long nop ket qua cong viec:\n- Goi ta van ban mo ta\n- Gui link (Google Drive, Figma, Github,...)\n- Gui anh chup man hinh truc tiep vao day\n- Hoac chon khong co output`, {
+                inline_keyboard: [
+                    [{ text: 'Khong co output', callback_data: `submit_no_output:${pending.issueId}:${pending.issueShortId}` }],
+                    [{ text: 'Hoan tat nop ket qua', callback_data: `submit_output_done:${pending.issueId}:${pending.issueShortId}` }],
+                ]
+            });
+            return;
+        }
+    }
+    // C1. Xu ly khi dang trong output session
+    const activeSession = !isGroup ? sessionStore_1.outputSessions.get(chatId) : undefined;
+    if (activeSession) {
+        // /done_output hoac tuong tu
+        if (lowerText === '/done_output' || lowerText === 'xong' || lowerText === 'done output') {
+            await finalizeOutputSession(chatId, activeSession, member);
+            return;
+        }
+        // Khong co output
+        const NO_OUTPUT_KEYWORDS = ['khong co output', 'ko co output', 'không có output', 'no output', 'khong co ket qua', 'no result'];
+        if (NO_OUTPUT_KEYWORDS.some(k => lowerText.includes(k))) {
+            activeSession.texts.push('(Nhan su xac nhan khong co output/ket qua cu the)');
+            await finalizeOutputSession(chatId, activeSession, member);
+            return;
+        }
+        // Nhan anh/video/document
+        let collectedFile = false;
+        if (message.photo && message.photo.length > 0) {
+            const largestPhoto = message.photo[message.photo.length - 1];
+            const url = await getTelegramFileUrl(largestPhoto.file_id);
+            if (url) {
+                activeSession.urls.push(url);
+                collectedFile = true;
+            }
+        }
+        else if (message.document?.file_id) {
+            const url = await getTelegramFileUrl(message.document.file_id);
+            if (url) {
+                activeSession.urls.push(url);
+                collectedFile = true;
+            }
+        }
+        else if (message.video?.file_id) {
+            const url = await getTelegramFileUrl(message.video.file_id);
+            if (url) {
+                activeSession.urls.push(url);
+                collectedFile = true;
+            }
+        }
+        // Thu thap text & link tu text
+        if (text) {
+            const urlPattern = /https?:\/\/[^\s]+/g;
+            const linksInText = text.match(urlPattern) || [];
+            activeSession.urls.push(...linksInText);
+            const textWithoutUrls = text.replace(urlPattern, '').trim();
+            if (textWithoutUrls)
+                activeSession.texts.push(textWithoutUrls);
+        }
+        if (text || collectedFile) {
+            const count = activeSession.texts.length + activeSession.urls.length;
+            await (0, telegram_agent_1.sendMessage)(chatId, `Da ghi nhan (${count} muc). Tiep tuc gui them hoac nhan "Hoan tat nop ket qua".`, {
+                inline_keyboard: [
+                    [{ text: 'Hoan tat nop ket qua', callback_data: `submit_output_done:${activeSession.issueId}:${activeSession.issueShortId}` }]
+                ]
+            });
+        }
+        return;
+    }
     // C. Intercept Global Commands & Buttons để Hủy Session (Tránh kẹt Form)
-    const GLOBAL_COMMANDS = [
-        "/start", "/check", "/team_status", "trạng thái checkin",
-        "/check_all", "/check_team", "📊 trạng thái thành viên",
-        "👤 hồ sơ của tôi", "/ho_so",
-        "/portal", "🌐 mở web portal",
-        "📁 quản lý dự án & task",
-        "🌅 điểm danh (check-in/out)", "/checkin", "/checkout",
-        "📝 đăng ký nghỉ phép / remote", "/dang_ky", "/nghi_phep", "/remote",
-        "📝 công việc của tôi", "/cong_viec",
-        "📊 hỏi quy chế đãi ngộ", "/quy_che",
-        "/cancel", "hủy", "cancel", "huy"
-    ];
     if (GLOBAL_COMMANDS.includes(lowerText) || lowerText.startsWith("/subtask")) {
         if (telegram_agent_1.userFormSession[chatId]) {
             delete telegram_agent_1.userFormSession[chatId];
@@ -181,6 +310,33 @@ async function handleTelegramMessage(message) {
     }
     if (lowerText === "/cancel" || lowerText === "hủy" || lowerText === "cancel" || lowerText === "huy") {
         await (0, telegram_agent_1.sendMessage)(chatId, "✅ Đã hủy thao tác hiện tại.", telegram_agent_1.KEYBOARD_MAIN);
+        return;
+    }
+    // Xu ly reject reason cho admin tu choi task
+    const fSession = telegram_agent_1.userFormSession[chatId];
+    if (fSession?.step === 'await_reject_reason' && text) {
+        const { issueId, adminId } = fSession;
+        delete telegram_agent_1.userFormSession[chatId];
+        try {
+            await apiClient.patch(`${api_client_1.API_ROUTES.PLANE.ISSUES}/${issueId}`, {
+                status: 'working', // chuyen ve In Progress
+                reviewNote: text,
+                reviewedById: adminId,
+            });
+            // Notify assignee
+            try {
+                const issuesRes = (await apiClient.get(api_client_1.API_ROUTES.PLANE.ISSUES));
+                const issue = (issuesRes.data || []).find((i) => i.id === issueId);
+                if (issue?.Assignee?.telegramChatId) {
+                    await (0, telegram_agent_1.sendMessage)(Number(issue.Assignee.telegramChatId), `Task *${issue.shortId || issueId}* (${issue.title}) bi tu choi.\nLy do: ${text}\nVui long lam lai va nop ket qua.`);
+                }
+            }
+            catch (e) { }
+            await (0, telegram_agent_1.sendMessage)(chatId, `Da tu choi va thong bao cho nhan su. Task chuyen ve In Progress.`);
+        }
+        catch (e) {
+            await (0, telegram_agent_1.sendMessage)(chatId, `Loi khi tu choi task.`);
+        }
         return;
     }
     // Xử lý các bước nhập Form đăng ký (nghỉ phép/remote/tạo task/dự án)
@@ -292,7 +448,7 @@ async function handleTelegramMessage(message) {
         let dbTasks = [];
         let mappedTasks = [];
         try {
-            const json = await apiClient.get("/internal/v1/team/plane/issues");
+            const json = await apiClient.get(api_client_1.API_ROUTES.PLANE.ISSUES);
             dbTasks = Array.isArray(json) ? json : (json?.data || []);
             const allMembers = await (0, telegram_agent_1.getCachedMembers)();
             dbTasks.forEach((sub) => {
@@ -385,6 +541,27 @@ async function handleTelegramMessage(message) {
     }
     // E. Xử lý các nút bấm Reply Keyboard & Commands Tác vụ nhanh
     const cleanText = text.trim().toLowerCase();
+    if (cleanText === "/lichhop" || cleanText === "📅 lịch họp") {
+        await (0, telegram_agent_1.sendMessage)(chatId, "📅 *QUẢN LÝ LỊCH HỌP*\n\nVui lòng chọn:", {
+            inline_keyboard: [
+                [
+                    { text: "➕ Tạo lịch họp mới", callback_data: "meeting_create" },
+                    { text: "📋 Xem lịch sắp tới", callback_data: "meeting_list" }
+                ]
+            ]
+        });
+        return;
+    }
+    if (cleanText === "/thongbao" || cleanText === "/notify") {
+        const isAdmin = ['kimngan151091@gmail.com', 'lehuyducanh.vn@gmail.com', 'zuzzivn@gmail.com'].includes((member.email || '').toLowerCase());
+        if (!isAdmin) {
+            await (0, telegram_agent_1.sendMessage)(chatId, "⚠️ Chỉ Ban Giám Đốc mới được dùng lệnh /thongbao.");
+            return;
+        }
+        telegram_agent_1.userFormSession[chatId] = { step: 'await_announcement_text', memberId: member.id };
+        await (0, telegram_agent_1.sendMessage)(chatId, "📢 Vui lòng nhập nội dung Thông báo toàn hệ thống:\n(Gõ /cancel để hủy)");
+        return;
+    }
     if (cleanText === "👤 hồ sơ của tôi" || cleanText === "/ho_so") {
         if (!member) {
             await (0, telegram_agent_1.sendMessage)(chatId, "❌ Tài khoản Telegram của bạn chưa được liên kết với nhân sự nào. Vui lòng bấm nút đăng ký hoặc liên kết trước.");
@@ -477,14 +654,38 @@ async function handleTelegramMessage(message) {
     if (cleanText === "📝 công việc của tôi" || cleanText === "/cong_viec") {
         await (0, telegram_agent_1.sendMessage)(chatId, "🔍 Đang truy vấn danh sách công việc của bạn...");
         try {
-            const result = await (0, index_1.executeMcpTool)("get_my_issues", { employee_name: member.fullName }, member);
-            const text = result.content[0].text;
-            // Chỉ thay tiêu đề, giữ nguyên format compact từ MCP tool
-            const formattedText = text.replace(/Danh sách task của [^:]+:/i, `📋 *CÔNG VIỆC CỦA BẠN:*`);
+            // Fetch trực tiếp từ API để có đầy đủ subIssues
+            const allMembers = await (0, telegram_agent_1.getCachedMembers)();
+            const issuesRes = await apiClient.get(api_client_1.API_ROUTES.PLANE.ISSUES);
+            const rawTasks = issuesRes?.data || [];
+            // Reconstruct hierarchy from flat Plane issues
+            const parentMap = new Map();
+            const topLevelIssues = [];
+            // Store all issues in map
+            rawTasks.forEach((t) => {
+                t.subIssues = [];
+                parentMap.set(t.id, t);
+            });
+            // Build hierarchy
+            rawTasks.forEach((t) => {
+                if (t.parentId && parentMap.has(t.parentId)) {
+                    parentMap.get(t.parentId).subIssues.push(t);
+                }
+                else {
+                    topLevelIssues.push(t);
+                }
+            });
+            // Lấy issues của member này (Bao gồm parent task member phụ trách, HOẶC parent task có subtask do member phụ trách)
+            const myIssues = topLevelIssues.filter((t) => {
+                const isAssigned = t.assigneeId === member.id;
+                const hasAssignedSub = t.subIssues.some((sub) => sub.assigneeId === member.id);
+                return isAssigned || hasAssignedSub;
+            });
+            const formattedText = (0, issueFormatter_1.formatMyIssuesDM)(myIssues, member.fullName);
             await (0, telegram_agent_1.sendMessage)(chatId, formattedText);
         }
         catch (e) {
-            console.error("Lỗi fetch task qua MCP:", e);
+            console.error("Lỗi fetch task:", e);
             await (0, telegram_agent_1.sendMessage)(chatId, "❌ Gặp lỗi khi truy vấn danh sách công việc.");
         }
         return;
@@ -546,8 +747,12 @@ async function handleTelegramMessage(message) {
             if (tasksData) {
                 dbTasks = tasksData.data || [];
                 dbTasks.forEach((sub) => {
+                    // Project có thể là string (identifier) hoặc object {identifier, ...}
+                    const projIdent = typeof sub.Project === 'string'
+                        ? sub.Project
+                        : (sub.Project?.identifier || '');
                     mappedTasks.push({
-                        id: sub.Project && sub.sequenceId ? `${sub.Project.identifier}-${sub.sequenceId}` : sub.id,
+                        id: projIdent && sub.sequenceId ? `${projIdent}-${sub.sequenceId}` : sub.id,
                         title: sub.title,
                         description: sub.description || '',
                         assignee: sub.Assignee ? sub.Assignee.fullName : 'Chưa phân công',
@@ -617,7 +822,7 @@ async function handleTelegramMessage(message) {
                     const result = await (0, index_1.executeMcpTool)("get_team_leaves", aiResponse.teamLeavesPayload || {}, member);
                     await (0, telegram_agent_1.sendMessage)(chatId, result.content[0].text);
                 }
-                else if (['create_project', 'update_issue', 'create_issue', 'leave_request', 'check_in_out', 'breakdown_issue', 'update_sub_issues', 'request_issue_approval'].includes(aiResponse.action)) {
+                else if (['create_project', 'update_issue', 'update_issues', 'create_issue', 'leave_request', 'check_in_out', 'breakdown_issue', 'update_sub_issues', 'request_issue_approval'].includes(aiResponse.action)) {
                     const actionId = Math.random().toString(36).substring(2, 10);
                     telegram_agent_1.actionCache[actionId] = {
                         action: aiResponse.action,

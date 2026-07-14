@@ -79,8 +79,14 @@ async function executeHrTool(name, args, user, isBoss, apiClient, members) {
             const { date, session, type, reason, startDate, endDate, leaveType } = args;
             const employeeName = user.fullName;
             const sessionText = session === "all" ? "Cả ngày" : session === "am" ? "Buổi sáng" : "Buổi chiều";
-            const finalStartDate = date ? date + "T00:00:00.000Z" : (startDate ? startDate + "T00:00:00.000Z" : null);
-            const finalEndDate = date ? date + "T23:59:59.000Z" : (endDate ? endDate + "T23:59:59.000Z" : null);
+            let finalStartDate = date ? date + "T00:00:00.000Z" : (startDate ? startDate + "T00:00:00.000Z" : null);
+            let finalEndDate = date ? date + "T23:59:59.000Z" : (endDate ? endDate + "T23:59:59.000Z" : null);
+            if (session === "am" && finalEndDate) {
+                finalEndDate = finalEndDate.replace("T23:59:59.000Z", "T12:00:00.000Z");
+            }
+            else if (session === "pm" && finalStartDate) {
+                finalStartDate = finalStartDate.replace("T00:00:00.000Z", "T12:00:00.000Z");
+            }
             const finalLeaveType = leaveType || (type === "leave" ? "annual" : "remote");
             if (!finalStartDate || !finalEndDate) {
                 throw new types_js_1.McpError(types_js_1.ErrorCode.InvalidParams, "Thiếu thông tin ngày xin nghỉ.");

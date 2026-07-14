@@ -47,6 +47,7 @@ const hrTools_1 = require("./mcp/tools/hrTools");
 const attendanceTools_1 = require("./mcp/tools/attendanceTools");
 dotenv.config();
 const telegram_agent_2 = require("./telegram_agent");
+const cronJobs_1 = require("./cronJobs");
 const CORE_API_URL = process.env.CORE_API_URL || "http://localhost:5100";
 let apiClient = new api_client_1.CoreApiClient({
     baseURL: CORE_API_URL + '/internal/v1/team',
@@ -109,7 +110,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
     const { user } = await authorizeClient();
     return executeMcpTool(name, args, user);
 });
-async function executeMcpTool(name, args, user) {
+async function executeMcpTool(name, args, user, username) {
     const isBoss = ["kimngan151091@gmail.com", "lehuyducanh.vn@gmail.com", "zuzzivn@gmail.com"].includes(user.email.toLowerCase());
     const members = await getTeamMembersCache();
     let toolName = name;
@@ -117,7 +118,7 @@ async function executeMcpTool(name, args, user) {
     const hrNames = hrTools_1.HR_TOOLS_SCHEMA.map(t => t.name);
     const attendanceNames = attendanceTools_1.ATTENDANCE_TOOLS_SCHEMA.map(t => t.name);
     if (planeNames.includes(name)) {
-        return (0, planeTools_1.executePlaneTool)(toolName, args, user, isBoss, apiClient, members);
+        return (0, planeTools_1.executePlaneTool)(toolName, args, user, isBoss, apiClient, members, username);
     }
     if (hrNames.includes(name)) {
         return (0, hrTools_1.executeHrTool)(toolName, args, user, isBoss, apiClient, members);
@@ -293,6 +294,105 @@ async function main() {
                 }
             }
         });
+        // ─── REVIEW SYSTEM: Nhân sự nộp output → Notify Admins ──────────────────
+        nc.subscribe('core.team.task.submitted_for_review', {
+            callback: async (err, msg) => {
+                if (!err) {
+                    try {
+                        const data = JSON.parse(msg.data.toString());
+                        const issue = data.issue;
+                        const admins = data.admins || [];
+                        const projIdent = issue.Project?.identifier || '';
+                        const shortId = projIdent && issue.sequenceId ? `${projIdent}-${issue.sequenceId}` : issue.id?.substring(0, 8);
+                        const submitterName = issue.Assignee?.fullName || 'Nhân sự';
+                        const now = new Date();
+                        const timeStr = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+                        let txt = `🔵 *TASK CẦN DUYỆT OUTPUT*\n\n`;
+                        txt += `📋 *${shortId}*: ${issue.title}\n`;
+                        txt += `👤 Nộp bởi: *${submitterName}*\n`;
+                        txt += `🕐 Nộp lúc: ${timeStr}\n\n`;
+                        if (issue.outputContent) {
+                            txt += `📝 *Output:*\n${issue.outputContent.substring(0, 300)}${issue.outputContent.length > 300 ? '...' : ''}\n\n`;
+                        }
+                        const urls = Array.isArray(issue.outputUrls) ? issue.outputUrls : [];
+                        if (urls.length > 0) {
+                            txt += `🔗 *Links đính kèm (${urls.length}):*\n`;
+                            urls.slice(0, 3).forEach((u) => { txt += `• ${u}\n`; });
+                        }
+                        txt += `\n_Vui lòng xem xét và phê duyệt hoặc từ chối:_`;
+                        for (const admin of admins) {
+                            if (admin.telegramChatId) {
+                                await (0, telegram_agent_1.sendMessage)(Number(admin.telegramChatId), txt, {
+                                    inline_keyboard: [[
+                                            { text: '✅ APPROVE — Xác nhận Done', callback_data: `review_approve:${issue.id}` },
+                                            { text: '❌ REJECT — Làm lại', callback_data: `review_reject:${issue.id}` }
+                                        ]]
+                                });
+                            }
+                        }
+                        console.log(`[NATS Review] Đã notify ${admins.length} admin về task ${shortId} cần duyệt.`);
+                    }
+                    catch (e) {
+                        console.error('[NATS] Error processing submitted_for_review', e);
+                    }
+                }
+            }
+        });
+        // ─── REVIEW APPROVED: Admin duyệt → Notify assignee ─────────────────────
+        nc.subscribe('core.team.task.review_approved', {
+            callback: async (err, msg) => {
+                if (!err) {
+                    try {
+                        const data = JSON.parse(msg.data.toString());
+                        const issue = data.issue;
+                        const assignee = data.assignee;
+                        const reviewer = data.reviewer;
+                        if (assignee?.telegramChatId) {
+                            const projIdent = issue.Project?.identifier || '';
+                            const shortId = projIdent && issue.sequenceId ? `${projIdent}-${issue.sequenceId}` : issue.id?.substring(0, 8);
+                            const txt = `✅ *TASK ĐÃ ĐƯỢC DUYỆT!*\n\n` +
+                                `📋 *${shortId}*: ${issue.title}\n` +
+                                `👔 Duyệt bởi: *${reviewer?.fullName || 'Admin'}*\n\n` +
+                                `🎉 Chúc mừng! Task của bạn đã được xác nhận *Done*.\n` +
+                                `Cảm ơn bạn đã hoàn thành xuất sắc công việc! 🌟`;
+                            await (0, telegram_agent_1.sendMessage)(Number(assignee.telegramChatId), txt);
+                        }
+                    }
+                    catch (e) {
+                        console.error('[NATS] Error processing review_approved', e);
+                    }
+                }
+            }
+        });
+        // ─── REVIEW REJECTED: Admin từ chối → Notify assignee ───────────────────
+        nc.subscribe('core.team.task.review_rejected', {
+            callback: async (err, msg) => {
+                if (!err) {
+                    try {
+                        const data = JSON.parse(msg.data.toString());
+                        const issue = data.issue;
+                        const assignee = data.assignee;
+                        const reviewer = data.reviewer;
+                        const reviewNote = data.reviewNote;
+                        if (assignee?.telegramChatId) {
+                            const projIdent = issue.Project?.identifier || '';
+                            const shortId = projIdent && issue.sequenceId ? `${projIdent}-${issue.sequenceId}` : issue.id?.substring(0, 8);
+                            let txt = `❌ *OUTPUT BỊ TỪ CHỐI — Cần làm lại*\n\n` +
+                                `📋 *${shortId}*: ${issue.title}\n` +
+                                `👔 Xem xét bởi: *${reviewer?.fullName || 'Admin'}*\n\n`;
+                            if (reviewNote) {
+                                txt += `💬 *Lý do:* ${reviewNote}\n\n`;
+                            }
+                            txt += `⚡ Vui lòng xem lại, hoàn thiện và nộp lại output khi sẵn sàng.`;
+                            await (0, telegram_agent_1.sendMessage)(Number(assignee.telegramChatId), txt);
+                        }
+                    }
+                    catch (e) {
+                        console.error('[NATS] Error processing review_rejected', e);
+                    }
+                }
+            }
+        });
     }
     catch (err) {
         console.error("[NATS] Failed to initialize NATS subscribers:", err.message);
@@ -304,6 +404,13 @@ async function main() {
     }
     catch (err) {
         console.error("Failed to start Telegram Bot:", err.message);
+    }
+    // Khởi chạy Cron Jobs (báo cáo tự động)
+    try {
+        (0, cronJobs_1.startCronJobs)(apiClient, telegram_agent_1.sendMessage);
+    }
+    catch (err) {
+        console.error("Failed to start Cron Jobs:", err.message);
     }
 }
 main().catch((error) => {
