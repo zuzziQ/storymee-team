@@ -457,7 +457,10 @@ export default function StorymeeTeamPage() {
         <TaskDetailModal
           task={selectedTask}
           onClose={() => setSelectedTask(null)}
-          onUpdate={handleUpdateTask}
+          onUpdate={(t) => {
+            setSelectedTask(t);
+            handleUpdateTask(t, teamMembers, fetchDbData);
+          }}
           tasks={tasks}
           teamMembers={teamMembers}
           projects={projects}

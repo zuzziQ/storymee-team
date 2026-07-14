@@ -151,6 +151,14 @@ export class PlaneController {
                 stateId = project.states.find((s: any) => s.name === 'Todo' || s.group === 'unstarted')?.id || project.states[0].id;
             }
 
+            let finalAssigneeId = data.assigneeId;
+            if (!finalAssigneeId && data.parentId) {
+                const parent = await prisma.plIssue.findUnique({ where: { id: data.parentId }});
+                if (parent && parent.assigneeId) {
+                    finalAssigneeId = parent.assigneeId;
+                }
+            }
+
             const newIssue = await prisma.plIssue.create({
                 data: {
                     title: data.title,
@@ -158,7 +166,7 @@ export class PlaneController {
                     projectId: data.projectId,
                     workspaceId: workspaceId,
                     stateId: stateId!,
-                    assigneeId: data.assigneeId,
+                    assigneeId: finalAssigneeId,
                     parentId: data.parentId,
                     priority: data.priority || 'medium',
                     estimateHours: data.estimateHours ? parseFloat(data.estimateHours) : null,
