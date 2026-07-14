@@ -11,6 +11,14 @@ function mapIssueStatus(nameLower: string, group: string): string {
   return 'Todo';
 }
 
+const formatLocalTime = (isoString: string) => {
+  if (!isoString) return '';
+  const d = new Date(isoString);
+  if (isNaN(d.getTime())) return '';
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export function useTaskState() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [dbTaskError, setDbTaskError] = useState<string | null>(null);
@@ -35,7 +43,8 @@ export function useTaskState() {
             return {
               id: c.id, dbId: c.id, title: c.title,
               isDone: cGroup === 'completed' || cName === 'done',
-              status: cStatus
+              status: cStatus,
+              assignee: c.Assignee?.fullName || issue.Assignee?.fullName || 'Chưa phân công'
             };
           });
 
@@ -49,7 +58,7 @@ export function useTaskState() {
             createdAt: issue.createdAt || new Date().toISOString(),
             priority: (issue.priority.charAt(0).toUpperCase() + issue.priority.slice(1)),
             status: mappedStatus,
-            deadline: issue.targetDate ? issue.targetDate.split('T')[0] : '',
+            deadline: formatLocalTime(issue.targetDate),
             estimate: issue.estimateHours ? parseFloat(issue.estimateHours) : 0,
             parentTaskId: null,
             projectId: issue.projectId || 'default_no_project',
@@ -115,7 +124,8 @@ export function useTaskState() {
     activeProjectId: string,
     teamMembers: TeamMember[],
     projects: Project[],
-    onRefresh: () => void
+    onRefresh: () => void,
+    status?: string
   ) => {
     try {
       const matchedMember = teamMembers.find(m => m.name === assignee);
@@ -131,7 +141,8 @@ export function useTaskState() {
         priority: priority.toLowerCase(),
         assigneeId: matchedMember ? matchedMember.id : null,
         projectId: targetProjectId,
-        estimateHours: estimate || undefined
+        estimateHours: estimate || undefined,
+        status: status
       });
       onRefresh();
     } catch (err) {

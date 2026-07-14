@@ -146,7 +146,9 @@ interface KanbanTabProps {
   activeUserEmail: string;
   onArchiveTaskDirect: (task: Task) => void;
   onRequestArchive: (task: Task) => void;
-  handleCreateTask?: (title: string, assignee: string, estimate: number, priority: any) => Promise<void>;
+  handleUpdateTaskStatus?: (id: string, status: string) => void;
+  handleCreateTask?: (title: string, assignee: string, estimate: number, priority: any, status?: string) => Promise<void> | void;
+  teamMembers: TeamMember[];
 }
 
 
@@ -198,9 +200,7 @@ export default function KanbanTab({
 
   const submitNewTask = (col: string) => {
     if (newTaskTitle.trim() && handleCreateTask) {
-      // Gọi API tạo task. Plane backend thường sẽ set state mặc định là Todo hoặc Backlog. 
-      // Ở đây ta cứ pass title, priority. 
-      handleCreateTask(newTaskTitle.trim(), 'Chưa phân công', 4, 'Medium');
+      handleCreateTask(newTaskTitle.trim(), 'Chưa phân công', 4, 'Medium', col);
     }
     setCreatingInCol(null);
     setNewTaskTitle('');
@@ -295,6 +295,7 @@ export default function KanbanTab({
                     value={newTaskTitle}
                     onChange={(e) => setNewTaskTitle(e.target.value)}
                     onKeyDown={(e) => {
+                      if (e.nativeEvent.isComposing) return;
                       if (e.key === 'Enter') submitNewTask(col);
                       if (e.key === 'Escape') setCreatingInCol(null);
                     }}

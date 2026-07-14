@@ -130,6 +130,23 @@ export class PlaneController {
             if (!project) return reply.status(404).send({ success: false, message: "Project not found" });
             
             if (!workspaceId) workspaceId = project.workspaceId;
+            if (!stateId && data.status && project.states.length > 0) {
+                const statusLower = data.status.toLowerCase();
+                let matchedState = project.states.find((s: any) => 
+                    s.name.toLowerCase() === statusLower || 
+                    ((statusLower === 'in review' || statusLower === 'in_review') && s.name.toLowerCase() === 'in review')
+                );
+                if (!matchedState) {
+                    matchedState = project.states.find((s: any) => 
+                        ((statusLower === 'backlog') && s.group === 'backlog') ||
+                        ((statusLower === 'todo' || statusLower === 'pending') && s.group === 'unstarted') ||
+                        ((statusLower === 'in progress' || statusLower === 'in_progress' || statusLower === 'working') && s.group === 'started') ||
+                        ((statusLower === 'done' || statusLower === 'completed') && s.group === 'completed') ||
+                        ((statusLower === 'cancelled' || statusLower === 'canceled') && s.group === 'cancelled')
+                    );
+                }
+                if (matchedState) stateId = matchedState.id;
+            }
             if (!stateId && project.states.length > 0) {
                 stateId = project.states.find((s: any) => s.name === 'Todo' || s.group === 'unstarted')?.id || project.states[0].id;
             }

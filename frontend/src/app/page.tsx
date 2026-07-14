@@ -301,6 +301,7 @@ export default function StorymeeTeamPage() {
               handleAnalyzeProject={handleAnalyzeProject}
               handleDeleteProject={handleDeleteProject}
               handleCreateTask={handleCreateTask}
+              onSelectTask={setSelectedTask}
               teamMembers={teamMembers}
               showAddProjectModal={showAddProjectModal}
               setShowAddProjectModal={setShowAddProjectModal}

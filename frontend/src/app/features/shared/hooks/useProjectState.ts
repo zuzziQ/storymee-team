@@ -48,16 +48,6 @@ export function useProjectState() {
           tasksCount: 0,
           completedCount: 0
         }));
-        mappedProjects.unshift({
-          id: 'default_no_project',
-          name: 'Mặc định (Không thuộc dự án nào)',
-          key: 'NO_PROJ',
-          description: 'Các công việc chung, không thuộc dự án cụ thể.',
-          color: '#a1a1aa',
-          progress: 0,
-          tasksCount: 0,
-          completedCount: 0
-        });
         setProjects(mappedProjects);
         setActiveProjectId(prev => {
           if (prev && mappedProjects.some((p: any) => p.id === prev)) return prev;

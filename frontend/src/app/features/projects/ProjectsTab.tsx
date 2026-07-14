@@ -18,6 +18,7 @@ interface ProjectsTabProps {
   handleDeleteProject?: (id: string) => void;
   handleCreateTask?: (title: string, assignee: string, estimate: number, priority: any) => Promise<void>;
   teamMembers: TeamMember[];
+  onSelectTask?: (task: Task) => void;
   
   showAddProjectModal: boolean;
   setShowAddProjectModal: (show: boolean) => void;
@@ -51,7 +52,8 @@ export default function ProjectsTab({
   newProjectColor,
   setNewProjectColor,
   handleAddProject,
-  handleCreateTask
+  handleCreateTask,
+  onSelectTask
 }: ProjectsTabProps) {
   const proj = projects.find(p => p.id === activeProjectId);
   const projTasks = proj ? tasks.filter(t => t.projectId === proj.id) : [];
@@ -244,7 +246,7 @@ export default function ProjectsTab({
               {projTasks.map(t => {
                 const finished = t.subtasks.filter(s => s.isDone).length;
                 return (
-                  <div key={t.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--bg-muted)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                  <div key={t.id} onClick={() => onSelectTask && onSelectTask(t)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--bg-muted)', borderRadius: 8, border: '1px solid var(--border)', cursor: 'pointer' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
                       <span style={{ fontSize: 11, color: '#71717a', fontFamily: 'monospace', width: 55 }}>{t.id}</span>
                       <span style={{ fontSize: 13, fontWeight: 500, color: '#fafafa' }}>{t.title}</span>
@@ -262,7 +264,7 @@ export default function ProjectsTab({
               )}
               
               {/* Quick Add Task */}
-              {handleCreateTask && activeProjectId && activeProjectId !== 'default_no_project' && (
+              {handleCreateTask && activeProjectId && (
                 <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
                   <input
                     type="text"
@@ -270,6 +272,7 @@ export default function ProjectsTab({
                     value={newTaskTitle}
                     onChange={e => setNewTaskTitle(e.target.value)}
                     onKeyDown={e => {
+                      if (e.nativeEvent.isComposing) return;
                       if (e.key === 'Enter' && newTaskTitle.trim()) {
                         handleCreateTask(newTaskTitle.trim(), 'Chưa phân công', 4, 'Medium');
                         setNewTaskTitle('');

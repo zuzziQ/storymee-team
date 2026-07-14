@@ -74,12 +74,16 @@ export function useAppState() {
   }, [auth.authReady, auth.activeUser]);
 
   // --- Wrapper handlers: bind deps từ các hooks ---
-  const handleUpdateTask = (task: any) =>
+  const handleUpdateTask = (task: any) => {
     taskState.handleUpdateTask(task, hr.teamMembers, fetchDbData);
+    if (auth.selectedTask?.id === task.id) {
+      auth.setSelectedTask(task);
+    }
+  };
 
-  const handleCreateTask = (title: string, assignee: string, estimate: number, priority: any) =>
+  const handleCreateTask = (title: string, assignee: string, estimate: number, priority: any, status?: string) =>
     taskState.handleCreateTask(title, assignee, estimate, priority,
-      projectState.activeProjectId, hr.teamMembers, projectState.projects, fetchDbData);
+      projectState.activeProjectId, hr.teamMembers, projectState.projects, fetchDbData, status);
 
   const handleCreateSubtask = (title: string, parentTaskId: string, projectId: string) =>
     taskState.handleCreateSubtask(title, parentTaskId, projectId, fetchDbData);

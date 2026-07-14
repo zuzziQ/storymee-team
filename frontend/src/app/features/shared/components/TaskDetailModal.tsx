@@ -550,29 +550,11 @@ export default function TaskDetailModal({
                             onChange={(e) => handleUpdateSubtaskStatus(sub.id, e.target.checked ? 'done' : 'pending')}
                             style={{ width: 14, height: 14, accentColor: '#6366f1', flexShrink: 0 }}
                           />
-                          <span style={{ fontSize: 13, color: (sub.isDone || sub.status === 'done' || sub.status === 'completed' || sub.status === 'cancelled') ? '#71717a' : '#fafafa', textDecoration: (sub.isDone || sub.status === 'done' || sub.status === 'completed' || sub.status === 'cancelled') ? 'line-through' : 'none', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub.title}</span>
+                          <span style={{ fontSize: 13, color: (sub.isDone || sub.status === 'done' || sub.status === 'completed' || sub.status === 'cancelled') ? '#71717a' : '#fafafa', textDecoration: (sub.isDone || sub.status === 'done' || sub.status === 'completed' || sub.status === 'cancelled') ? 'line-through' : 'none', whiteSpace: 'normal', wordBreak: 'break-word' }}>{sub.title}</span>
                         </label>
                         
-                        {/* Assignee, Priority, Deadline Controls */}
+                        {/* Assignee, Deadline Controls */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                          
-                          {/* Priority */}
-                          <select
-                             value={sub.priority || 'Medium'}
-                             onChange={(e) => {
-                               const p = e.target.value as Priority;
-                               const newSubs = subtasks.map(s => s.id === sub.id ? { ...s, priority: p } : s);
-                               setSubtasks(newSubs);
-                               if (sub.dbId) coreApiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${sub.dbId}`, { priority: p.toLowerCase() }).catch(() => {});
-                               handleTaskUpdate({ subtasks: newSubs });
-                             }}
-                             style={{ fontSize: 10, padding: '2px 4px', borderRadius: 4, background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: sub.priority === 'Urgent' ? '#ef4444' : sub.priority === 'High' ? '#f97316' : '#a1a1aa', outline: 'none', cursor: 'pointer' }}
-                          >
-                            <option value="Low">Low</option>
-                            <option value="Medium">Medium</option>
-                            <option value="High">High</option>
-                            <option value="Urgent">Urgent</option>
-                          </select>
 
                           {/* Assignee */}
                           <select
@@ -1027,10 +1009,26 @@ export default function TaskDetailModal({
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <span style={{ fontSize: 10, color: '#71717a', textTransform: 'uppercase', fontWeight: 600 }}>Hạn chót (Deadline)</span>
               <input
-                type="date"
+                type="datetime-local"
                 className="input-dark"
                 value={task.deadline}
-                onChange={e => handleTaskUpdate({ deadline: e.target.value })}
+                onChange={e => {
+                  const newDeadline = e.target.value;
+                  const updates: Partial<Task> = { deadline: newDeadline };
+                  if (newDeadline) {
+                    const target = new Date(newDeadline);
+                    const now = new Date();
+                    if (!isNaN(target.getTime()) && target > now) {
+                      const diffHours = (target.getTime() - now.getTime()) / 3600000;
+                      // Ước tính số giờ làm việc (8h/ngày)
+                      const estimate = Math.max(1, Math.round(diffHours * (8 / 24)));
+                      if (!task.estimate || task.estimate === 0) {
+                         updates.estimate = estimate;
+                      }
+                    }
+                  }
+                  handleTaskUpdate(updates);
+                }}
                 style={{ padding: '6px 12px', fontSize: 13, borderRadius: 8 }}
               />
             </div>
