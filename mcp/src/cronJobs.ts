@@ -118,13 +118,13 @@ export function startCronJobs(
   }, { timezone: "Asia/Ho_Chi_Minh" });
 
   // ─────────────────────────────────────────────────────────────────────────
-  // CRON 2: 8:30 sáng → Gửi DM cá nhân: Nhắc việc đầu ngày (Thứ 2 - Thứ 7)
+  // CRON 2: 8:20 sáng → Gửi DM cá nhân: Nhắc việc đầu ngày (Thứ 2 - Thứ 7)
   // ─────────────────────────────────────────────────────────────────────────
-  cron.schedule('30 8 * * 1-6', async () => {
+  cron.schedule('20 8 * * 1-6', async () => {
     try {
-      console.log("[Cron 8h30 DM] Đang gửi nhắc nhở đầu ngày cho từng thành viên...");
+      console.log("[Cron 8h20 DM] Đang gửi nhắc nhở đầu ngày cho từng thành viên...");
       const { members, allIssues, todayStr } = await fetchAllData(apiClient);
-      console.log(`[Cron 8h30 DM] ${members.length} thành viên, ${allIssues.length} issues`);
+      console.log(`[Cron 8h20 DM] ${members.length} thành viên, ${allIssues.length} issues`);
 
       for (const m of members) {
         if (!m.telegramChatId) continue;
@@ -198,26 +198,26 @@ export function startCronJobs(
       }
       console.log("[Cron 8h30 DM] ✅ Đã gửi xong báo cáo đầu ngày cho tất cả thành viên.");
     } catch (err) {
-      console.error("[Cron 8h30 DM] Lỗi:", err);
+      console.error("[Cron 8h20 DM] Lỗi:", err);
     }
   }, { timezone: "Asia/Ho_Chi_Minh" });
 
   // ─────────────────────────────────────────────────────────────────────────
-  // CRON 3: 17:00 chiều → Gửi nhóm: Tổng kết cuối ngày (Thứ 2 - Thứ 7)
+  // CRON 3: 18:05 chiều → Gửi nhóm: Tổng kết cuối ngày (Thứ 2 - Thứ 7)
   // ─────────────────────────────────────────────────────────────────────────
-  cron.schedule('0 17 * * 1-6', async () => {
+  cron.schedule('5 18 * * 1-6', async () => {
     if (!GROUP_ID) {
-      console.log("[Cron 17h Nhóm] TELEGRAM_GROUP_ID chưa cấu hình, bỏ qua.");
+      console.log("[Cron 18h05 Nhóm] TELEGRAM_GROUP_ID chưa cấu hình, bỏ qua.");
       return;
     }
     try {
-      console.log("[Cron 17h Nhóm] Đang tạo báo cáo cuối ngày...");
+      console.log("[Cron 18h05 Nhóm] Đang tạo báo cáo cuối ngày...");
       const data = await fetchAllData(apiClient);
       const msg = formatGroupEveningReport(data as TeamReportData);
       await sendMessage(GROUP_ID, msg);
-      console.log("[Cron 17h Nhóm] ✅ Đã gửi báo cáo cuối ngày vào nhóm.");
+      console.log("[Cron 18h05 Nhóm] ✅ Đã gửi báo cáo cuối ngày vào nhóm.");
     } catch (err) {
-      console.error("[Cron 17h Nhóm] Lỗi:", err);
+      console.error("[Cron 18h05 Nhóm] Lỗi:", err);
     }
   }, { timezone: "Asia/Ho_Chi_Minh" });
 
