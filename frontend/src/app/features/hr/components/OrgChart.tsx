@@ -446,11 +446,10 @@ export default function OrgChart({
                       
                       const res = await coreApiClient.post(API_ROUTES.HR.TEAM_MEMBERS, {
                         fullName: newMember.name,
-                        jobTitle: newMember.role,
+                        role: newMember.role,
                         email: emailToUse,
-                        hexColor: newMember.color,
                         telegramUsername: newMember.telegramUsername,
-                        workType: newMember.workArrangement || 'office',
+                        workArrangement: newMember.workArrangement || 'office',
                         isActive: true
                       });
                       
@@ -458,12 +457,12 @@ export default function OrgChart({
                       const added = {
                         id: dbMember.id || 'new-' + Date.now(),
                         name: dbMember.fullName || newMember.name,
-                        role: dbMember.jobTitle || newMember.role,
+                        role: dbMember.role || newMember.role,
                         email: dbMember.email || emailToUse,
-                        color: dbMember.hexColor || newMember.color,
+                        color: newMember.color,
                         skills: newMember.skills || [],
                         telegramUsername: dbMember.telegramUsername || newMember.telegramUsername || '',
-                        workArrangement: dbMember.workType || newMember.workArrangement || 'office',
+                        workArrangement: dbMember.workArrangement || newMember.workArrangement || 'office',
                         isActive: true
                       } as any;
                       
