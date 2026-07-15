@@ -71,6 +71,38 @@ exports.HR_TOOLS_SCHEMA = [
             },
             required: ["email", "fullName"]
         }
+    },
+    {
+        name: "schedule_meeting",
+        description: "Tạo lịch họp mới.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                title: { type: "string" },
+                description: { type: "string" },
+                startTime: { type: "string" },
+                endTime: { type: "string" },
+                attendees: { type: "array", items: { type: "string" } }
+            },
+            required: ["title", "startTime", "endTime"]
+        }
+    },
+    {
+        name: "update_meeting",
+        description: "Cập nhật hoặc hủy lịch họp.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                meeting_id: { type: "string" },
+                title: { type: "string" },
+                description: { type: "string" },
+                startTime: { type: "string" },
+                endTime: { type: "string" },
+                attendees: { type: "array", items: { type: "string" } },
+                status: { type: "string" }
+            },
+            required: ["meeting_id"]
+        }
     }
 ];
 async function executeHrTool(name, args, user, isBoss, apiClient, members) {
@@ -271,6 +303,46 @@ async function executeHrTool(name, args, user, isBoss, apiClient, members) {
                         type: "text",
                         text: `Cập nhật nhân sự thành công! ✓\n• **Họ tên**: ${fullName}\n• **Email**: ${email}\n• **Vai trò**: ${role || 'Chưa rõ'}\n• **Telegram**: ${telegramUsername ? '@' + telegramUsername : 'Chưa có'} (Chat ID: ${telegramChatId || 'Chưa có'})`
                     }]
+            };
+        }
+        case "schedule_meeting": {
+            const { title, description, startTime, endTime, attendees } = args;
+            let resJson;
+            try {
+                resJson = await apiClient.post('hr/meetings', {
+                    title,
+                    description,
+                    startTime,
+                    endTime,
+                    hostId: user.id,
+                    attendees: attendees || []
+                });
+            }
+            catch (err) {
+                throw new types_js_1.McpError(types_js_1.ErrorCode.InternalError, "Lỗi tạo lịch họp.");
+            }
+            return {
+                content: [{ type: "text", text: `Đã đặt lịch họp thành công: ${title}` }]
+            };
+        }
+        case "update_meeting": {
+            const { meeting_id, title, description, startTime, endTime, attendees, status } = args;
+            let resJson;
+            try {
+                resJson = await apiClient.patch(`hr/meetings/${meeting_id}`, {
+                    title,
+                    description,
+                    startTime,
+                    endTime,
+                    attendees,
+                    status
+                });
+            }
+            catch (err) {
+                throw new types_js_1.McpError(types_js_1.ErrorCode.InternalError, "Lỗi cập nhật lịch họp.");
+            }
+            return {
+                content: [{ type: "text", text: `Đã cập nhật lịch họp thành công.` }]
             };
         }
         default:

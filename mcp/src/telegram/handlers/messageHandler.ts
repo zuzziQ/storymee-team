@@ -835,7 +835,7 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
         } else if (aiResponse.action === 'get_team_leaves') {
           const result = await executeMcpTool("get_team_leaves", aiResponse.teamLeavesPayload || {}, member);
           await sendMessage(chatId, result.content[0].text);
-        } else if (['create_project', 'update_issue', 'update_issues', 'create_issue', 'leave_request', 'check_in_out', 'breakdown_issue', 'update_sub_issues', 'request_issue_approval'].includes(aiResponse.action)) {
+        } else if (['create_project', 'update_issue', 'update_issues', 'create_issue', 'leave_request', 'check_in_out', 'breakdown_issue', 'update_sub_issues', 'request_issue_approval', 'create_meeting', 'update_meeting'].includes(aiResponse.action)) {
           const actionId = Math.random().toString(36).substring(2, 10);
           actionCache[actionId] = {
             action: aiResponse.action,
@@ -851,7 +851,11 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
                       ? aiResponse.approvalPayload
                       : aiResponse.action === 'create_project'
                         ? aiResponse.projectPayload
-                        : aiResponse.taskPayload,
+                        : aiResponse.action === 'create_meeting'
+                          ? aiResponse.meetingPayload
+                          : aiResponse.action === 'update_meeting'
+                            ? aiResponse.updateMeetingPayload
+                            : aiResponse.taskPayload,
             member: member
           };
 
@@ -873,6 +877,13 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
               ? '👉 Bấm Xác nhận sẽ xóa toàn bộ việc con cũ của task này và thay bằng danh sách trên.'
               : '👉 Bấm Xác nhận sẽ tạo thêm các việc con này vào danh sách hiện tại.';
             confirmMsg = `💡 *ĐỀ XUẤT ${actionTitle} CÁC CÔNG VIỆC CON CHO ${up.task_id}:*\n${listStr}\n\n${actionDesc}`;
+          } else if (aiResponse.action === 'create_meeting') {
+            const mp = aiResponse.meetingPayload;
+            confirmMsg = `💡 *ĐỀ XUẤT ĐẶT LỊCH HỌP:*\n• Tiêu đề: *${mp.title}*\n• Thời gian: *${new Date(mp.startTime).toLocaleString('vi-VN')}* đến *${new Date(mp.endTime).toLocaleString('vi-VN')}*\n• Tham gia: *${mp.attendees?.join(', ') || 'Chỉ mình bạn'}*`;
+          } else if (aiResponse.action === 'update_meeting') {
+            const mp = aiResponse.updateMeetingPayload;
+            const isCancel = mp.status === 'cancelled';
+            confirmMsg = `💡 *ĐỀ XUẤT ${isCancel ? 'HỦY' : 'CẬP NHẬT'} LỊCH HỌP ${mp.meeting_id}:*\n• Tiêu đề: *${mp.title}*\n• Thời gian: *${new Date(mp.startTime).toLocaleString('vi-VN')}* đến *${new Date(mp.endTime).toLocaleString('vi-VN')}*`;
           } else if (aiResponse.action === 'update_issue') {
             const tp = aiResponse.taskPayload;
             const statusText = tp.status ? `\n• Trạng thái mới: *${tp.status}*` : '';

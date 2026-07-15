@@ -701,6 +701,33 @@ async function handleCallbackQuery(callbackQuery: any) {
           }
         }
 
+      } else if (action === 'create_meeting' || action === 'update_meeting') {
+        const mcpTool = action === 'create_meeting' ? 'schedule_meeting' : 'update_meeting';
+        try {
+          const result = await executeMcpTool(mcpTool, payload, actionMember);
+          await fetchAxios(`${TELEGRAM_API}/editMessageText`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              chat_id: chatId,
+              message_id: messageId,
+              text: `✅ *Hệ thống:* ${result.content[0].text}`,
+              parse_mode: "Markdown"
+            })
+          });
+        } catch (err: any) {
+          const errorMsg = err.message || "Lỗi không xác định";
+          await fetchAxios(`${TELEGRAM_API}/editMessageText`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              chat_id: chatId,
+              message_id: messageId,
+              text: `❌ *Lỗi khi thực thi:* ${errorMsg}`,
+              parse_mode: "Markdown"
+            })
+          });
+        }
       } else if (action === 'approve_issue_request') {
         const result = await executeMcpTool("approve_issue_request", {
           task_id: payload.task_id,

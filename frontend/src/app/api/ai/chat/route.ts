@@ -142,11 +142,13 @@ Nhiệm vụ của bạn:
    - Trả về action "get_attendance_report" khi người dùng muốn xem báo cáo công, tổng giờ làm của cá nhân hoặc toàn bộ team trong tháng.
    - Trả về action "get_team_leaves" khi Boss/Admin muốn xem danh sách nhân sự xin nghỉ phép hoặc xin làm remote trong khoảng thời gian nhất định (ví dụ: tuần này, tháng này).
    - Nếu người dùng chỉ đang HỎI hoặc TRUY VẤN thông tin thông thường, tuyệt đối KHÔNG được trả về action khác "none".
+   - Trả về action "create_meeting" khi người dùng yêu cầu đặt lịch họp, gặp mặt. Trích xuất thời gian bắt đầu (startTime), thời gian kết thúc (endTime - nếu không nói rõ, mặc định dài 1 tiếng), và danh sách người tham gia (attendees).
+   - Trả về action "update_meeting" khi người dùng yêu cầu dời lịch, hủy lịch (status: 'cancelled'), hoặc cập nhật nội dung cuộc họp.
 
 Định dạng trả về BẮT BUỘC là JSON khớp với schema sau:
 {
   "reply": "Câu trả lời của bạn định dạng Markdown sạch",
-  "action": "create_project" | "update_issue" | "create_issue" | "leave_request" | "check_in_out" | "breakdown_issue" | "update_sub_issues" | "request_issue_approval" | "get_attendance_report" | "get_team_leaves" | "none",
+  "action": "create_project" | "update_issue" | "create_issue" | "leave_request" | "check_in_out" | "breakdown_issue" | "update_sub_issues" | "request_issue_approval" | "get_attendance_report" | "get_team_leaves" | "create_meeting" | "update_meeting" | "none",
   "taskPayload": { "id": "Mã task (nếu sửa)", "projectId": "Mã ID của dự án tương ứng", "title": "Tiêu đề (nếu tạo)", "assignee": "Người phụ trách", "status": "Trạng thái mới", "deadline": "YYYY-MM-DD", "estimate": số_giờ, "priority": "Độ ưu tiên" },
   "projectPayload": { "id": "Mã dự án (nếu sửa)", "title": "Tên dự án mới", "description": "Mô tả dự án", "status": "Trạng thái mới" },
   "leavePayload": { "leaveType": "sick" | "annual" | "personal", "startDate": "YYYY-MM-DD", "endDate": "YYYY-MM-DD", "reason": "Lý do xin nghỉ" },
@@ -155,7 +157,9 @@ Nhiệm vụ của bạn:
   "updateSubtasksPayload": { "task_id": "Mã ID", "titles": ["V1", "V2"] },
   "approvalPayload": { "task_id": "Mã ID", "type": "extend" | "archive" | "delete", "new_deadline": "YYYY-MM-DD", "reason": "Ghi chú" },
   "reportPayload": { "employee_name": "Tên nhân viên", "month": 7, "year": 2026 },
-  "teamLeavesPayload": { "period": "this_week" | "this_month" | "today" }
+  "teamLeavesPayload": { "period": "this_week" | "this_month" | "today" },
+  "meetingPayload": { "title": "Tiêu đề", "description": "Mô tả", "startTime": "YYYY-MM-DDTHH:mm:ss", "endTime": "YYYY-MM-DDTHH:mm:ss", "attendees": ["email1", "email2"] },
+  "updateMeetingPayload": { "meeting_id": "Mã ID", "title": "Tiêu đề", "description": "Mô tả", "startTime": "YYYY-MM-DDTHH:mm:ss", "endTime": "YYYY-MM-DDTHH:mm:ss", "attendees": ["email1", "email2"], "status": "cancelled" }
 }`;
 
     let lettaConvId = null;
