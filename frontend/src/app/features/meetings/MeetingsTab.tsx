@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
-import { Meeting } from '../../constants';
+import { Meeting, TeamMember } from '../../constants';
 import { coreApiClient, API_ROUTES } from '../../../lib/apiClient';
 
 interface MeetingsTabProps {
   meetings: Meeting[];
   setMeetings: React.Dispatch<React.SetStateAction<Meeting[]>>;
+  teamMembers?: TeamMember[];
 }
 
-export default function MeetingsTab({ meetings, setMeetings }: MeetingsTabProps) {
+export default function MeetingsTab({ meetings, setMeetings, teamMembers = [] }: MeetingsTabProps) {
   const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(meetings.length > 0 ? meetings[0].id : null);
   const [isEditingDocs, setIsEditingDocs] = useState(false);
   const [docInputs, setDocInputs] = useState<{ title: string; url: string }[]>([]);
@@ -17,8 +18,22 @@ export default function MeetingsTab({ meetings, setMeetings }: MeetingsTabProps)
 
   const [saving, setSaving] = useState(false);
 
-  // Group meetings by date (simplified for the list)
-  const sortedMeetings = [...meetings].sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+  const nowMs = Date.now();
+  
+  const sortedMeetings = [...meetings].sort((a, b) => {
+    const startA = new Date(a.startTime).getTime();
+    const endA = a.endTime ? new Date(a.endTime).getTime() : startA + 3600000;
+    const startB = new Date(b.startTime).getTime();
+    const endB = b.endTime ? new Date(b.endTime).getTime() : startB + 3600000;
+
+    const isPastA = endA < nowMs;
+    const isPastB = endB < nowMs;
+
+    if (isPastA && !isPastB) return 1;
+    if (!isPastA && isPastB) return -1;
+    if (isPastA && isPastB) return startB - startA; // past meetings: newer first
+    return startA - startB; // upcoming: sooner first
+  });
   
   const selected = sortedMeetings.find(m => m.id === selectedMeetingId) || null;
 
@@ -60,6 +75,14 @@ export default function MeetingsTab({ meetings, setMeetings }: MeetingsTabProps)
     setSaving(false);
   };
 
+  const getAttendeeNames = (attendeeIds: string[]) => {
+    if (!attendeeIds || attendeeIds.length === 0) return 'Không có';
+    return attendeeIds.map(id => {
+      const tm = teamMembers.find(t => t.id === id);
+      return tm ? tm.fullName : 'Thành viên Ẩn';
+    }).join(', ');
+  };
+
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: 24, height: '100%' }}>
       {/* CỘT TRÁI: DANH SÁCH LỊCH HỌP */}
@@ -73,6 +96,9 @@ export default function MeetingsTab({ meetings, setMeetings }: MeetingsTabProps)
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {sortedMeetings.map(m => {
+              const startMs = new Date(m.startTime).getTime();
+              const endMs = m.endTime ? new Date(m.endTime).getTime() : startMs + 3600000;
+              const isPast = endMs < nowMs;
               const date = new Date(m.startTime).toLocaleDateString('vi-VN', { weekday: 'short', day: '2-digit', month: '2-digit' });
               const time = new Date(m.startTime).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
               const isSelected = selectedMeetingId === m.id;
@@ -91,27 +117,34 @@ export default function MeetingsTab({ meetings, setMeetings }: MeetingsTabProps)
                     alignItems: 'center',
                     gap: 16,
                     transition: 'all 0.2s',
-                    boxShadow: isSelected ? '0 0 10px rgba(167, 139, 250, 0.15)' : 'none'
+                    boxShadow: isSelected ? '0 0 10px rgba(167, 139, 250, 0.15)' : 'none',
+                    opacity: isPast ? 0.6 : 1
                   }}
                 >
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', background: 'rgba(0,0,0,0.2)', padding: '8px 12px', borderRadius: 8, minWidth: 65 }}>
-                    <span style={{ fontSize: 11, color: '#a78bfa', fontWeight: 600, textTransform: 'uppercase' }}>{date.split(',')[0]}</span>
-                    <span style={{ fontSize: 16, color: '#fafafa', fontWeight: 700 }}>{date.split(',')[1].trim().split('/')[0]}</span>
+                    <span style={{ fontSize: 11, color: isPast ? '#71717a' : '#a78bfa', fontWeight: 600, textTransform: 'uppercase' }}>{date.split(',')[0]}</span>
+                    <span style={{ fontSize: 16, color: isPast ? '#a1a1aa' : '#fafafa', fontWeight: 700 }}>{date.split(',')[1]?.trim().split('/')[0] || ''}</span>
                   </div>
                   
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 15, fontWeight: 600, color: '#fafafa', marginBottom: 4 }}>{m.title}</div>
-                    <div style={{ fontSize: 12, color: '#a1a1aa', display: 'flex', gap: 12 }}>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: isPast ? '#a1a1aa' : '#fafafa', marginBottom: 4 }}>{m.title}</div>
+                    <div style={{ fontSize: 12, color: '#a1a1aa', display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                       <span>⏰ {time}</span>
-                      <span>🎤 Host: {m.host?.name || 'Storymee'}</span>
+                      <span>🎤 Host: {m.host?.name || m.host?.fullName || 'Storymee'}</span>
+                      {m.attendees && m.attendees.length > 0 && (
+                        <span>👥 {m.attendees.length} người tham dự</span>
+                      )}
                     </div>
                   </div>
                   
-                  {m.status === 'upcoming' && (
-                    <span style={{ fontSize: 10, padding: '4px 8px', background: '#3b82f620', color: '#60a5fa', borderRadius: 4, fontWeight: 600 }}>Sắp tới</span>
+                  {!isPast && m.status === 'upcoming' && (
+                    <span style={{ fontSize: 10, padding: '4px 8px', background: '#3b82f620', color: '#60a5fa', borderRadius: 4, fontWeight: 600, flexShrink: 0 }}>Sắp tới</span>
                   )}
-                  {m.status === 'happening' && (
-                    <span style={{ fontSize: 10, padding: '4px 8px', background: '#10b98120', color: '#34d399', borderRadius: 4, fontWeight: 600 }}>Đang diễn ra</span>
+                  {!isPast && m.status === 'happening' && (
+                    <span style={{ fontSize: 10, padding: '4px 8px', background: '#10b98120', color: '#34d399', borderRadius: 4, fontWeight: 600, flexShrink: 0 }}>Đang diễn ra</span>
+                  )}
+                  {isPast && (
+                    <span style={{ fontSize: 10, padding: '4px 8px', background: 'rgba(255,255,255,0.05)', color: '#a1a1aa', borderRadius: 4, fontWeight: 600, flexShrink: 0 }}>Đã qua</span>
                   )}
                 </div>
               );
@@ -134,6 +167,15 @@ export default function MeetingsTab({ meetings, setMeetings }: MeetingsTabProps)
               {selected.description}
             </div>
           )}
+
+          <div style={{ marginBottom: 24 }}>
+            <h4 style={{ margin: 0, fontSize: 13, color: '#a78bfa', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+              <span>👥</span> Thành phần tham dự
+            </h4>
+            <div style={{ fontSize: 13, color: '#d4d4d8', padding: '8px 12px', background: 'rgba(255,255,255,0.02)', borderRadius: 8 }}>
+              {getAttendeeNames(selected.attendees)}
+            </div>
+          </div>
 
           {selected.meetLink && (
             <div style={{ marginBottom: 24 }}>

@@ -370,7 +370,7 @@ export default function StorymeeTeamPage() {
 
           {/* ===== LỊCH HỌP ===== */}
           {tab === 'meetings' && (
-            <MeetingsTab meetings={meetings} setMeetings={setMeetings} />
+            <MeetingsTab meetings={meetings} setMeetings={setMeetings} teamMembers={teamMembers} />
           )}
 
           {/* ===== WORKLOAD ===== */}

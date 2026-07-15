@@ -3,9 +3,9 @@ import { prisma } from '../config/prisma';
 export class MeetingService {
   static async getMeetings() {
     return prisma.omniMeeting.findMany({
-      orderBy: { startTime: 'asc' },
+      orderBy: { startTime: 'desc' },
       where: {
-        startTime: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } // from yesterday onwards
+        startTime: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } // last 30 days
       },
       include: {
         host: {
