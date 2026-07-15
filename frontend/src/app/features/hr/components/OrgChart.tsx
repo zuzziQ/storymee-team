@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { TeamMember, Task, getInitials } from '../../../constants';
+import { coreApiClient, API_ROUTES } from '../../../../lib/apiClient';
 
 interface OrgChartProps {
   hrProfileView: 'chart' | 'list';
@@ -375,6 +376,16 @@ export default function OrgChart({
                 />
               </div>
               <div>
+                <label style={{ fontSize: 11, color: '#a1a1aa', display: 'block', marginBottom: 4 }}>Email</label>
+                <input
+                  className="input-dark"
+                  value={newMember.email}
+                  onChange={e => setNewMember({ ...newMember, email: e.target.value })}
+                  style={{ width: '100%', padding: '8px 12px', fontSize: 12, borderRadius: 8 }}
+                  placeholder="name@company.com"
+                />
+              </div>
+              <div>
                 <label style={{ fontSize: 11, color: '#a1a1aa', display: 'block', marginBottom: 4 }}>Chức vụ</label>
                 <input
                   className="input-dark"
@@ -427,22 +438,42 @@ export default function OrgChart({
               </button>
               <button
                 className="btn-primary"
-                onClick={() => {
+                onClick={async () => {
                   if (setTeamMembers && newMember.name) {
-                    const added = {
-                      id: 'new-' + Date.now(),
-                      name: newMember.name,
-                      role: newMember.role,
-                      email: newMember.email,
-                      color: newMember.color,
-                      skills: newMember.skills || [],
-                      telegramUsername: newMember.telegramUsername || '',
-                      workArrangement: newMember.workArrangement || 'office',
-                      isActive: true
-                    } as any;
-                    setTeamMembers(prev => [...prev, added]);
-                    setShowAddModal(false);
-                    setNewMember({ name: '', role: 'Nhân sự mới', email: '', color: '#10b981', skills: [], telegramUsername: '' });
+                    try {
+                      // Backend requires email, auto-generate if empty
+                      const emailToUse = newMember.email || `${newMember.name.replace(/\s+/g, '').toLowerCase()}_${Date.now()}@storymee.local`;
+                      
+                      const res = await coreApiClient.post(API_ROUTES.HR.TEAM_MEMBERS, {
+                        fullName: newMember.name,
+                        jobTitle: newMember.role,
+                        email: emailToUse,
+                        hexColor: newMember.color,
+                        telegramUsername: newMember.telegramUsername,
+                        workType: newMember.workArrangement || 'office',
+                        isActive: true
+                      });
+                      
+                      const dbMember = res.data;
+                      const added = {
+                        id: dbMember.id || 'new-' + Date.now(),
+                        name: dbMember.fullName || newMember.name,
+                        role: dbMember.jobTitle || newMember.role,
+                        email: dbMember.email || emailToUse,
+                        color: dbMember.hexColor || newMember.color,
+                        skills: newMember.skills || [],
+                        telegramUsername: dbMember.telegramUsername || newMember.telegramUsername || '',
+                        workArrangement: dbMember.workType || newMember.workArrangement || 'office',
+                        isActive: true
+                      } as any;
+                      
+                      setTeamMembers(prev => [...prev, added]);
+                      setShowAddModal(false);
+                      setNewMember({ name: '', role: 'Nhân sự mới', email: '', color: '#10b981', skills: [], telegramUsername: '' });
+                    } catch (error: any) {
+                      console.error('Failed to create team member:', error);
+                      alert('Lỗi tạo nhân sự: ' + (error.message || 'Unknown error'));
+                    }
                   }
                 }}
                 style={{ padding: '8px 16px', fontSize: 12, borderRadius: 8 }}

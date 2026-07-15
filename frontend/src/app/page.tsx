@@ -459,7 +459,7 @@ export default function StorymeeTeamPage() {
           onClose={() => setSelectedTask(null)}
           onUpdate={(t) => {
             setSelectedTask(t);
-            handleUpdateTask(t, teamMembers, fetchDbData);
+            handleUpdateTask(t);
           }}
           tasks={tasks}
           teamMembers={teamMembers}

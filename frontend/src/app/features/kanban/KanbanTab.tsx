@@ -148,7 +148,6 @@ interface KanbanTabProps {
   onRequestArchive: (task: Task) => void;
   handleUpdateTaskStatus?: (id: string, status: string) => void;
   handleCreateTask?: (title: string, assignee: string, estimate: number, priority: any, status?: string) => Promise<void> | void;
-  teamMembers: TeamMember[];
 }
 
 
