@@ -857,7 +857,11 @@ async function handleTelegramMessage(message) {
                     else if (aiResponse.action === 'update_sub_issues') {
                         const up = aiResponse.updateSubtasksPayload;
                         const listStr = up.titles ? up.titles.map((t) => `  • ${t}`).join('\n') : '';
-                        confirmMsg = `💡 *ĐỀ XUẤT CẬP NHẬT CÁC CÔNG VIỆC CON CHO ${up.task_id}:*\n${listStr}\n\n👉 Bấm Xác nhận sẽ xóa toàn bộ việc con cũ của task này và thay bằng danh sách trên.`;
+                        const actionTitle = up.overwrite ? 'THAY THẾ TOÀN BỘ' : 'TẠO THÊM';
+                        const actionDesc = up.overwrite
+                            ? '👉 Bấm Xác nhận sẽ xóa toàn bộ việc con cũ của task này và thay bằng danh sách trên.'
+                            : '👉 Bấm Xác nhận sẽ tạo thêm các việc con này vào danh sách hiện tại.';
+                        confirmMsg = `💡 *ĐỀ XUẤT ${actionTitle} CÁC CÔNG VIỆC CON CHO ${up.task_id}:*\n${listStr}\n\n${actionDesc}`;
                     }
                     else if (aiResponse.action === 'update_issue') {
                         const tp = aiResponse.taskPayload;
