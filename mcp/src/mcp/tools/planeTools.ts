@@ -587,25 +587,6 @@ case "update_issue": {
         if (targetMem) assigneeId = targetMem.id;
       }
 
-      if (status && (status.toLowerCase() === 'done' || status.toLowerCase() === 'completed') && !isBoss) {
-        // Tự động chuyển sang in_review thay vì block
-        await apiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${foundSubtask.id}`, { status: 'in_review' });
-        // Đánh dấu cần thu thập output
-        if (username) {
-          pendingOutputByUsername.set(username.toLowerCase().replace(/^@/, ''), {
-            issueId: foundSubtask.id,
-            issueShortId: foundSubtask.shortId || task_id,
-            issueTitle: foundSubtask.title,
-            memberId: user.id,
-          });
-        }
-        return {
-          content: [{
-            type: "text",
-            text: `IN_REVIEW_REDIRECT:${foundSubtask.id}:${foundSubtask.shortId || task_id}:${foundSubtask.title}`
-          }]
-        };
-      }
 
       let projectId = undefined;
       if (project_name) {
