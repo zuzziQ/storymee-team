@@ -18,6 +18,35 @@ export default function MeetingsTab({ meetings, setMeetings, teamMembers = [] }:
 
   const [saving, setSaving] = useState(false);
 
+  const [isEditingMeeting, setIsEditingMeeting] = useState(false);
+  const [meetingInputs, setMeetingInputs] = useState<{title: string; description: string; meetLink: string; attendees: string[]}>({
+    title: '', description: '', meetLink: '', attendees: []
+  });
+
+  const handleEditMeeting = () => {
+    if (!selected) return;
+    setMeetingInputs({
+      title: selected.title || '',
+      description: selected.description || '',
+      meetLink: selected.meetLink || '',
+      attendees: selected.attendees || []
+    });
+    setIsEditingMeeting(true);
+  };
+
+  const handleSaveMeeting = async () => {
+    if (!selected) return;
+    setSaving(true);
+    try {
+      await coreApiClient.patch(`${API_ROUTES.HR.MEETINGS}/${selected.id}`, meetingInputs);
+      setMeetings(prev => prev.map(m => m.id === selected.id ? { ...m, ...meetingInputs } : m));
+      setIsEditingMeeting(false);
+    } catch (e) {
+      alert('Lỗi khi lưu thông tin cuộc họp');
+    }
+    setSaving(false);
+  };
+
   const nowMs = Date.now();
   
   const sortedMeetings = [...meetings].sort((a, b) => {
@@ -79,7 +108,7 @@ export default function MeetingsTab({ meetings, setMeetings, teamMembers = [] }:
     if (!attendeeIds || attendeeIds.length === 0) return 'Không có';
     return attendeeIds.map(id => {
       const tm = teamMembers.find(t => t.id === id);
-      return tm ? tm.fullName : 'Thành viên Ẩn';
+      return tm ? tm.name : 'Thành viên Ẩn';
     }).join(', ');
   };
 
@@ -106,7 +135,7 @@ export default function MeetingsTab({ meetings, setMeetings, teamMembers = [] }:
               return (
                 <div 
                   key={m.id}
-                  onClick={() => { setSelectedMeetingId(m.id); setIsEditingDocs(false); setIsEditingOutputs(false); }}
+                  onClick={() => { setSelectedMeetingId(m.id); setIsEditingDocs(false); setIsEditingOutputs(false); setIsEditingMeeting(false); }}
                   style={{
                     padding: '16px 20px',
                     borderRadius: 12,
@@ -130,7 +159,7 @@ export default function MeetingsTab({ meetings, setMeetings, teamMembers = [] }:
                     <div style={{ fontSize: 15, fontWeight: 600, color: isPast ? '#a1a1aa' : '#fafafa', marginBottom: 4 }}>{m.title}</div>
                     <div style={{ fontSize: 12, color: '#a1a1aa', display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                       <span>⏰ {time}</span>
-                      <span>🎤 Host: {m.host?.name || m.host?.fullName || 'Storymee'}</span>
+                      <span>🎤 Host: {m.host?.name || 'Storymee'}</span>
                       {m.attendees && m.attendees.length > 0 && (
                         <span>👥 {m.attendees.length} người tham dự</span>
                       )}
@@ -156,26 +185,70 @@ export default function MeetingsTab({ meetings, setMeetings, teamMembers = [] }:
       {/* CỘT PHẢI: CHI TIẾT */}
       {selected ? (
         <div className='glass' style={{ padding: 24, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
-          <h3 style={{ fontSize: 16, color: '#fafafa', margin: '0 0 8px 0' }}>{selected.title}</h3>
           
-          <div style={{ display: 'flex', gap: 8, fontSize: 12, color: '#a1a1aa', marginBottom: 20 }}>
-            <span>{new Date(selected.startTime).toLocaleString('vi-VN')}</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+            <h3 style={{ fontSize: 16, color: '#fafafa', margin: 0 }}>{selected.title}</h3>
+            {!isEditingMeeting && (
+              <button className='btn-ghost' onClick={handleEditMeeting} style={{ fontSize: 11, padding: '4px 8px' }}>Chỉnh sửa</button>
+            )}
           </div>
           
-          {selected.description && (
-            <div style={{ fontSize: 13, color: '#d4d4d8', marginBottom: 20, padding: 12, background: 'rgba(255,255,255,0.02)', borderRadius: 8 }}>
-              {selected.description}
+          {isEditingMeeting ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24, padding: 16, background: 'rgba(255,255,255,0.02)', borderRadius: 8 }}>
+              <div>
+                <label style={{ fontSize: 11, color: '#a1a1aa', marginBottom: 4, display: 'block' }}>Tiêu đề</label>
+                <input 
+                  className='input-dark' 
+                  value={meetingInputs.title}
+                  onChange={e => setMeetingInputs({...meetingInputs, title: e.target.value})}
+                  style={{ width: '100%', padding: '8px 12px', fontSize: 13, borderRadius: 6 }} 
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: 11, color: '#a1a1aa', marginBottom: 4, display: 'block' }}>Mô tả</label>
+                <textarea 
+                  className='input-dark' 
+                  value={meetingInputs.description}
+                  onChange={e => setMeetingInputs({...meetingInputs, description: e.target.value})}
+                  style={{ width: '100%', padding: '8px 12px', fontSize: 13, borderRadius: 6, minHeight: 60 }} 
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: 11, color: '#a1a1aa', marginBottom: 4, display: 'block' }}>Link Google Meet</label>
+                <input 
+                  className='input-dark' 
+                  value={meetingInputs.meetLink}
+                  onChange={e => setMeetingInputs({...meetingInputs, meetLink: e.target.value})}
+                  style={{ width: '100%', padding: '8px 12px', fontSize: 13, borderRadius: 6 }} 
+                />
+              </div>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
+                <button className='btn-ghost' onClick={() => setIsEditingMeeting(false)} style={{ fontSize: 12 }}>Hủy</button>
+                <button className='btn-primary' onClick={handleSaveMeeting} disabled={saving} style={{ fontSize: 12, padding: '6px 16px', borderRadius: 6 }}>Lưu lại</button>
+              </div>
             </div>
-          )}
+          ) : (
+            <>
+              <div style={{ display: 'flex', gap: 8, fontSize: 12, color: '#a1a1aa', marginBottom: 20 }}>
+                <span>{new Date(selected.startTime).toLocaleString('vi-VN')}</span>
+              </div>
+              
+              {selected.description && (
+                <div style={{ fontSize: 13, color: '#d4d4d8', marginBottom: 20, padding: 12, background: 'rgba(255,255,255,0.02)', borderRadius: 8 }}>
+                  {selected.description}
+                </div>
+              )}
 
-          <div style={{ marginBottom: 24 }}>
-            <h4 style={{ margin: 0, fontSize: 13, color: '#a78bfa', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-              <span>👥</span> Thành phần tham dự
-            </h4>
-            <div style={{ fontSize: 13, color: '#d4d4d8', padding: '8px 12px', background: 'rgba(255,255,255,0.02)', borderRadius: 8 }}>
-              {getAttendeeNames(selected.attendees)}
-            </div>
-          </div>
+              <div style={{ marginBottom: 24 }}>
+                <h4 style={{ margin: 0, fontSize: 13, color: '#a78bfa', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                  <span>👥</span> Thành phần tham dự
+                </h4>
+                <div style={{ fontSize: 13, color: '#d4d4d8', padding: '8px 12px', background: 'rgba(255,255,255,0.02)', borderRadius: 8 }}>
+                  {getAttendeeNames(selected.attendees)}
+                </div>
+              </div>
+            </>
+          )}
 
           {selected.meetLink && (
             <div style={{ marginBottom: 24 }}>
