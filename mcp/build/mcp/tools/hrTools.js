@@ -102,7 +102,8 @@ exports.HR_TOOLS_SCHEMA = [
                 description: { type: "string" },
                 startTime: { type: "string" },
                 endTime: { type: "string" },
-                attendees: { type: "array", items: { type: "string" } }
+                attendees: { type: "array", items: { type: "string" } },
+                meetLink: { type: "string", description: "Link Google Meet (nếu có)" }
             },
             required: ["title", "startTime", "endTime"]
         }
@@ -119,6 +120,7 @@ exports.HR_TOOLS_SCHEMA = [
                 startTime: { type: "string" },
                 endTime: { type: "string" },
                 attendees: { type: "array", items: { type: "string" } },
+                meetLink: { type: "string", description: "Link Google Meet (nếu có)" },
                 status: { type: "string" }
             },
             required: ["meeting_id"]
@@ -326,7 +328,7 @@ async function executeHrTool(name, args, user, isBoss, apiClient, members) {
             };
         }
         case "schedule_meeting": {
-            const { title, description, startTime, endTime, attendees } = args;
+            const { title, description, startTime, endTime, attendees, meetLink } = args;
             const resolvedAttendees = await resolveAttendees(attendees);
             let resJson;
             try {
@@ -336,7 +338,8 @@ async function executeHrTool(name, args, user, isBoss, apiClient, members) {
                     startTime,
                     endTime,
                     hostId: user.id,
-                    attendees: resolvedAttendees
+                    attendees: resolvedAttendees,
+                    meetLink
                 });
             }
             catch (err) {
@@ -347,8 +350,11 @@ async function executeHrTool(name, args, user, isBoss, apiClient, members) {
             };
         }
         case "update_meeting": {
-            const { meeting_id, title, description, startTime, endTime, attendees, status } = args;
-            const resolvedAttendees = attendees ? await resolveAttendees(attendees) : undefined;
+            const { meeting_id, title, description, startTime, endTime, attendees, status, meetLink } = args;
+            let resolvedAttendees = undefined;
+            if (attendees) {
+                resolvedAttendees = await resolveAttendees(attendees);
+            }
             let resJson;
             try {
                 resJson = await apiClient.patch(`hr/meetings/${meeting_id}`, {
@@ -357,14 +363,15 @@ async function executeHrTool(name, args, user, isBoss, apiClient, members) {
                     startTime,
                     endTime,
                     attendees: resolvedAttendees,
-                    status
+                    status,
+                    meetLink
                 });
             }
             catch (err) {
                 throw new types_js_1.McpError(types_js_1.ErrorCode.InternalError, "Lỗi cập nhật lịch họp.");
             }
             return {
-                content: [{ type: "text", text: `Đã cập nhật lịch họp thành công.` }]
+                content: [{ type: "text", text: `Đã cập nhật lịch họp thành công: ${meeting_id}` }]
             };
         }
         default:
