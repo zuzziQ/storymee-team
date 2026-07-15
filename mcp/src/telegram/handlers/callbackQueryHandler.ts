@@ -585,12 +585,12 @@ async function handleCallbackQuery(callbackQuery: any) {
           });
         } catch (e) {}
       } else if (action === 'update_sub_issues') {
-        const result = await executeMcpTool("update_sub_issues", {
-          task_id: payload.task_id,
-          titles: payload.titles
-        }, actionMember);
-
         try {
+          const result = await executeMcpTool("update_sub_issues", {
+            task_id: payload.task_id,
+            titles: payload.titles
+          }, actionMember);
+
           await fetchAxios(`${TELEGRAM_API}/editMessageText`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -601,7 +601,20 @@ async function handleCallbackQuery(callbackQuery: any) {
               parse_mode: "Markdown"
             })
           });
-        } catch (e) {}
+        } catch (err: any) {
+          const errorMsg = err.message || "Lỗi không xác định";
+          await fetchAxios(`${TELEGRAM_API}/editMessageText`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              chat_id: chatId,
+              message_id: messageId,
+              text: `❌ *Lỗi khi cập nhật việc con:* ${errorMsg}`,
+              parse_mode: "Markdown"
+            })
+          });
+          return;
+        }
       } else if (action === 'request_issue_approval') {
         if (payload.type === 'extend' || payload.type === 'extend_deadline') {
           try {

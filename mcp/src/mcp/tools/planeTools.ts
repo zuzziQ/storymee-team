@@ -108,12 +108,13 @@ export const PLANE_TOOLS_SCHEMA = [
   },
   {
     name: "update_sub_issues",
-    description: "Cập nhật hoặc thay thế toàn bộ danh sách công việc con (subtasks) của một công việc lớn (ví dụ: T-103) bằng danh sách tiêu đề mới, tự động xóa các việc con cũ của task này và gán các việc con mới cho cùng một nhân sự.",
+    description: "Tạo thêm hoặc thay thế danh sách công việc con (subtasks) của một công việc lớn (ví dụ: T-103) bằng danh sách tiêu đề mới.",
     inputSchema: {
       type: "object",
       properties: {
         task_id: { type: "string", description: "Mã ID công việc lớn (ví dụ: T-103, T-004)" },
-        titles: { type: "array", items: { type: "string" }, description: "Mảng chứa danh sách các tiêu đề việc con mới" }
+        titles: { type: "array", items: { type: "string" }, description: "Mảng chứa danh sách các tiêu đề việc con mới" },
+        overwrite: { type: "boolean", description: "Nếu true, sẽ xóa hết các việc con cũ đang có trước khi tạo. Nếu false (mặc định), sẽ tạo thêm (append) việc con mới." }
       },
       required: ["task_id", "titles"]
     }
@@ -769,7 +770,7 @@ case "breakdown_issue": {
       };
     }
 case "update_sub_issues": {
-      const { task_id, titles } = args as any;
+      const { task_id, titles, overwrite } = args as any;
 
       if (!Array.isArray(titles)) {
         throw new McpError(ErrorCode.InvalidParams, "Danh sách tiêu đề công việc con phải là một mảng.");
@@ -800,13 +801,15 @@ case "update_sub_issues": {
         );
       }
 
-      // 2. Hủy các subtask cũ có tiêu đề bắt đầu bằng [task_id] trong cùng dự án mẹ
-      for (const sub of dbTasks) {
-        if (sub.parentId === matchedSubtask.id) {
-          if (sub.title && sub.title.startsWith(`[${task_id}]`)) {
-            try {
-                await apiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${sub.id}`, { status: "cancelled" });
-            } catch(e) {}
+      // 2. Hủy các subtask cũ có tiêu đề bắt đầu bằng [task_id] trong cùng dự án mẹ NẾU overwrite = true
+      if (overwrite) {
+        for (const sub of dbTasks) {
+          if (sub.parentId === matchedSubtask.id) {
+            if (sub.title && sub.title.startsWith(`[${task_id}]`)) {
+              try {
+                  await apiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${sub.id}`, { status: "cancelled" });
+              } catch(e) {}
+            }
           }
         }
       }
@@ -829,6 +832,7 @@ case "update_sub_issues": {
                       assigneeId: matchedSubtask.assigneeId || undefined,
                       parentId: matchedSubtask.id
                     });
+            createdSubtasks.push(cleanTitle);
           } catch (err: any) {
             throw err;
           }
@@ -838,12 +842,10 @@ case "update_sub_issues": {
         content: [{
           type: "text",
           text: titles.length === 0
-            ? `📝 *ĐÃ XÓA TOÀN BỘ CÔNG VIỆC CON CHO ${task_id} THÀNH CÔNG:*\n` +
+            ? (overwrite ? `📝 *ĐÃ XÓA TOÀN BỘ CÔNG VIỆC CON CHO ${task_id} THÀNH CÔNG:*\nCông việc gốc: *${matchedSubtask.title}*\nĐã dọn dẹp sạch toàn bộ subtask cũ của công việc này.` : `Không có việc con nào được tạo thêm.`)
+            : `📝 *ĐÃ ${overwrite ? 'CẬP NHẬT' : 'TẠO THÊM'} CÁC CÔNG VIỆC CON CHO ${task_id} THÀNH CÔNG:*\n` +
               `Công việc gốc: *${matchedSubtask.title}*\n` +
-              `Đã dọn dẹp sạch toàn bộ subtask cũ của công việc này.`
-            : `📝 *ĐÃ CẬP NHẬT CÁC CÔNG VIỆC CON CHO ${task_id} THÀNH CÔNG:*\n` +
-              `Công việc gốc: *${matchedSubtask.title}*\n` +
-              `Đã xóa việc cũ và tạo mới ${createdSubtasks.length} việc con:\n` +
+              (overwrite ? `Đã xóa việc cũ và tạo mới ${createdSubtasks.length} việc con:\n` : `Đã tạo thêm ${createdSubtasks.length} việc con:\n`) +
               createdSubtasks.join("\n")
         }]
       };
