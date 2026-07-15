@@ -139,7 +139,7 @@ export function startCronJobs(
 
         if (activeIssues.length === 0) {
           await sendMessage(chatId,
-            `☀️ *BÁO CÁO ĐẦU NGÀY (8h30)*\n\nChào *${m.fullName}*! Hôm nay bạn không có công việc nào đang mở. Chúc một ngày mới tràn đầy năng lượng! 🎉`,
+            `☀️ *BÁO CÁO ĐẦU NGÀY (8h20)*\n\nChào *${m.fullName}*! Hôm nay bạn không có công việc nào đang mở. Chúc một ngày mới tràn đầy năng lượng! 🎉`,
             { inline_keyboard: [[{ text: "🌅 Vào ca (Check-in)", callback_data: "attendance_direct:present" }]] }
           );
           continue;
@@ -154,7 +154,7 @@ export function startCronJobs(
         // Fetch lịch họp hôm nay
         const todayMeetings = await fetchTodayMeetings(apiClient);
 
-        let msg = `☀️ *BÁO CÁO ĐẦU NGÀY (8h30)*\n`;
+        let msg = `☀️ *BÁO CÁO ĐẦU NGÀY (8h20)*\n`;
         msg += `Chào *${m.fullName}*! Dưới đây là công việc cần tập trung hôm nay:\n\n`;
 
         // Lịch họp đặt LÊN ĐẦU
@@ -196,7 +196,7 @@ export function startCronJobs(
           inline_keyboard: [[{ text: "🌅 Vào ca (Check-in)", callback_data: "attendance_direct:present" }]]
         });
       }
-      console.log("[Cron 8h30 DM] ✅ Đã gửi xong báo cáo đầu ngày cho tất cả thành viên.");
+      console.log("[Cron 8h20 DM] ✅ Đã gửi xong báo cáo đầu ngày cho tất cả thành viên.");
     } catch (err) {
       console.error("[Cron 8h20 DM] Lỗi:", err);
     }
@@ -222,11 +222,11 @@ export function startCronJobs(
   }, { timezone: "Asia/Ho_Chi_Minh" });
 
   // ─────────────────────────────────────────────────────────────────────────
-  // CRON 4: 17:30 chiều → Gửi DM cá nhân: Nhắc tiến độ cuối ngày (Thứ 2 - Thứ 7)
+  // CRON 4: 18:05 chiều → Gửi DM cá nhân: Nhắc tiến độ cuối ngày (Thứ 2 - Thứ 7)
   // ─────────────────────────────────────────────────────────────────────────
-  cron.schedule('30 17 * * 1-6', async () => {
+  cron.schedule('5 18 * * 1-6', async () => {
     try {
-      console.log("[Cron 17h30 DM] Đang gửi tổng kết cuối ngày cho từng thành viên...");
+      console.log("[Cron 18h05 DM] Đang gửi tổng kết cuối ngày cho từng thành viên...");
       const { members, allIssues, todayStr } = await fetchAllData(apiClient);
 
       for (const m of members) {
@@ -245,7 +245,7 @@ export function startCronJobs(
         const stillOpen = myIssues.filter((t: any) => !isDoneGroup(t.State?.group || 'unstarted'));
         const openParsed = stillOpen.map((i: any) => parseIssue(i, members));
 
-        let msg = `🌇 *TỔNG KẾT CUỐI NGÀY (17h30)*\n`;
+        let msg = `🌇 *TỔNG KẾT CUỐI NGÀY (18h05)*\n`;
         msg += `Chào *${m.fullName}*! Dưới đây là tóm tắt ngày làm việc của bạn:\n\n`;
 
         if (doneToday.length > 0) {
@@ -271,9 +271,9 @@ export function startCronJobs(
           inline_keyboard: [[{ text: "🚪 Tan ca (Check-out)", callback_data: "attendance_direct:checkout" }]]
         });
       }
-      console.log("[Cron 17h30 DM] ✅ Đã gửi tổng kết cuối ngày cho tất cả thành viên.");
+      console.log("[Cron 18h05 DM] ✅ Đã gửi tổng kết cuối ngày cho tất cả thành viên.");
     } catch (err) {
-      console.error("[Cron 17h30 DM] Lỗi:", err);
+      console.error("[Cron 18h05 DM] Lỗi:", err);
     }
   }, { timezone: "Asia/Ho_Chi_Minh" });
 
@@ -335,9 +335,9 @@ export function startCronJobs(
   }, { timezone: "Asia/Ho_Chi_Minh" });
 
   console.log("✅ Đã đăng ký 5 Cron Jobs:");
-  console.log("   • 8:30 sáng → DM cá nhân: nhắc việc đầu ngày + lịch họp");
+  console.log("   • 8:20 sáng → DM cá nhân: nhắc việc đầu ngày + lịch họp");
   console.log("   • 9:00 sáng → Nhóm: tổng kết đầu ngày + lịch họp");
-  console.log("   • 17:00 chiều → Nhóm: tổng kết cuối ngày");
-  console.log("   • 17:30 chiều → DM cá nhân: nhắc tiến độ cuối ngày");
+  console.log("   • 18:05 chiều → Nhóm: tổng kết cuối ngày");
+  console.log("   • 18:05 chiều → DM cá nhân: nhắc tiến độ cuối ngày");
   console.log("   • */1 phút → Nhắc meeting 15 phút trước khi bắt đầu");
 }

@@ -616,57 +616,90 @@ async function handleCallbackQuery(callbackQuery) {
                 catch (e) { }
             }
             else if (action === 'request_issue_approval') {
-                const result = await (0, index_1.executeMcpTool)("request_issue_approval", {
-                    task_id: payload.task_id,
-                    type: payload.type,
-                    reason: payload.reason || "Không có lý do",
-                    new_deadline: payload.new_deadline
-                }, actionMember);
-                try {
-                    await (0, fetchAxios_1.fetchAxios)(`${TELEGRAM_API}/editMessageText`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            chat_id: chatId,
-                            message_id: messageId,
-                            text: `✅ *Hệ thống:* ${result.content[0].text}`,
-                            parse_mode: "Markdown"
-                        })
-                    });
+                if (payload.type === 'extend' || payload.type === 'extend_deadline') {
+                    try {
+                        await (0, index_1.executeMcpTool)("update_issue", {
+                            task_id: payload.task_id,
+                            deadline: payload.new_deadline
+                        }, actionMember, username);
+                        await (0, fetchAxios_1.fetchAxios)(`${TELEGRAM_API}/editMessageText`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                chat_id: chatId,
+                                message_id: messageId,
+                                text: `✅ *Hệ thống:* Đã cập nhật hạn chót mới cho công việc *${payload.task_id}* thành *${payload.new_deadline}* thành công!`,
+                                parse_mode: "Markdown"
+                            })
+                        });
+                    }
+                    catch (err) {
+                        const errorMsg = err.message || "Lỗi không xác định";
+                        await (0, fetchAxios_1.fetchAxios)(`${TELEGRAM_API}/editMessageText`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                chat_id: chatId,
+                                message_id: messageId,
+                                text: `❌ *Lỗi khi dời hạn:* ${errorMsg}`,
+                                parse_mode: "Markdown"
+                            })
+                        });
+                    }
                 }
-                catch (e) { }
-                // Gửi thông báo cho Admin
-                try {
-                    const allMems = await (0, telegram_agent_1.getCachedMembers)();
-                    if (allMems && allMems.length > 0) {
-                        const adminEmails = ['kimngan151091@gmail.com', 'lehuyducanh.vn@gmail.com', 'zuzzivn@gmail.com'];
-                        for (const targetMem of allMems) {
-                            if ((adminEmails.includes((targetMem.email || "").toLowerCase()) || targetMem.telegramUsername?.toLowerCase() === 'mlq007') && targetMem.telegramChatId) {
-                                const adminChatId = Number(targetMem.telegramChatId);
-                                const reqTypeStr = payload.type === 'extend' || payload.type === 'extend_deadline' ? 'Xin dời deadline' : (payload.type === 'archive' || payload.type === 'delete') ? 'Xin lưu trữ' : 'Yêu cầu không hợp lệ';
-                                if (payload.type === 'delete')
-                                    payload.type = 'archive';
-                                await (0, fetchAxios_1.fetchAxios)(`${TELEGRAM_API}/sendMessage`, {
-                                    method: "POST",
-                                    headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({
-                                        chat_id: adminChatId,
-                                        text: `🔔 *YÊU CẦU PHÊ DUYỆT MỚI*\n\n• Nhân sự: **${actionMember.fullName}**\n• Task ID: **${payload.task_id}**\n• Yêu cầu: **${reqTypeStr}**\n• Lý do: _${payload.reason || 'Không có'}_` + (payload.new_deadline ? `\n• Hạn mới đề xuất: *${payload.new_deadline}*` : ``),
-                                        parse_mode: "Markdown",
-                                        reply_markup: {
-                                            inline_keyboard: [
-                                                [{ text: "✅ Phê duyệt", callback_data: `approve_issue:${payload.task_id}:${payload.type}` }],
-                                                [{ text: "❌ Từ chối", callback_data: `reject_issue:${payload.task_id}:${payload.type}` }]
-                                            ]
-                                        }
-                                    })
-                                });
+                else {
+                    const result = await (0, index_1.executeMcpTool)("request_issue_approval", {
+                        task_id: payload.task_id,
+                        type: payload.type,
+                        reason: payload.reason || "Không có lý do",
+                        new_deadline: payload.new_deadline
+                    }, actionMember);
+                    try {
+                        await (0, fetchAxios_1.fetchAxios)(`${TELEGRAM_API}/editMessageText`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                chat_id: chatId,
+                                message_id: messageId,
+                                text: `✅ *Hệ thống:* ${result.content[0].text}`,
+                                parse_mode: "Markdown"
+                            })
+                        });
+                    }
+                    catch (e) { }
+                    // Gửi thông báo cho Admin
+                    try {
+                        const allMems = await (0, telegram_agent_1.getCachedMembers)();
+                        if (allMems && allMems.length > 0) {
+                            const adminEmails = ['kimngan151091@gmail.com', 'lehuyducanh.vn@gmail.com', 'zuzzivn@gmail.com'];
+                            for (const targetMem of allMems) {
+                                if ((adminEmails.includes((targetMem.email || "").toLowerCase()) || targetMem.telegramUsername?.toLowerCase() === 'mlq007') && targetMem.telegramChatId) {
+                                    const adminChatId = Number(targetMem.telegramChatId);
+                                    const reqTypeStr = payload.type === 'extend' || payload.type === 'extend_deadline' ? 'Xin dời deadline' : (payload.type === 'archive' || payload.type === 'delete') ? 'Xin lưu trữ' : 'Yêu cầu không hợp lệ';
+                                    if (payload.type === 'delete')
+                                        payload.type = 'archive';
+                                    await (0, fetchAxios_1.fetchAxios)(`${TELEGRAM_API}/sendMessage`, {
+                                        method: "POST",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({
+                                            chat_id: adminChatId,
+                                            text: `🔔 *YÊU CẦU PHÊ DUYỆT MỚI*\n\n• Nhân sự: **${actionMember.fullName}**\n• Task ID: **${payload.task_id}**\n• Yêu cầu: **${reqTypeStr}**\n• Lý do: _${payload.reason || 'Không có'}_` + (payload.new_deadline ? `\n• Hạn mới đề xuất: *${payload.new_deadline}*` : ``),
+                                            parse_mode: "Markdown",
+                                            reply_markup: {
+                                                inline_keyboard: [
+                                                    [{ text: "✅ Phê duyệt", callback_data: `approve_issue:${payload.task_id}:${payload.type}` }],
+                                                    [{ text: "❌ Từ chối", callback_data: `reject_issue:${payload.task_id}:${payload.type}` }]
+                                                ]
+                                            }
+                                        })
+                                    });
+                                }
                             }
                         }
                     }
-                }
-                catch (err) {
-                    console.error("Lỗi gửi tin nhắn duyệt task cho admin:", err);
+                    catch (err) {
+                        console.error("Lỗi gửi tin nhắn duyệt task cho admin:", err);
+                    }
                 }
             }
             else if (action === 'approve_issue_request') {

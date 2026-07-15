@@ -311,10 +311,11 @@ export default function OrgChart({
               const matchesSearch = m.name.toLowerCase().includes(hrSearchQuery.toLowerCase()) || m.role.toLowerCase().includes(hrSearchQuery.toLowerCase());
               let matchesDept = true;
               if (hrDeptFilter !== 'all') {
-                if (hrDeptFilter === 'Giám đốc') matchesDept = m.role.includes('CEO');
-                else if (hrDeptFilter === 'Tech') matchesDept = ['CTO', 'Developer', 'Designer', 'IT'].some(keyword => m.role.includes(keyword));
-                else if (hrDeptFilter === 'Nội dung') matchesDept = ['Content', 'Media', 'Editor', 'Trợ lý'].some(keyword => m.role.includes(keyword));
-                else if (hrDeptFilter === 'Marketing') matchesDept = m.role.includes('Marketing');
+                const roleLower = (m.role || '').toLowerCase();
+                if (hrDeptFilter === 'Giám đốc') matchesDept = roleLower.includes('ceo');
+                else if (hrDeptFilter === 'Tech') matchesDept = ['cto', 'developer', 'designer', 'it'].some(keyword => roleLower.includes(keyword));
+                else if (hrDeptFilter === 'Nội dung') matchesDept = ['content', 'media', 'editor', 'trợ lý', 'writer'].some(keyword => roleLower.includes(keyword));
+                else if (hrDeptFilter === 'Marketing') matchesDept = roleLower.includes('marketing');
               }
               return matchesSearch && matchesDept;
             })

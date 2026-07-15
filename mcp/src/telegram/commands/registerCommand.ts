@@ -82,7 +82,7 @@ export const registerCommand: TelegramCommand = {
             fullName,
             telegramUsername: username,
             telegramChatId: chatId,
-            role: "Developer",
+            role: "Nhân sự mới",
             skills: []
           });
           await sendMessage(chatId, `🎉 **Đăng ký nhân sự mới thành công!**\n\n• Họ tên: **${fullName}**\n• Email: **${email}**\n• Telegram: **@${username}**\n• Chat ID: **${chatId}**\n\nHệ thống đã tự động tạo hồ sơ của bạn. Bạn đã có thể bắt đầu sử dụng bot!`, KEYBOARD_MAIN);

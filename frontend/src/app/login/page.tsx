@@ -40,7 +40,7 @@ export default function LoginPage() {
             localStorage.setItem('st_user', JSON.stringify({
               email: matchedUser.email,
               name: matchedUser.fullName,
-              role: matchedUser.role || 'Developer',
+              role: matchedUser.role || 'Nhân sự mới',
               color: matchedUser.color || '#6366f1'
             }));
             setTimeout(() => {
@@ -94,7 +94,7 @@ export default function LoginPage() {
           localStorage.setItem('st_user', JSON.stringify({
             email: matchedUser.email,
             name: matchedUser.fullName,
-            role: matchedUser.role || 'Developer',
+            role: matchedUser.role || 'Nhân sự mới',
             color: matchedUser.color || '#6366f1'
           }));
           setTimeout(() => {

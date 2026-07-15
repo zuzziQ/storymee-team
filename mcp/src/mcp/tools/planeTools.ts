@@ -800,17 +800,16 @@ case "update_sub_issues": {
         );
       }
 
-      // 2. Xóa các subtask cũ có tiêu đề bắt đầu bằng [task_id] trong cùng dự án mẹ
+      // 2. Hủy các subtask cũ có tiêu đề bắt đầu bằng [task_id] trong cùng dự án mẹ
       for (const sub of dbTasks) {
         if (sub.parentId === matchedSubtask.id) {
           if (sub.title && sub.title.startsWith(`[${task_id}]`)) {
             try {
-                apiClient.delete(`${API_ROUTES.HR.SUBTASKS}/${sub.id}`)
+                await apiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${sub.id}`, { status: "cancelled" });
             } catch(e) {}
           }
         }
       }
-
 
       // 3. Tạo các subtask mới do người dùng tùy chỉnh
       const createdSubtasks: string[] = [];
@@ -822,14 +821,13 @@ case "update_sub_issues": {
         subIdx++;
 
         try {
-            await apiClient.post(API_ROUTES.HR.SUBTASKS, {
+            await apiClient.post(API_ROUTES.PLANE.ISSUES, {
                       title: `[${task_id}] ${cleanTitle}`,
-                      estimatedHours: 2,
+                      projectId: matchedSubtask.projectId,
+                      description: `Tạo từ yêu cầu cập nhật việc con cho [${task_id}].`,
                       priority: matchedSubtask.priority || "medium",
-                      assigneeId: matchedSubtask.assigneeId,
-                      parentTaskId: matchedSubtask.projectId,
-                      status: "pending",
-                      planeTaskId: subtaskIdStr
+                      assigneeId: matchedSubtask.assigneeId || undefined,
+                      parentId: matchedSubtask.id
                     });
           } catch (err: any) {
             throw err;

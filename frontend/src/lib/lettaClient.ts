@@ -16,9 +16,6 @@ export interface LettaMessage {
  */
 export async function getOrCreateConversation(email: string, fullName: string): Promise<string> {
   try {
-    if (LETTA_BASE_URL.includes('localhost')) {
-       return 'mock-conv-id';
-    }
     // 1. Truy cập Core API để lấy thông tin nhân sự và lettaConversationId
     const data = await coreApiClient.get('/hr/team-members');
     
@@ -137,9 +134,6 @@ export async function sendMessageToLetta(conversationId: string, message: string
  */
 export async function getLettaHistory(conversationId: string): Promise<LettaMessage[]> {
   try {
-    if (LETTA_BASE_URL.includes('localhost')) {
-       return [];
-    }
     const res = await fetch(`${LETTA_BASE_URL}/conversations/${conversationId}/messages`, {
         headers: { 'Content-Type': 'application/json' },
         signal: AbortSignal.timeout(10000)
