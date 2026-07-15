@@ -807,7 +807,7 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
         currentUser: { ...member, name: member.fullName },
         tasks: mappedTasks,
         projects: projects,
-        companyRules: "Danh sách nhân sự công ty thực tế từ Database:\n" + allMembers.map((m:any) => `- ${m.fullName} (Role: ${m.role || 'Nhân viên'})`).join("\n"),
+        companyRules: "Danh sách nhân sự công ty thực tế từ Database:\n" + allMembers.map((m:any) => `- ${m.fullName} (Role: ${m.role || 'Nhân viên'}, Telegram: @${m.telegramUsername || 'Chưa có'}, Email: ${m.email})`).join("\n"),
         config: { useCloud: true, useFallback: true, useMasking: true, useCompression: true }
       })
     });

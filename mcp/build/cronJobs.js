@@ -244,52 +244,81 @@ function startCronJobs(apiClient, sendMessage) {
         }
     }, { timezone: "Asia/Ho_Chi_Minh" });
     // ─────────────────────────────────────────────────────────────────────────
-    // CRON 5: Mỗi phút → Kiểm tra meeting nào sắp bắt đầu trong 15 phút
+    // CRON 5: Mỗi phút → Kiểm tra meeting nào sắp bắt đầu trong 30 và 15 phút
     // ─────────────────────────────────────────────────────────────────────────
     // Dùng Set để tránh gửi trùng lặp trong cùng phút
-    const notifiedMeetingIds = new Set();
+    const notifiedMeeting30m = new Set();
+    const notifiedMeeting15m = new Set();
     node_cron_1.default.schedule('* * * * *', async () => {
         try {
             const nowVN = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
-            const in15min = new Date(nowVN.getTime() + 15 * 60 * 1000);
             const meetings = await fetchTodayMeetings(apiClient);
+            let members = [];
+            try {
+                const membersRes = await apiClient.get(api_client_1.API_ROUTES.HR.TEAM_MEMBERS);
+                members = membersRes?.data || [];
+            }
+            catch (e) { }
             for (const m of meetings) {
                 const startTime = new Date(m.startTime || m.start_time);
                 const diffMs = startTime.getTime() - nowVN.getTime();
                 const diffMin = Math.floor(diffMs / 60000);
-                // Chỉ nhắc khi còn 14–16 phút (cron 1-phút có thể sai +/-1)
-                if (diffMin >= 14 && diffMin <= 16 && !notifiedMeetingIds.has(m.id)) {
-                    notifiedMeetingIds.add(m.id);
+                let notifType = null;
+                if (diffMin >= 29 && diffMin <= 31 && !notifiedMeeting30m.has(m.id)) {
+                    notifType = '30m';
+                    notifiedMeeting30m.add(m.id);
+                }
+                else if (diffMin >= 14 && diffMin <= 16 && !notifiedMeeting15m.has(m.id)) {
+                    notifType = '15m';
+                    notifiedMeeting15m.add(m.id);
+                }
+                if (notifType) {
                     const title = m.title || 'Cuộc họp';
                     const timeStr = startTime.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Ho_Chi_Minh' });
-                    const notifMsg = `⏰ *NHẮC LỊCH HỌP*\n\n📅 *${title}*\nSẽ bắt đầu lúc *${timeStr}* (còn 15 phút)\n\nVui lòng chuẩn bị!`;
+                    const hostName = m.host?.fullName || m.hostName || '';
+                    const hostStr = hostName ? ` (Host: ${hostName})` : '';
+                    let attendeesNames = [];
+                    const attendeesList = m.attendees || [];
+                    const dmTargets = new Set();
+                    if (m.hostId)
+                        dmTargets.add(m.hostId);
+                    for (const attendeeId of attendeesList) {
+                        const member = members.find((x) => x.id === attendeeId);
+                        if (member) {
+                            attendeesNames.push(member.fullName);
+                            dmTargets.add(member.id);
+                        }
+                    }
+                    const attendeesStr = attendeesNames.length > 0 ? `\\n👥 *Thành phần tham dự*: ${attendeesNames.join(', ')}` : '';
+                    const notifMsg = `⏰ *NHẮC LỊCH HỌP*\\n\\n📅 *${title}*${hostStr}\\nSẽ bắt đầu lúc *${timeStr}* (còn ${notifType === '30m' ? '30' : '15'} phút)${attendeesStr}\\n\\nVui lòng chuẩn bị!`;
                     // Gửi vào nhóm
                     if (GROUP_ID) {
                         await sendMessage(GROUP_ID, notifMsg);
                     }
-                    // Gửi DM cho tất cả thành viên có telegramChatId
-                    const membersRes = await apiClient.get(api_client_1.API_ROUTES.HR.TEAM_MEMBERS);
-                    const members = membersRes?.data || [];
-                    for (const member of members) {
-                        if (member.telegramChatId) {
+                    // Gửi DM cho host và attendees
+                    for (const targetId of dmTargets) {
+                        const member = members.find((x) => x.id === targetId);
+                        if (member && member.telegramChatId) {
                             try {
                                 await sendMessage(Number(member.telegramChatId), notifMsg);
                             }
                             catch { }
                         }
                     }
-                    console.log(`[Cron Meeting] ✅ Đã gửi nhắc: "${title}" lúc ${timeStr}`);
+                    console.log(`[Cron Meeting] ✅ Đã gửi nhắc ${notifType}: "${title}" lúc ${timeStr}`);
                 }
             }
-            // Xóa meeting đã qua để tránh bộ nhớ tăng mãi
-            notifiedMeetingIds.forEach(id => {
-                const m = meetings.find((x) => x.id === id);
-                if (m) {
-                    const start = new Date(m.startTime || m.start_time);
-                    if (start.getTime() < nowVN.getTime() - 30 * 60 * 1000) {
-                        notifiedMeetingIds.delete(id);
+            // Cleanup
+            [notifiedMeeting30m, notifiedMeeting15m].forEach(set => {
+                set.forEach(id => {
+                    const m = meetings.find((x) => x.id === id);
+                    if (m) {
+                        const start = new Date(m.startTime || m.start_time);
+                        if (start.getTime() < nowVN.getTime() - 40 * 60 * 1000) {
+                            set.delete(id);
+                        }
                     }
-                }
+                });
             });
         }
         catch (err) {

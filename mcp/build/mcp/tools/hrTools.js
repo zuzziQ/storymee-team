@@ -4,6 +4,26 @@ exports.HR_TOOLS_SCHEMA = void 0;
 exports.executeHrTool = executeHrTool;
 const types_js_1 = require("@modelcontextprotocol/sdk/types.js");
 const api_client_1 = require("@storymee/api-client");
+const index_1 = require("../../index");
+async function resolveAttendees(attendeesInput) {
+    if (!attendeesInput || !Array.isArray(attendeesInput) || attendeesInput.length === 0)
+        return [];
+    const members = await (0, index_1.getTeamMembersCache)();
+    const resolvedIds = [];
+    for (const input of attendeesInput) {
+        if (!input || typeof input !== 'string')
+            continue;
+        const cleanInput = input.replace(/^@/, '').toLowerCase().trim();
+        const found = members.find((m) => m.id === input ||
+            (m.telegramUsername && m.telegramUsername.toLowerCase() === cleanInput) ||
+            (m.email && m.email.toLowerCase() === cleanInput) ||
+            m.fullName.toLowerCase() === cleanInput);
+        if (found && !resolvedIds.includes(found.id)) {
+            resolvedIds.push(found.id);
+        }
+    }
+    return resolvedIds;
+}
 exports.HR_TOOLS_SCHEMA = [
     {
         name: "submit_leave_request",
@@ -307,6 +327,7 @@ async function executeHrTool(name, args, user, isBoss, apiClient, members) {
         }
         case "schedule_meeting": {
             const { title, description, startTime, endTime, attendees } = args;
+            const resolvedAttendees = await resolveAttendees(attendees);
             let resJson;
             try {
                 resJson = await apiClient.post('hr/meetings', {
@@ -315,7 +336,7 @@ async function executeHrTool(name, args, user, isBoss, apiClient, members) {
                     startTime,
                     endTime,
                     hostId: user.id,
-                    attendees: attendees || []
+                    attendees: resolvedAttendees
                 });
             }
             catch (err) {
@@ -327,6 +348,7 @@ async function executeHrTool(name, args, user, isBoss, apiClient, members) {
         }
         case "update_meeting": {
             const { meeting_id, title, description, startTime, endTime, attendees, status } = args;
+            const resolvedAttendees = attendees ? await resolveAttendees(attendees) : undefined;
             let resJson;
             try {
                 resJson = await apiClient.patch(`hr/meetings/${meeting_id}`, {
@@ -334,7 +356,7 @@ async function executeHrTool(name, args, user, isBoss, apiClient, members) {
                     description,
                     startTime,
                     endTime,
-                    attendees,
+                    attendees: resolvedAttendees,
                     status
                 });
             }

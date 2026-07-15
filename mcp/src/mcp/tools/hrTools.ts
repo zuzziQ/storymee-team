@@ -1,6 +1,27 @@
 import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
 import { CoreApiClient, API_ROUTES } from "@storymee/api-client";
 import { fetchAxios } from "../../fetchAxios";
+import { getTeamMembersCache } from "../../index";
+
+async function resolveAttendees(attendeesInput: any[]): Promise<string[]> {
+  if (!attendeesInput || !Array.isArray(attendeesInput) || attendeesInput.length === 0) return [];
+  const members = await getTeamMembersCache();
+  const resolvedIds: string[] = [];
+  for (const input of attendeesInput) {
+    if (!input || typeof input !== 'string') continue;
+    const cleanInput = input.replace(/^@/, '').toLowerCase().trim();
+    const found = members.find((m: any) => 
+      m.id === input || 
+      (m.telegramUsername && m.telegramUsername.toLowerCase() === cleanInput) ||
+      (m.email && m.email.toLowerCase() === cleanInput) ||
+      m.fullName.toLowerCase() === cleanInput
+    );
+    if (found && !resolvedIds.includes(found.id)) {
+      resolvedIds.push(found.id);
+    }
+  }
+  return resolvedIds;
+}
 
 export const HR_TOOLS_SCHEMA = [
   {
@@ -332,6 +353,7 @@ case "upsert_team_member": {
     
     case "schedule_meeting": {
       const { title, description, startTime, endTime, attendees } = args as any;
+      const resolvedAttendees = await resolveAttendees(attendees);
       let resJson;
       try {
         resJson = await apiClient.post('hr/meetings', {
@@ -340,7 +362,7 @@ case "upsert_team_member": {
           startTime,
           endTime,
           hostId: user.id,
-          attendees: attendees || []
+          attendees: resolvedAttendees
         });
       } catch (err: any) {
         throw new McpError(ErrorCode.InternalError, "Lỗi tạo lịch họp.");
@@ -352,6 +374,7 @@ case "upsert_team_member": {
     
     case "update_meeting": {
       const { meeting_id, title, description, startTime, endTime, attendees, status } = args as any;
+      const resolvedAttendees = attendees ? await resolveAttendees(attendees) : undefined;
       let resJson;
       try {
         resJson = await apiClient.patch(`hr/meetings/${meeting_id}`, {
@@ -359,7 +382,7 @@ case "upsert_team_member": {
           description,
           startTime,
           endTime,
-          attendees,
+          attendees: resolvedAttendees,
           status
         });
       } catch (err: any) {
