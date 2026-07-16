@@ -147,6 +147,7 @@ Nhiệm vụ của bạn:
    - Nếu người dùng muốn xin nghỉ phép, hãy kiểm tra xem họ đã cung cấp đủ thông tin chưa bao gồm: loại nghỉ phép (leaveType: sick | annual | personal), ngày bắt đầu (startDate: YYYY-MM-DD), và ngày kết thúc (endDate: YYYY-MM-DD).
      + Nếu đã cung cấp đầy đủ thông tin: Trả về action "leave_request" kèm theo leavePayload.
    - Trả về action "check_in_out" khi người dùng muốn điểm danh, check-in, check-out, báo cáo vào ca hoặc tan ca.
+   - Trả về action "show_my_issues" khi người dùng muốn xem danh sách công việc của họ (ví dụ: "cho tôi xem task của tôi"). KHÔNG CẦN PAYLOAD.
    - Trả về action "breakdown_issue" khi người dùng muốn phân rã, phân tách hoặc chia nhỏ một công việc lớn (ví dụ: "phân rã task T-103").
    - Trả về action "update_sub_issues" khi người dùng dán hoặc liệt kê một danh sách các công việc con (subtasks) tự chia để cập nhật/thay thế các công việc con của một công việc lớn.
    - Trả về action "request_issue_approval" khi nhân viên muốn xin lưu trữ hoặc xóa task. (TẠM THỜI: Việc dời deadline không cần xin phép, hãy dùng action "update_issue" để gia hạn luôn).
@@ -161,7 +162,7 @@ Nhiệm vụ của bạn:
 - KHI ĐÃ CÓ ĐỦ DỮ LIỆU ĐỂ TRẢ LỜI: Định dạng trả về BẮT BUỘC phải là JSON khớp với schema sau:
 {
   "reply": "Câu trả lời của bạn định dạng Markdown sạch",
-  "action": "create_project" | "update_issue" | "create_issue" | "leave_request" | "check_in_out" | "breakdown_issue" | "update_sub_issues" | "request_issue_approval" | "create_meeting" | "update_meeting" | "none",
+  "action": "create_project" | "update_issue" | "create_issue" | "show_my_issues" | "leave_request" | "check_in_out" | "breakdown_issue" | "update_sub_issues" | "request_issue_approval" | "create_meeting" | "update_meeting" | "none",
   "taskPayload": { "id": "Mã task (nếu sửa)", "project_id": "Mã ID của dự án tương ứng", "title": "Tiêu đề (nếu tạo)", "assignee": "Người phụ trách", "status": "Trạng thái mới", "target_date": "YYYY-MM-DD", "estimate": số_giờ, "priority": "Độ ưu tiên" },
   "projectPayload": { "id": "Mã dự án (nếu sửa)", "title": "Tên dự án mới", "description": "Mô tả dự án", "status": "Trạng thái mới" },
   "leavePayload": { "leaveType": "sick" | "annual" | "personal", "startDate": "YYYY-MM-DD", "endDate": "YYYY-MM-DD", "reason": "Lý do xin nghỉ" },
@@ -245,9 +246,6 @@ Nhiệm vụ của bạn:
 
         while (turnCount < 3) {
           let currentToolConfig: any = { functionCallingConfig: { mode: "AUTO" } };
-          if (turnCount === 0 && (message.toLowerCase().includes("task") || message.toLowerCase().includes("công việc"))) {
-            currentToolConfig = { functionCallingConfig: { mode: "ANY", allowedFunctionNames: ["get_my_issues"] } };
-          }
 
           const hubRes = await fetch(geminiUrl, {
             method: "POST",
@@ -279,14 +277,12 @@ Nhiệm vụ của bạn:
 
             // Thực thi Tool nội bộ
             if (fnCall.name === "get_my_issues") {
-              return NextResponse.json({
-                status: 'success',
-                data: {
-                  reply: "🔍 Đang đồng bộ danh sách công việc của bạn từ hệ thống...",
-                  action: "show_my_issues",
-                  taskPayload: {}
-                }
-              });
+              try {
+                const issuesRes = await coreApiClient.get('/plane/issues') as any;
+                // Only return minimal info to save tokens
+                const minimal = (issuesRes.data || []).map((t:any) => ({id: t.id, shortId: t.shortId || `${t.Project?.identifier}-${t.sequenceId}`, title: t.title, status: t.State?.name, parentId: t.parentId}));
+                toolResultObj = { success: true, data: minimal };
+              } catch(e:any) { toolResultObj = { error: e.message }; }
             } else if (fnCall.name === "get_attendance_report") {
               try {
                 const attRes = await coreApiClient.get('/hr/attendance') as any;
