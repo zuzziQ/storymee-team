@@ -440,10 +440,25 @@ case "create_issue": {
       const newId = newIssue?.id || "N/A";
       const assigneeText = targetUser ? targetUser.fullName : 'Chưa phân công';
 
+      let shortId = newId;
+      if (newIssue && newIssue.sequenceId) {
+          if (newIssue.Project?.identifier) {
+              shortId = `${newIssue.Project.identifier}-${newIssue.sequenceId}`;
+          } else {
+              try {
+                  const projRes = (await apiClient.get(API_ROUTES.PLANE.PROJECTS)) as any;
+                  const proj = (projRes.data || []).find((p: any) => p.id === newIssue.projectId);
+                  if (proj && proj.identifier) {
+                      shortId = `${proj.identifier}-${newIssue.sequenceId}`;
+                  }
+              } catch(e) {}
+          }
+      }
+
       return {
         content: [{
           type: "text",
-          text: `Đã tạo công việc thành công! ✓\n• **ID**: ${(newIssue.Project?.identifier && newIssue.sequenceId) ? `${newIssue.Project.identifier}-${newIssue.sequenceId}` : newId}\n• **Tiêu đề**: ${title}\n• **Người thực hiện**: ${assigneeText}\n• **Hạn chót**: ${target_date || 'None'}`
+          text: `Đã tạo công việc thành công! ✓\n• **ID**: ${shortId}\n• **Tiêu đề**: ${title}\n• **Người thực hiện**: ${assigneeText}\n• **Hạn chót**: ${target_date || 'None'}`
         }]
       };
     }
