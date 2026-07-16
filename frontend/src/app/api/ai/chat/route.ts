@@ -124,8 +124,9 @@ ${hrContext}
 
 Quy định định dạng phản hồi (CHUẨN HÓA GIAO DIỆN):
 1. Múi giờ & Thời gian: Luôn trả về thời gian theo múi giờ Việt Nam (GMT+7). Giờ định dạng HH:mm:ss, ngày định dạng DD/MM/YYYY.
-2. Danh sách công việc (Tasks): Dùng định dạng:
-   - **[Mã Task]** Tên công việc (Trạng thái)
+2. Danh sách công việc (Tasks): Gom nhóm theo Trạng thái nếu có thể. LUÔN SỬ DỤNG short_id (ví dụ AIK2-11) thay vì id dài. Dùng định dạng giống UI bot:
+   - 🟡 **[short_id]**: [Tên công việc]
+     \`[Trạng thái]\` | 📅 [Deadline nếu có, ngược lại ẩn đi]
 3. Báo cáo điểm danh (Attendance): Dùng mẫu chuẩn:
    - "Hôm nay bạn đã check-in lúc [HH:mm:ss] ngày [DD/MM/YYYY] (GMT+7)."
 4. Danh sách nghỉ phép (Leaves): Dùng mẫu:
@@ -291,13 +292,18 @@ Nhiệm vụ của bạn:
                     t.State?.name !== 'Cancelled' &&
                     (t.Assignee?.fullName || '').toLowerCase().includes(targetName)
                   )
-                  .map((t:any) => ({ 
-                    id: t.id, 
-                    title: t.title, 
-                    status: t.State?.name, 
-                    assignee: t.Assignee?.fullName,
-                    deadline: t.targetDate ? t.targetDate.split('T')[0] : null
-                  }));
+                  .map((t:any) => {
+                    const projIdent = typeof t.Project === 'string' ? t.Project : (t.Project?.identifier || '');
+                    const shortId = projIdent && t.sequenceId ? `${projIdent}-${t.sequenceId}` : (t.id?.substring(0, 8) || 'Task');
+                    return { 
+                      id: t.id, 
+                      short_id: shortId,
+                      title: t.title, 
+                      status: t.State?.name, 
+                      assignee: t.Assignee?.fullName,
+                      deadline: t.targetDate ? t.targetDate.split('T')[0] : null
+                    };
+                  });
                 toolResultObj = { success: true, count: myIssues.length, tasks: myIssues };
               } catch(e:any) { toolResultObj = { error: e.message }; }
             } else if (fnCall.name === "get_attendance_report") {
