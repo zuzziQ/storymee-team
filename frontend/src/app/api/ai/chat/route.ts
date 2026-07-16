@@ -265,8 +265,23 @@ Nhiệm vụ của bạn:
               try {
                 const issuesRes = await coreApiClient.get('/plane/issues') as any;
                 const rawTasks = issuesRes?.data || [];
-                // Simple filtering
-                const myIssues = rawTasks.filter((t:any) => t.State?.name !== 'Done' && t.State?.name !== 'Completed' && t.State?.name !== 'Cancelled').map((t:any) => ({ id: t.id, title: t.title, status: t.State?.name, assignee: t.Assignee?.fullName }));
+                const targetName = (fnCall.args?.employee_name || currentUser.fullName || currentUser.name || "").toLowerCase();
+                
+                // Filter and simplify tasks
+                const myIssues = rawTasks
+                  .filter((t:any) => 
+                    t.State?.name !== 'Done' && 
+                    t.State?.name !== 'Completed' && 
+                    t.State?.name !== 'Cancelled' &&
+                    (t.Assignee?.fullName || '').toLowerCase().includes(targetName)
+                  )
+                  .map((t:any) => ({ 
+                    id: t.id, 
+                    title: t.title, 
+                    status: t.State?.name, 
+                    assignee: t.Assignee?.fullName,
+                    deadline: t.targetDate ? t.targetDate.split('T')[0] : null
+                  }));
                 toolResultObj = { success: true, count: myIssues.length, tasks: myIssues };
               } catch(e:any) { toolResultObj = { error: e.message }; }
             } else if (fnCall.name === "get_attendance_report") {
