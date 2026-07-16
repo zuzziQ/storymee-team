@@ -240,7 +240,7 @@ Nhiệm vụ của bạn:
             body: JSON.stringify({
               contents: messages,
               tools: toolsDefinition,
-              systemInstruction: { parts: [{ text: "BẠN LÀ AI ASSISTANT STORYMEE. LUÔN LUÔN TRẢ VỀ ĐÚNG ĐỊNH DẠNG JSON SCHEMA ĐƯỢC YÊU CẦU TRONG PROMPT." }] }
+              systemInstruction: { parts: [{ text: "BẠN LÀ AI ASSISTANT STORYMEE. HÃY GỌI TOOL NẾU CẦN LẤY DỮ LIỆU. CHỈ TRẢ VỀ JSON KHI ĐÃ ĐỦ DỮ LIỆU ĐỂ TRẢ LỜI." }] }
             }),
             signal: AbortSignal.timeout(45000)
           });
