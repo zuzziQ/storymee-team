@@ -343,9 +343,18 @@ case "create_issue": {
         if (lowerAssignee === 'chưa phân công' || lowerAssignee === 'none' || lowerAssignee === 'unassigned') {
           targetUser = null;
         } else {
-          targetUser = members.find((m: any) => m.fullName.toLowerCase() === lowerAssignee || m.id.toLowerCase() === lowerAssignee);
+          targetUser = members.find((m: any) => 
+            m.fullName.toLowerCase() === lowerAssignee || 
+            m.id.toLowerCase() === lowerAssignee ||
+            (m.email && m.email.toLowerCase() === lowerAssignee) ||
+            (m.telegramUsername && m.telegramUsername.toLowerCase() === lowerAssignee.replace('@', ''))
+          );
           if (!targetUser) {
-            targetUser = members.find((m: any) => m.fullName.toLowerCase().includes(lowerAssignee));
+            targetUser = members.find((m: any) => 
+               m.fullName.toLowerCase().includes(lowerAssignee) ||
+               (m.email && m.email.toLowerCase().includes(lowerAssignee)) ||
+               (m.telegramUsername && m.telegramUsername.toLowerCase().includes(lowerAssignee.replace('@', '')))
+            );
           }
           if (!targetUser) {
             throw new McpError(ErrorCode.InvalidParams, `Không tìm thấy nhân sự ${assignee} trong hệ thống.`);
@@ -544,9 +553,18 @@ case "assign_issue": {
       }
 
       const lowerAssignee = assignee.toLowerCase();
-      let targetUser = members.find((m: any) => m.fullName.toLowerCase() === lowerAssignee || m.id.toLowerCase() === lowerAssignee);
+      let targetUser = members.find((m: any) => 
+          m.fullName.toLowerCase() === lowerAssignee || 
+          m.id.toLowerCase() === lowerAssignee ||
+          (m.email && m.email.toLowerCase() === lowerAssignee) ||
+          (m.telegramUsername && m.telegramUsername.toLowerCase() === lowerAssignee.replace('@', ''))
+      );
       if (!targetUser) {
-        targetUser = members.find((m: any) => m.fullName.toLowerCase().includes(lowerAssignee) || (m.telegramUsername && m.telegramUsername.toLowerCase().includes(lowerAssignee)));
+        targetUser = members.find((m: any) => 
+           m.fullName.toLowerCase().includes(lowerAssignee) ||
+           (m.email && m.email.toLowerCase().includes(lowerAssignee)) ||
+           (m.telegramUsername && m.telegramUsername.toLowerCase().includes(lowerAssignee.replace('@', '')))
+        );
       }
       if (!targetUser) {
         throw new McpError(ErrorCode.InvalidParams, `Không tìm thấy nhân sự ${assignee} để bàn giao.`);
@@ -593,9 +611,18 @@ case "update_issue": {
       let assigneeId = undefined;
       if (assignee) {
         const lowerAssignee = assignee.toLowerCase();
-        let targetMem = members.find((m: any) => m.fullName.toLowerCase() === lowerAssignee || m.id.toLowerCase() === lowerAssignee);
+        let targetMem = members.find((m: any) => 
+            m.fullName.toLowerCase() === lowerAssignee || 
+            m.id.toLowerCase() === lowerAssignee ||
+            (m.email && m.email.toLowerCase() === lowerAssignee) ||
+            (m.telegramUsername && m.telegramUsername.toLowerCase() === lowerAssignee.replace('@', ''))
+        );
         if (!targetMem) {
-          targetMem = members.find((m: any) => m.fullName.toLowerCase().includes(lowerAssignee) || (m.telegramUsername && m.telegramUsername.toLowerCase().includes(lowerAssignee)));
+          targetMem = members.find((m: any) => 
+             m.fullName.toLowerCase().includes(lowerAssignee) ||
+             (m.email && m.email.toLowerCase().includes(lowerAssignee)) ||
+             (m.telegramUsername && m.telegramUsername.toLowerCase().includes(lowerAssignee.replace('@', '')))
+          );
         }
         if (targetMem) assigneeId = targetMem.id;
       }
