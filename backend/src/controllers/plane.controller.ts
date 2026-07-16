@@ -439,7 +439,11 @@ export class PlaneController {
             // Gọi sang PlaneService để xóa trên Plane thật
             const workspaceSlug = issue.Project?.Workspace?.slug || process.env.PLANE_WORKSPACE_SLUG || 'default';
             if (workspaceSlug && issue.projectId) {
-                await PlaneService.deleteIssue(workspaceSlug, issue.projectId, id);
+                try {
+                    await PlaneService.deleteIssue(workspaceSlug, issue.projectId, id);
+                } catch (planeErr: any) {
+                    console.warn(`[deleteIssue] Failed to delete from Plane API (maybe it never existed). Proceeding to delete locally. Error: ${planeErr.message}`);
+                }
             }
 
             // Xóa ở local DB
