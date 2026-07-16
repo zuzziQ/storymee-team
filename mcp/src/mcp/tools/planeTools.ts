@@ -748,6 +748,7 @@ case "breakdown_issue": {
             if (resJson.success === false) {
                 throw new Error(resJson.message || "Lỗi tạo subtask.");
             }
+            createdSubtasks.push(item.title);
         } catch (err: any) {
             throw new McpError(ErrorCode.InternalError, "Lỗi tạo subtask: " + err.message);
         }
@@ -795,15 +796,13 @@ case "update_sub_issues": {
         );
       }
 
-      // 2. Hủy các subtask cũ có tiêu đề bắt đầu bằng [task_id] trong cùng dự án mẹ NẾU overwrite = true
+      // 2. Hủy các subtask cũ trong cùng dự án mẹ NẾU overwrite = true
       if (overwrite) {
         for (const sub of dbTasks) {
           if (sub.parentId === matchedSubtask.id) {
-            if (sub.title && sub.title.startsWith(`[${task_id}]`)) {
-              try {
-                  await apiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${sub.id}`, { status: "cancelled" });
-              } catch(e) {}
-            }
+            try {
+                await apiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${sub.id}`, { status: "cancelled" });
+            } catch(e) {}
           }
         }
       }
@@ -819,7 +818,7 @@ case "update_sub_issues": {
 
         try {
             await apiClient.post(API_ROUTES.PLANE.ISSUES, {
-                      title: `[${task_id}] ${cleanTitle}`,
+                      title: cleanTitle,
                       projectId: matchedSubtask.projectId,
                       description: `Tạo từ yêu cầu cập nhật việc con cho [${task_id}].`,
                       priority: matchedSubtask.priority || "medium",
