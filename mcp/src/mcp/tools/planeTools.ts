@@ -397,8 +397,10 @@ case "create_issue": {
       if (!finalProjectId) {
           try {
               const projRes = (await apiClient.get(API_ROUTES.PLANE.PROJECTS)) as any;
-              if (projRes.data && projRes.data.length > 0) {
-                  finalProjectId = projRes.data[0].id;
+              const allProjects = projRes.data || [];
+              if (allProjects.length > 0) {
+                  const defaultProj = allProjects.find((p: any) => p.name && p.name.toLowerCase().includes("mặc định"));
+                  finalProjectId = defaultProj ? defaultProj.id : allProjects[0].id;
               }
           } catch (e) {}
       }
