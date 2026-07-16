@@ -300,6 +300,7 @@ export default function StorymeeTeamPage() {
               aiPredictedDate={aiPredictedDate}
               handleAnalyzeProject={handleAnalyzeProject}
               handleDeleteProject={handleDeleteProject}
+              handleUpdateProject={handleUpdateProject}
               handleCreateTask={handleCreateTask}
               onSelectTask={setSelectedTask}
               teamMembers={teamMembers}
@@ -457,6 +458,7 @@ export default function StorymeeTeamPage() {
         <TaskDetailModal
           task={selectedTask}
           onClose={() => setSelectedTask(null)}
+          onDeleteTask={handleArchiveTaskDirect}
           onUpdate={(t) => {
             setSelectedTask(t);
             handleUpdateTask(t);

@@ -103,6 +103,8 @@ export function useTaskState() {
         } catch {}
       }
       await coreApiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${subtaskId}`, {
+        name: task.title || undefined, // plane uses name in patch according to Plane API? Wait, Plane API issues uses `name` or `title`? Above in handleCreateTask it uses `title`.
+        title: task.title || undefined,
         status: apiStatus,
         assigneeId: matchedMember ? matchedMember.id : undefined,
         priority: task.priority ? task.priority.toLowerCase() : undefined,

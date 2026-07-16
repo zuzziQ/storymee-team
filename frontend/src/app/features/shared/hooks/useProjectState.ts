@@ -100,6 +100,16 @@ export function useProjectState() {
     }
   };
 
+  const handleUpdateProject = async (id: string, updates: Partial<Project>, onRefresh?: () => void) => {
+    try {
+      setProjects(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
+      await coreApiClient.patch(`${API_ROUTES.PLANE.PROJECTS}/${id}`, updates);
+      onRefresh?.();
+    } catch (err) {
+      console.error('Lỗi cập nhật dự án:', err);
+    }
+  };
+
   const handleAnalyzeProject = async (
     id: string,
     tasks: any[],
@@ -157,6 +167,7 @@ export function useProjectState() {
     fetchProjectsData,
     handleAddProject,
     handleDeleteProject,
+    handleUpdateProject,
     handleAnalyzeProject,
   };
 }

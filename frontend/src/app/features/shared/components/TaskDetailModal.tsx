@@ -40,6 +40,7 @@ export default function TaskDetailModal({
 }: {
   task: Task;
   onClose: () => void;
+  onDeleteTask?: (task: Task) => void;
   onUpdate: (t: Task) => void;
   tasks: Task[];
   teamMembers: TeamMember[];
@@ -62,6 +63,11 @@ export default function TaskDetailModal({
   const [taskDescription, setTaskDescription] = useState(task.description || '');
   const [taskOutput, setTaskOutput] = useState(task.outputSuggested || '');
   const [showSubmitPanel, setShowSubmitPanel] = useState(false);
+  
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editedTitle, setEditedTitle] = useState(task.title);
+  const [editingSubtaskId, setEditingSubtaskId] = useState<string | null>(null);
+  const [editedSubtaskTitle, setEditedSubtaskTitle] = useState('');
 
   // Admin check: role chứa Founder hoặc IT Admin
   const isAdmin = !!(activeUser?.role && (
@@ -421,6 +427,36 @@ export default function TaskDetailModal({
     setAiLoading(false);
   };
 
+  const handleDeleteSubtask = async (id: string, dbId?: string) => {
+    if (!window.confirm("Bạn có chắc chắn muốn xoá subtask này?")) return;
+    const newSubtasks = subtasks.filter(s => s.id !== id);
+    setSubtasks(newSubtasks);
+    if (dbId) {
+      try {
+        await coreApiClient.delete(`${API_ROUTES.PLANE.ISSUES}/${dbId}`);
+      } catch (err) {
+        console.error("Failed to delete subtask", err);
+      }
+    }
+    handleTaskUpdate({ subtasks: newSubtasks });
+  };
+
+  const saveEditedSubtask = async (id: string, dbId?: string) => {
+    if (!editedSubtaskTitle.trim()) { setEditingSubtaskId(null); return; }
+    const newTitle = editedSubtaskTitle.trim();
+    const newSubtasks = subtasks.map(s => s.id === id ? { ...s, title: newTitle } : s);
+    setSubtasks(newSubtasks);
+    setEditingSubtaskId(null);
+    if (dbId) {
+      try {
+        await coreApiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${dbId}`, { name: newTitle, title: newTitle });
+      } catch (err) {
+        console.error("Failed to rename subtask", err);
+      }
+    }
+    handleTaskUpdate({ subtasks: newSubtasks });
+  };
+
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
       <div className="glass modal-content" style={{ width: 850, height: 660, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -428,16 +464,57 @@ export default function TaskDetailModal({
         {/* Header modal */}
         <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
-            <div>
+            <div style={{ flex: 1, minWidth: 0, paddingRight: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
                 <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#71717a', background: 'rgba(255,255,255,0.05)', padding: '2px 8px', borderRadius: 4 }}>{task.id}</span>
                 <span className={`badge ${getStatusClass(task.status)}`} style={{ fontSize: 10 }}>{task.status}</span>
               </div>
-              <h2 style={{ fontSize: 18, fontWeight: 700, color: '#fafafa', margin: 0 }}>{task.title}</h2>
+              {isEditingTitle ? (
+                <input
+                  type="text"
+                  value={editedTitle}
+                  onChange={e => setEditedTitle(e.target.value)}
+                  onBlur={() => {
+                    setIsEditingTitle(false);
+                    if (editedTitle.trim() && editedTitle.trim() !== task.title) {
+                      handleTaskUpdate({ title: editedTitle.trim() });
+                    }
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      setIsEditingTitle(false);
+                      if (editedTitle.trim() && editedTitle.trim() !== task.title) {
+                        handleTaskUpdate({ title: editedTitle.trim() });
+                      }
+                    } else if (e.key === 'Escape') {
+                      setIsEditingTitle(false);
+                      setEditedTitle(task.title);
+                    }
+                  }}
+                  autoFocus
+                  style={{ fontSize: 18, fontWeight: 700, color: '#fafafa', margin: 0, background: 'transparent', border: '1px solid var(--border)', borderRadius: 4, width: '100%', padding: '2px 4px', outline: 'none' }}
+                />
+              ) : (
+                <h2 onClick={() => setIsEditingTitle(true)} style={{ fontSize: 18, fontWeight: 700, color: '#fafafa', margin: 0, cursor: 'pointer', display: 'inline-block' }} title="Nhấn để sửa tên">{task.title}</h2>
+              )}
             </div>
-            <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#71717a', cursor: 'pointer', padding: 4 }}>
-              <X size={18} />
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+              {onDeleteTask && (
+                <button 
+                  onClick={() => {
+                    onDeleteTask(task);
+                    onClose();
+                  }} 
+                  style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#ef4444', cursor: 'pointer', padding: 6, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }} 
+                  title="Xoá Task"
+                >
+                  <Trash2 size={16} />
+                </button>
+              )}
+              <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#71717a', cursor: 'pointer', padding: 6, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <X size={18} />
+              </button>
+            </div>
           </div>
 
           {/* Status Pipeline Step Tracker */}
@@ -550,15 +627,38 @@ export default function TaskDetailModal({
                       <div key={sub.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--bg-muted)', borderRadius: 10, border: '1px solid var(--border)', gap: 12 }}>
                         
                         {/* Checkbox & Title */}
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
                           <input
                             type="checkbox"
                             checked={sub.isDone || sub.status === 'done' || sub.status === 'completed'}
                             onChange={(e) => handleUpdateSubtaskStatus(sub.id, e.target.checked ? 'done' : 'pending')}
-                            style={{ width: 14, height: 14, accentColor: '#6366f1', flexShrink: 0 }}
+                            style={{ width: 14, height: 14, accentColor: '#6366f1', flexShrink: 0, cursor: 'pointer' }}
                           />
-                          <span style={{ fontSize: 13, color: (sub.isDone || sub.status === 'done' || sub.status === 'completed' || sub.status === 'cancelled') ? '#71717a' : '#fafafa', textDecoration: (sub.isDone || sub.status === 'done' || sub.status === 'completed' || sub.status === 'cancelled') ? 'line-through' : 'none', whiteSpace: 'normal', wordBreak: 'break-word' }}>{sub.title}</span>
-                        </label>
+                          {editingSubtaskId === sub.id ? (
+                            <input
+                              type="text"
+                              value={editedSubtaskTitle}
+                              onChange={e => setEditedSubtaskTitle(e.target.value)}
+                              onBlur={() => saveEditedSubtask(sub.id, sub.dbId)}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') saveEditedSubtask(sub.id, sub.dbId);
+                                if (e.key === 'Escape') setEditingSubtaskId(null);
+                              }}
+                              autoFocus
+                              style={{ flex: 1, padding: '2px 6px', fontSize: 13, borderRadius: 4, border: '1px solid var(--border)', background: 'transparent', color: '#fafafa', outline: 'none' }}
+                            />
+                          ) : (
+                            <span 
+                              style={{ fontSize: 13, color: (sub.isDone || sub.status === 'done' || sub.status === 'completed' || sub.status === 'cancelled') ? '#71717a' : '#fafafa', textDecoration: (sub.isDone || sub.status === 'done' || sub.status === 'completed' || sub.status === 'cancelled') ? 'line-through' : 'none', whiteSpace: 'normal', wordBreak: 'break-word', cursor: 'text' }}
+                              onDoubleClick={() => {
+                                setEditingSubtaskId(sub.id);
+                                setEditedSubtaskTitle(sub.title);
+                              }}
+                            >
+                              {sub.title}
+                            </span>
+                          )}
+                        </div>
                         
                         {/* Assignee, Deadline Controls */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
@@ -593,6 +693,25 @@ export default function TaskDetailModal({
                             <option value="done">Done</option>
                             <option value="cancelled">Huỷ</option>
                           </select>
+
+                          {/* Action Buttons */}
+                          <button
+                            onClick={() => {
+                              setEditingSubtaskId(sub.id);
+                              setEditedSubtaskTitle(sub.title);
+                            }}
+                            style={{ background: 'none', border: 'none', color: '#71717a', cursor: 'pointer', padding: 4 }}
+                            title="Sửa subtask"
+                          >
+                            <Edit3 size={14} />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteSubtask(sub.id, sub.dbId)}
+                            style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: 4 }}
+                            title="Xoá subtask"
+                          >
+                            <Trash2 size={14} />
+                          </button>
                         </div>
                       </div>
                     ))}
@@ -1016,9 +1135,9 @@ export default function TaskDetailModal({
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <span style={{ fontSize: 10, color: '#71717a', textTransform: 'uppercase', fontWeight: 600 }}>Hạn chót (Deadline)</span>
               <input
-                type="datetime-local"
+                type="date"
                 className="input-dark"
-                value={task.deadline}
+                value={task.deadline ? task.deadline.split('T')[0] : ''}
                 onChange={e => {
                   const newDeadline = e.target.value;
                   const updates: Partial<Task> = { deadline: newDeadline };

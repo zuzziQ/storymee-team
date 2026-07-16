@@ -1,9 +1,10 @@
-import React from 'react';
-import { Sparkles, Layers, Activity, Users, DollarSign, Calendar, Zap, AlertCircle, Trash2 } from 'lucide-react';
+import React, { useState } from 'react';
+import { Sparkles, Layers, Activity, Users, DollarSign, Calendar, Zap, AlertCircle, Trash2, Edit3 } from 'lucide-react';
 import {
   Project, Task, TeamMember,
   renderFormattedText
 } from '../../constants';
+import EditProjectModal from '../shared/components/EditProjectModal';
 
 interface ProjectsTabProps {
   projects: Project[];
@@ -16,6 +17,7 @@ interface ProjectsTabProps {
   aiPredictedDate: Record<string, string>;
   handleAnalyzeProject: (projId: string) => void;
   handleDeleteProject?: (id: string) => void;
+  handleUpdateProject?: (id: string, updates: Partial<Project>) => void;
   handleCreateTask?: (title: string, assignee: string, estimate: number, priority: any) => Promise<void>;
   teamMembers: TeamMember[];
   onSelectTask?: (task: Task) => void;
@@ -42,6 +44,7 @@ export default function ProjectsTab({
   aiPredictedDate,
   handleAnalyzeProject,
   handleDeleteProject,
+  handleUpdateProject,
   teamMembers,
   showAddProjectModal,
   setShowAddProjectModal,
@@ -58,7 +61,8 @@ export default function ProjectsTab({
   const proj = projects.find(p => p.id === activeProjectId);
   const projTasks = proj ? tasks.filter(t => t.projectId === proj.id) : [];
   
-  const [newTaskTitle, setNewTaskTitle] = React.useState('');
+  const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
   const doneTasks = projTasks.filter(t => t.status === 'Done');
   const inProgressTasks = projTasks.filter(t => t.status === 'In Progress');
   const todoTasks = projTasks.filter(t => t.status === 'Todo' || t.status === 'Backlog' || t.status === 'In Review');
@@ -138,6 +142,25 @@ export default function ProjectsTab({
                 <h2 style={{ fontSize: 18, fontWeight: 700, color: '#fafafa' }}>{proj.name}</h2>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {handleUpdateProject && proj.id !== 'default_no_project' && (
+                  <button
+                    onClick={() => setEditingProject(proj)}
+                    style={{
+                      background: 'rgba(255,255,255,0.05)',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      color: '#fafafa',
+                      padding: '8px',
+                      borderRadius: 8,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                    title="Sửa dự án"
+                  >
+                    <Edit3 size={14} />
+                  </button>
+                )}
                 {handleDeleteProject && proj.id !== 'default_no_project' && (
                   <button
                     onClick={() => {
@@ -358,6 +381,14 @@ export default function ProjectsTab({
             </div>
           </div>
         </div>
+      )}
+
+      {editingProject && handleUpdateProject && (
+        <EditProjectModal
+          project={editingProject}
+          onClose={() => setEditingProject(null)}
+          onUpdateProject={handleUpdateProject}
+        />
       )}
     </div>
   );

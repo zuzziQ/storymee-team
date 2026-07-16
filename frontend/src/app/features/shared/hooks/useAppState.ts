@@ -105,6 +105,7 @@ export function useAppState() {
 
   const handleAddProject = () => projectState.handleAddProject(fetchDbData);
   const handleDeleteProject = (id: string) => projectState.handleDeleteProject(id, fetchDbData);
+  const handleUpdateProject = (id: string, updates: Partial<any>) => projectState.handleUpdateProject(id, updates, fetchDbData);
   const handleAnalyzeProject = (id: string) =>
     projectState.handleAnalyzeProject(id, taskState.tasks, hr.teamMembers, chat.omniConfig);
 
@@ -213,6 +214,7 @@ export function useAppState() {
     aiPredictedDate: projectState.aiPredictedDate,
     handleAddProject,
     handleDeleteProject,
+    handleUpdateProject,
     handleAnalyzeProject,
 
     // Chat
