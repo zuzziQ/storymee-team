@@ -806,7 +806,7 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
         } else if (aiResponse.action === 'create_issue') {
           await sendMessage(chatId, "⏳ Đang tự động tạo Task theo yêu cầu...");
           try {
-            const result = await executeMcpTool("create_issue", aiResponse.issuePayload, member);
+            const result = await executeMcpTool("create_issue", aiResponse.taskPayload, member);
             await sendMessage(chatId, result.content[0].text);
           } catch (e: any) {
             await sendMessage(chatId, `❌ Lỗi khi tạo Task: ${e.message}`);
@@ -842,10 +842,7 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
           };
 
           let confirmMsg = '';
-          if (aiResponse.action === 'leave_request') {
-            const lp = aiResponse.leavePayload;
-            confirmMsg = `💡 *ĐỀ XUẤT XIN NGHỈ PHÉP:*\n• Loại phép: *${lp.leaveType === 'sick' ? 'Nghỉ ốm' : lp.leaveType === 'annual' ? 'Nghỉ phép năm' : 'Việc riêng'}*\n• Thời gian: *${lp.startDate} đến ${lp.endDate}*\n• Lý do: *${lp.reason || 'Không có'}*`;
-          } else if (aiResponse.action === 'check_in_out') {
+          if (aiResponse.action === 'check_in_out') {
             const cp = aiResponse.checkInOutPayload;
             confirmMsg = `💡 *ĐỀ XUẤT ĐIỂM DANH:*\n• Trạng thái: *${cp.status === 'present' ? 'Đi làm' : cp.status === 'late' ? 'Đi muộn' : 'Vắng'}*\n• Ghi chú: *${cp.notes || 'Không có'}*${cp.employee_name ? `\n• Nhân sự: *${cp.employee_name}*` : ''}`;
           } else if (aiResponse.action === 'breakdown_issue') {
