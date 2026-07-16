@@ -412,6 +412,10 @@ export default function TaskDetailModal({
 
           setSubtasks([...subtasks, ...finalUiList]);
           
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(`subtasks_checklist_${task.id}`, JSON.stringify([...subtasks, ...finalUiList]));
+          }
+          
           try {
             handleTaskUpdate({ subtasks: [...subtasks, ...finalUiList] });
           } catch (e) { /* silent fail */ }
@@ -433,6 +437,10 @@ export default function TaskDetailModal({
     const newSubtasks = subtasks.filter(s => s.id !== id);
     setSubtasks(newSubtasks);
     
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`subtasks_checklist_${task.id}`, JSON.stringify(newSubtasks));
+    }
+    
     // Only call backend if dbId is a valid UUID (length > 20 and not literal 'undefined')
     if (dbId && dbId.length > 20 && dbId !== 'undefined') {
       try {
@@ -443,6 +451,20 @@ export default function TaskDetailModal({
     }
     
     handleTaskUpdate({ subtasks: newSubtasks });
+  };
+
+  const onDragEnd = (result: any) => {
+    if (!result.destination) return;
+    const reordered = Array.from(subtasks);
+    const [moved] = reordered.splice(result.source.index, 1);
+    reordered.splice(result.destination.index, 0, moved);
+    setSubtasks(reordered);
+    
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`subtasks_checklist_${task.id}`, JSON.stringify(reordered));
+    }
+    
+    handleTaskUpdate({ subtasks: reordered });
   };
 
   const saveEditedSubtask = async (id: string, dbId?: string) => {
