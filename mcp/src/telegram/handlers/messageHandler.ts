@@ -63,15 +63,18 @@ async function finalizeOutputSession(chatId: number, session: any, member: any) 
 export async function handleTelegramMessage(message: any) {
   const chatId = message.chat.id;
   const username = message.from?.username;
-  let text = ((message.text || message.caption) || "")
+  const originalText = (message.text || message.caption) || "";
+  let text = originalText
     .replace(/^(\/[a-zA-Z0-9_]+)@[a-zA-Z0-9_]+/i, '$1')
     .replace(/^@[a-zA-Z0-9_]+\s*/i, '')
     .trim();
   const isGroup = chatId < 0;
 
-  // Hỗ trợ lệnh /ai trong group để bypass Privacy Mode
+  // Hỗ trợ lệnh /ai và tag @bot trong group để bypass Privacy Mode
   let isAiCommand = false;
-  if (text.toLowerCase().startsWith("/ai ")) {
+  if (/^@[a-zA-Z0-9_]+\s*/i.test(originalText)) {
+    isAiCommand = true;
+  } else if (text.toLowerCase().startsWith("/ai ")) {
     text = text.substring(4).trim();
     isAiCommand = true;
   } else if (text.toLowerCase() === "/ai") {
