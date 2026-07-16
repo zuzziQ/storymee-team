@@ -279,33 +279,14 @@ Nhiệm vụ của bạn:
 
             // Thực thi Tool nội bộ
             if (fnCall.name === "get_my_issues") {
-              try {
-                const issuesRes = await coreApiClient.get('/plane/issues') as any;
-                const rawTasks = issuesRes?.data || [];
-                const targetName = (fnCall.args?.employee_name || currentUser.fullName || currentUser.name || "").toLowerCase();
-                
-                // Filter and simplify tasks
-                const myIssues = rawTasks
-                  .filter((t:any) => 
-                    t.State?.name !== 'Done' && 
-                    t.State?.name !== 'Completed' && 
-                    t.State?.name !== 'Cancelled' &&
-                    (t.Assignee?.fullName || '').toLowerCase().includes(targetName)
-                  )
-                  .map((t:any) => {
-                    const projIdent = typeof t.Project === 'string' ? t.Project : (t.Project?.identifier || '');
-                    const shortId = projIdent && t.sequenceId ? `${projIdent}-${t.sequenceId}` : (t.id?.substring(0, 8) || 'Task');
-                    return { 
-                      id: t.id, 
-                      short_id: shortId,
-                      title: t.title, 
-                      status: t.State?.name, 
-                      assignee: t.Assignee?.fullName,
-                      deadline: t.targetDate ? t.targetDate.split('T')[0] : null
-                    };
-                  });
-                toolResultObj = { success: true, count: myIssues.length, tasks: myIssues };
-              } catch(e:any) { toolResultObj = { error: e.message }; }
+              return NextResponse.json({
+                status: 'success',
+                data: {
+                  reply: "🔍 Đang đồng bộ danh sách công việc của bạn từ hệ thống...",
+                  action: "show_my_issues",
+                  taskPayload: {}
+                }
+              });
             } else if (fnCall.name === "get_attendance_report") {
               try {
                 const attRes = await coreApiClient.get('/hr/attendance') as any;

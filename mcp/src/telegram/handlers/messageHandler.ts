@@ -799,7 +799,40 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
             month: rp.month,
             year: rp.year
           }, member);
-          await sendMessage(chatId, result.content[0].text);
+        } else if (aiResponse.action === 'show_my_issues') {
+          try {
+            const allMembers = await getCachedMembers();
+            const issuesRes = await apiClient.get(API_ROUTES.PLANE.ISSUES) as any;
+            const rawTasks: any[] = issuesRes?.data || [];
+            
+            const parentMap = new Map<string, any>();
+            const topLevelIssues: any[] = [];
+            
+            rawTasks.forEach((t: any) => {
+              t.subIssues = [];
+              parentMap.set(t.id, t);
+            });
+            
+            rawTasks.forEach((t: any) => {
+              if (t.parentId && parentMap.has(t.parentId)) {
+                parentMap.get(t.parentId).subIssues.push(t);
+              } else {
+                topLevelIssues.push(t);
+              }
+            });
+            
+            const myIssues = topLevelIssues.filter((t: any) => {
+                const isAssigned = t.assigneeId === member.id;
+                const hasAssignedSub = t.subIssues.some((sub: any) => sub.assigneeId === member.id);
+                return isAssigned || hasAssignedSub;
+            });
+            
+            const formattedText = formatMyIssuesDM(myIssues, member.fullName);
+            await sendMessage(chatId, formattedText);
+          } catch (e: any) {
+            console.error("Lỗi fetch task AI action:", e);
+            await sendMessage(chatId, "❌ Gặp lỗi khi đồng bộ danh sách công việc.");
+          }
         } else if (aiResponse.action === 'get_team_leaves') {
           const result = await executeMcpTool("get_team_leaves", aiResponse.teamLeavesPayload || {}, member);
           await sendMessage(chatId, result.content[0].text);
