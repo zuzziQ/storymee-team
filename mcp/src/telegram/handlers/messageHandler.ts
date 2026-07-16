@@ -759,17 +759,23 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
         dbTasks = tasksData.data || [];
         
         dbTasks.forEach((sub: any) => {
+          const statusName = sub.State?.name || 'Todo';
+          const lowerStatus = statusName.toLowerCase();
+          // Bỏ qua các task đã hoàn thành hoặc bị huỷ để giảm Context Size cho LLM
+          if (lowerStatus === 'done' || lowerStatus === 'completed' || lowerStatus === 'cancelled') return;
+
           // Project có thể là string (identifier) hoặc object {identifier, ...}
           const projIdent = typeof sub.Project === 'string'
             ? sub.Project
             : (sub.Project?.identifier || '');
+            
           mappedTasks.push({
             id: projIdent && sub.sequenceId ? `${projIdent}-${sub.sequenceId}` : sub.id,
             title: sub.title,
-            description: sub.description || '',
+            description: (sub.description || '').substring(0, 100), // Rút gọn description
             assignee: sub.Assignee ? sub.Assignee.fullName : 'Chưa phân công',
             priority: sub.priority ? sub.priority.charAt(0).toUpperCase() + sub.priority.slice(1) : 'None',
-            status: sub.State?.name || 'Todo',
+            status: statusName,
             deadline: sub.targetDate ? sub.targetDate.split('T')[0] : '',
             estimate: 0,
             projectId: sub.projectId,
