@@ -432,13 +432,16 @@ export default function TaskDetailModal({
     if (!window.confirm("Bạn có chắc chắn muốn xoá subtask này?")) return;
     const newSubtasks = subtasks.filter(s => s.id !== id);
     setSubtasks(newSubtasks);
-    if (dbId) {
+    
+    // Only call backend if dbId is a valid UUID (length > 20 and not literal 'undefined')
+    if (dbId && dbId.length > 20 && dbId !== 'undefined') {
       try {
         await coreApiClient.delete(`${API_ROUTES.PLANE.ISSUES}/${dbId}`);
       } catch (err) {
-        console.error("Failed to delete subtask", err);
+        console.error("Failed to delete subtask on backend", err);
       }
     }
+    
     handleTaskUpdate({ subtasks: newSubtasks });
   };
 
