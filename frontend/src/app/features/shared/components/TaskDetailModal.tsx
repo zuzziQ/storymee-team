@@ -277,7 +277,9 @@ export default function TaskDetailModal({
     const newSub: SubTask = {
       id: tempId,
       title: title.trim(),
-      isDone: false
+      isDone: false,
+      status: 'pending',
+      assignee: task.assignee
     };
     
     setSubtasks([...subtasks, newSub]);
@@ -321,10 +323,14 @@ export default function TaskDetailModal({
     const newSubtasks = subtasks.map(s => s.id === id ? { ...s, isDone, status: newStatus } : s);
     setSubtasks(newSubtasks);
     
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`subtasks_checklist_${task.id}`, JSON.stringify(newSubtasks));
+    }
+    
     const sub = subtasks.find(s => s.id === id);
-    if (sub && (sub.dbId || sub.id.length > 20)) { // Assuming dbId exists or id is UUID
+    if (sub && sub.dbId && sub.dbId.length > 20 && sub.dbId !== 'undefined') {
       try {
-        await coreApiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${sub.dbId || sub.id}`, { status: newStatus });
+        await coreApiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${sub.dbId}`, { status: newStatus });
       } catch (err) {
         console.error("Failed to update subtask status", err);
       }
@@ -385,7 +391,8 @@ export default function TaskDetailModal({
                     dbId: res.data.id,
                     title,
                     isDone: false,
-                    status: 'pending'
+                    status: 'pending',
+                    assignee: task.assignee
                   };
                 }
               } catch (e) {
@@ -396,7 +403,8 @@ export default function TaskDetailModal({
                 id: `sub-ai-${Date.now()}-${idx}`,
                 title,
                 isDone: false,
-                status: 'pending'
+                status: 'pending',
+                assignee: task.assignee
               };
             });
             
@@ -406,7 +414,8 @@ export default function TaskDetailModal({
                 id: `sub-ai-${Date.now()}-${idx}`,
                 title,
                 isDone: false,
-                status: 'pending'
+                status: 'pending',
+                assignee: task.assignee
              }));
           }
 
@@ -694,9 +703,17 @@ export default function TaskDetailModal({
                             value={sub.assignee || ''}
                             onChange={(e) => {
                                const a = e.target.value;
+                               const member = teamMembers.find(m => m.name === a);
                                const newSubs = subtasks.map(s => s.id === sub.id ? { ...s, assignee: a } : s);
                                setSubtasks(newSubs);
-                               if (sub.dbId) coreApiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${sub.dbId}`, { assigneeId: a }).catch(() => {}); // Note: Requires mapping name to member ID on backend if needed, but standard behavior sends string name for now
+                               
+                               if (typeof window !== 'undefined') {
+                                 localStorage.setItem(`subtasks_checklist_${task.id}`, JSON.stringify(newSubs));
+                               }
+                               
+                               if (sub.dbId && sub.dbId.length > 20 && sub.dbId !== 'undefined') {
+                                 coreApiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${sub.dbId}`, { assigneeId: member ? member.id : null }).catch(() => {});
+                               }
                                handleTaskUpdate({ subtasks: newSubs });
                             }}
                             style={{ fontSize: 11, padding: '2px 6px', borderRadius: 4, background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: sub.assignee ? getMemberColor(sub.assignee) : '#71717a', outline: 'none', cursor: 'pointer', maxWidth: 90 }}
