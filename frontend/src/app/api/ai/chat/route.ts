@@ -232,6 +232,7 @@ Nhiệm vụ của bạn:
         let turnCount = 0;
         let messages: any[] = [{ role: "user", parts: [{ text: fullPrompt }] }];
         let finalRawText = "";
+        let debugTool = null;
 
         while (turnCount < 3) {
           const hubRes = await fetch(geminiUrl, {
@@ -301,13 +302,10 @@ Nhiệm vụ của bạn:
             messages.push(candidate.content);
             messages.push({
               role: "function",
-              parts: [{
-                functionResponse: {
-                  name: fnCall.name,
-                  response: { result: toolResultObj }
-                }
-              }]
+              parts: [{ functionResponse: { name: fnCall.name, response: { name: fnCall.name, content: toolResultObj } } }]
             });
+            debugTool = { name: fnCall.name, result: toolResultObj };
+            
             turnCount++;
           } else if (part.text) {
             finalRawText = part.text;
@@ -385,7 +383,7 @@ Nhiệm vụ của bạn:
       console.error("Lỗi gửi log:", err);
     }
 
-    return NextResponse.json({ status: 'success', data: result, log });
+    return NextResponse.json({ status: 'success', data: result, log, debug: debugTool });
   } catch (error: any) {
     console.error('API Chat Error:', error);
     return NextResponse.json({ error: error.message || 'Internal Server Error', stack: error.stack }, { status: 500 });
