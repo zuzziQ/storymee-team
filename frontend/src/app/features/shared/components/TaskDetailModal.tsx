@@ -287,8 +287,15 @@ export default function TaskDetailModal({
         const realId = response.data.id;
         const mappedSub = { ...newSub, id: realId, dbId: realId };
         
-        setSubtasks(prev => prev.map(s => s.id === tempId ? mappedSub : s));
-        handleTaskUpdate({ subtasks: [...subtasks, mappedSub] });
+        setSubtasks(prev => {
+          const newSubs = prev.map(s => s.id === tempId ? mappedSub : s);
+          // Sync localStorage synchronously to prevent merge conflicts
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(`subtasks_checklist_${task.id}`, JSON.stringify(newSubs));
+          }
+          handleTaskUpdate({ subtasks: newSubs });
+          return newSubs;
+        });
       }
     } catch (err) {
       console.error("Lỗi tạo Subtask lên Plane DB:", err);
