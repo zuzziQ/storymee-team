@@ -117,7 +117,7 @@ Bạn có quyền truy cập thông tin dự án, tasks và quy chế công ty �
 Ngữ cảnh thời gian & dự án hiện tại:
 - Ngày hôm nay (Thời gian thực của hệ thống): ${todayStr}
 - Danh sách dự án lớn: ${JSON.stringify(projects)}
-- Danh sách công việc (tasks): ${JSON.stringify(tasks)}
+- Danh sách công việc: ${tasks && tasks.length > 0 ? JSON.stringify(tasks) : "(Đã bị ẩn để tiết kiệm token. BẠN BẮT BUỘC PHẢI DÙNG TOOL `get_my_issues` ĐỂ XEM DANH SÁCH CÔNG VIỆC CỦA NHÂN SỰ NÀY NẾU HỌ HỎI VỀ TASK CỦA HỌ)"}
 - Nhân sự đang tương tác: ${JSON.stringify(currentUser)}
 - Thông tin điểm danh & ngày phép của nhân sự này:
 ${hrContext}
