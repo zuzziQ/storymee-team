@@ -243,14 +243,22 @@ export default function TaskDetailModal({
       }
 
       // Merge: ưu tiên giữ trạng thái isDone của local, nhưng bổ sung các item mới từ DB
+      // Quan trọng: Phải xoá các item đã bị xoá khỏi DB
       const mergedMap = new Map<string, SubTask>();
-      localItems.forEach(item => mergedMap.set(item.id, item));
+      const dbIds = new Set(dbItems.map(item => item.id));
+
+      localItems.forEach(item => {
+        // Chỉ giữ lại những task tạm (chưa sync) hoặc những task thực sự còn trên DB
+        if (item.id.startsWith('sub-') || dbIds.has(item.id)) {
+          mergedMap.set(item.id, item);
+        }
+      });
       
       dbItems.forEach(item => {
         if (mergedMap.has(item.id)) {
           // Update title if DB changed, but keep local isDone state
           const existing = mergedMap.get(item.id)!;
-          mergedMap.set(item.id, { ...existing, title: item.title });
+          mergedMap.set(item.id, { ...existing, title: item.title, status: item.status });
         } else {
           // New subtask from DB (e.g. AI generated)
           mergedMap.set(item.id, item);
