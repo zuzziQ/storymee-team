@@ -61,11 +61,15 @@ export async function POST(request: Request) {
 
         let leavesData, attData;
         try {
-          leavesData = await coreApiClient.get('/hr/leave-requests');
-        } catch (e) {}
-        try {
-          attData = await coreApiClient.get(`/hr/attendance?memberId=${member.id}`);
-        } catch (e) {}
+          const [leavesRes, attRes] = await Promise.allSettled([
+            coreApiClient.get('/hr/leave-requests'),
+            coreApiClient.get(`/hr/attendance?memberId=${member.id}`)
+          ]);
+          if (leavesRes.status === 'fulfilled') leavesData = leavesRes.value;
+          if (attRes.status === 'fulfilled') attData = attRes.value;
+        } catch (e) {
+          console.error("Lỗi fetch HR data parallel:", e);
+        }
 
         if (leavesData && leavesData.status === 'success') {
           let annualUsed = 0, remoteUsed = 0;
@@ -162,11 +166,13 @@ Nhiệm vụ của bạn:
   "updateMeetingPayload": { "meeting_id": "Mã ID", "title": "Tiêu đề", "description": "Mô tả", "startTime": "YYYY-MM-DDTHH:mm:ss", "endTime": "YYYY-MM-DDTHH:mm:ss", "attendees": ["email1", "email2"], "status": "cancelled" }
 }`;
 
-    let lettaConvId = null;
-    try {
-      lettaConvId = await getOrCreateConversation(currentUser.email, currentUser.fullName || currentUser.name);
-    } catch (err: any) {
-      console.warn("Lỗi khởi tạo Letta Conversation (sẽ fallback sang OmniRouter):", err.message);
+    let lettaConvId = currentUser.lettaConversationId || null;
+    if (!lettaConvId) {
+      try {
+        lettaConvId = await getOrCreateConversation(currentUser.email, currentUser.fullName || currentUser.name);
+      } catch (err: any) {
+        console.warn("Lỗi khởi tạo Letta Conversation (sẽ fallback sang OmniRouter):", err.message);
+      }
     }
 
     const fullPrompt = `${systemPrompt}\n\nUser Message: ${message}`;
