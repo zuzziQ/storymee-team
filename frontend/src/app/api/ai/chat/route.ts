@@ -244,7 +244,7 @@ Nhiệm vụ của bạn:
         let debugTool: any = "Deploy verified";
 
         while (turnCount < 3) {
-          let currentToolConfig = { functionCallingConfig: { mode: "AUTO" } };
+          let currentToolConfig: any = { functionCallingConfig: { mode: "AUTO" } };
           if (turnCount === 0 && (message.toLowerCase().includes("task") || message.toLowerCase().includes("công việc"))) {
             currentToolConfig = { functionCallingConfig: { mode: "ANY", allowedFunctionNames: ["get_my_issues"] } };
           }
