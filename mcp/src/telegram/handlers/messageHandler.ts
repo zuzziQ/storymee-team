@@ -778,7 +778,7 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
         currentUser: { ...member, name: member.fullName },
         tasks: mappedTasks,
         projects: projects,
-        companyRules: "Danh sách nhân sự công ty thực tế từ Database:\n" + allMembers.map((m:any) => `- ${m.fullName} (Role: ${m.role || 'Nhân viên'}, Telegram: @${m.telegramUsername || 'Chưa có'}, Email: ${m.email})`).join("\n"),
+        companyRules: "Danh sách nhân sự công ty thực tế từ Database:\n" + allMembers.map((m:any) => `- ${m.fullName} (Role: ${m.role || 'Nhân viên'}, Telegram: @${m.telegramUsername || 'Chưa có'}, Email: ${m.email})`).join("\n") + "\n\nQUY TẮC: Nếu user không chỉ định rõ Tên Dự án, TUYỆT ĐỐI không tự suy diễn project_id, hãy để project_id rỗng để hệ thống đưa vào dự án Mặc định.",
         config: { useCloud: true, useFallback: true, useMasking: true, useCompression: true }
       })
     });
