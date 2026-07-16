@@ -389,7 +389,7 @@ Nhiệm vụ của bạn:
       console.error("Lỗi gửi log:", err);
     }
 
-    return NextResponse.json({ status: 'success', data: result, log, debug: debugTool });
+    return NextResponse.json({ status: 'success', data: result, log });
   } catch (error: any) {
     console.error('API Chat Error:', error);
     return NextResponse.json({ error: error.message || 'Internal Server Error', stack: error.stack }, { status: 500 });
