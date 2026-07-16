@@ -43,7 +43,11 @@ case "check_in_out": {
             "TỪ CHỐI TRUY CẬP: Chỉ có Admin/Boss mới có quyền điểm danh hộ nhân sự khác."
           );
         }
-        const found = members.find((m: any) => m.fullName.toLowerCase() === employee_name.toLowerCase());
+        const lowerName = employee_name.toLowerCase();
+        let found = members.find((m: any) => m.fullName.toLowerCase() === lowerName || m.id.toLowerCase() === lowerName);
+        if (!found) {
+          found = members.find((m: any) => m.fullName.toLowerCase().includes(lowerName) || (m.telegramUsername && m.telegramUsername.toLowerCase().includes(lowerName)));
+        }
         if (!found) {
           throw new McpError(ErrorCode.InvalidParams, `Không tìm thấy nhân sự ${employee_name} trong hệ thống.`);
         }

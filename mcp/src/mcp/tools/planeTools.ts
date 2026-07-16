@@ -543,7 +543,11 @@ case "assign_issue": {
         );
       }
 
-      const targetUser = members.find((m: any) => m.fullName.toLowerCase() === assignee.toLowerCase());
+      const lowerAssignee = assignee.toLowerCase();
+      let targetUser = members.find((m: any) => m.fullName.toLowerCase() === lowerAssignee || m.id.toLowerCase() === lowerAssignee);
+      if (!targetUser) {
+        targetUser = members.find((m: any) => m.fullName.toLowerCase().includes(lowerAssignee) || (m.telegramUsername && m.telegramUsername.toLowerCase().includes(lowerAssignee)));
+      }
       if (!targetUser) {
         throw new McpError(ErrorCode.InvalidParams, `Không tìm thấy nhân sự ${assignee} để bàn giao.`);
       }
@@ -588,7 +592,11 @@ case "update_issue": {
 
       let assigneeId = undefined;
       if (assignee) {
-        const targetMem = members.find((m: any) => m.fullName.toLowerCase().includes(assignee.toLowerCase()));
+        const lowerAssignee = assignee.toLowerCase();
+        let targetMem = members.find((m: any) => m.fullName.toLowerCase() === lowerAssignee || m.id.toLowerCase() === lowerAssignee);
+        if (!targetMem) {
+          targetMem = members.find((m: any) => m.fullName.toLowerCase().includes(lowerAssignee) || (m.telegramUsername && m.telegramUsername.toLowerCase().includes(lowerAssignee)));
+        }
         if (targetMem) assigneeId = targetMem.id;
       }
 

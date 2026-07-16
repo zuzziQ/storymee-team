@@ -10,12 +10,15 @@ async function resolveAttendees(attendeesInput: any[]): Promise<string[]> {
   for (const input of attendeesInput) {
     if (!input || typeof input !== 'string') continue;
     const cleanInput = input.replace(/^@/, '').toLowerCase().trim();
-    const found = members.find((m: any) => 
-      m.id === input || 
+    let found = members.find((m: any) => 
+      m.id.toLowerCase() === cleanInput || 
       (m.telegramUsername && m.telegramUsername.toLowerCase() === cleanInput) ||
       (m.email && m.email.toLowerCase() === cleanInput) ||
       m.fullName.toLowerCase() === cleanInput
     );
+    if (!found) {
+      found = members.find((m: any) => m.fullName.toLowerCase().includes(cleanInput) || (m.telegramUsername && m.telegramUsername.toLowerCase().includes(cleanInput)));
+    }
     if (found && !resolvedIds.includes(found.id)) {
       resolvedIds.push(found.id);
     }
