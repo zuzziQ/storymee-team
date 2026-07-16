@@ -27,6 +27,7 @@ interface Attachment { id: string; type: 'link' | 'file'; label: string; url: st
 export default function TaskDetailModal({
   task,
   onClose,
+  onDeleteTask,
   onUpdate,
   tasks,
   teamMembers,

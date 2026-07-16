@@ -101,6 +101,7 @@ export default function StorymeeTeamPage() {
     handleSaveMyProfile,
     handleUpdateTask,
     handleDeleteProject,
+    handleUpdateProject,
     handleCreateTask,
     handleSendAiChat,
     handleAutoSendChat,
