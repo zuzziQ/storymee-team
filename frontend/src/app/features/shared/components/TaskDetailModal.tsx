@@ -289,7 +289,8 @@ export default function TaskDetailModal({
         title: title.trim(),
         parentId: task.dbId || task.id,
         projectId: task.projectId,
-        priority: 'medium'
+        priority: 'medium',
+        assigneeId: task.assigneeId
       });
       
       if ((response.success || response.status === 'success') && response.data) {
@@ -383,7 +384,8 @@ export default function TaskDetailModal({
                   title: title,
                   parentId: task.dbId || task.id,
                   projectId: task.projectId,
-                  priority: 'medium'
+                  priority: 'medium',
+                  assigneeId: task.assigneeId
                 });
                 if (res.success || res.status === 'success') {
                   return {
@@ -774,7 +776,7 @@ export default function TaskDetailModal({
                       placeholder="Thêm subtask thủ công..."
                       style={{ flex: 1, padding: '6px 12px', fontSize: 12, borderRadius: 8 }}
                       onKeyDown={e => {
-                        if (e.key === 'Enter') {
+                        if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
                           const el = document.getElementById('new-subtask-input') as HTMLInputElement;
                           if (el) {
                             handleAddSubtask(el.value);
