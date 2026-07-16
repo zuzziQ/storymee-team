@@ -112,11 +112,7 @@ export async function handleTelegramMessage(message: any) {
   }
 
 
-  // PRE-FETCH Tasks để tối ưu hoá tốc độ (ẩn độ trễ mạng)
-  const prefetchTasksPromise = apiClient.get(API_ROUTES.PLANE.ISSUES).catch(err => {
-    console.error("Lỗi prefetch tasks:", err);
-    return null;
-  });
+  // PRE-FETCH Projects để tiết kiệm Tool Call cho LLM
   const prefetchProjectsPromise = apiClient.get(API_ROUTES.PLANE.PROJECTS).catch(err => {
     console.error("Lỗi prefetch projects:", err);
     return null;
@@ -748,45 +744,11 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
   await sendChatAction(chatId, 'typing');
 
   // F. Fetch Tasks & Projects thực tế từ Postgres CHỈ NẾU intent = TASK hoặc PROJECT_MANAGEMENT
-  let dbTasks: any[] = [];
   let mappedTasks: any[] = [];
   let projects: any[] = [];
   
   if (userIntent === "TASK" || userIntent === "PROJECT_MANAGEMENT" || userIntent === "") {
-    try {
-      const tasksData = await prefetchTasksPromise;
-      if (tasksData) {
-        dbTasks = tasksData.data || [];
-        
-        dbTasks.forEach((sub: any) => {
-          const statusName = sub.State?.name || 'Todo';
-          const lowerStatus = statusName.toLowerCase();
-          // Bỏ qua các task đã hoàn thành hoặc bị huỷ để giảm Context Size cho LLM
-          if (lowerStatus === 'done' || lowerStatus === 'completed' || lowerStatus === 'cancelled') return;
-
-          // Project có thể là string (identifier) hoặc object {identifier, ...}
-          const projIdent = typeof sub.Project === 'string'
-            ? sub.Project
-            : (sub.Project?.identifier || '');
-            
-          mappedTasks.push({
-            id: projIdent && sub.sequenceId ? `${projIdent}-${sub.sequenceId}` : sub.id,
-            title: sub.title,
-            description: (sub.description || '').substring(0, 100), // Rút gọn description
-            assignee: sub.Assignee ? sub.Assignee.fullName : 'Chưa phân công',
-            priority: sub.priority ? sub.priority.charAt(0).toUpperCase() + sub.priority.slice(1) : 'None',
-            status: statusName,
-            deadline: sub.targetDate ? sub.targetDate.split('T')[0] : '',
-            estimate: 0,
-            projectId: sub.projectId,
-            uuid: sub.id // Lưu ID UUID thật của subtask để thao tác update sau này
-          });
-        });
-      }
-    } catch (err) {
-      console.error("Lỗi fetch tasks/projects cho AI context:", err);
-    }
-  
+    // Tasks được gửi rỗng, LLM sẽ tự gọi tool "get_my_issues" nếu cần
     try {
       const projData = await prefetchProjectsPromise;
       if (projData && projData.data) {
@@ -841,13 +803,27 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
         } else if (aiResponse.action === 'get_team_leaves') {
           const result = await executeMcpTool("get_team_leaves", aiResponse.teamLeavesPayload || {}, member);
           await sendMessage(chatId, result.content[0].text);
-        } else if (['create_project', 'update_issue', 'update_issues', 'create_issue', 'leave_request', 'check_in_out', 'breakdown_issue', 'update_sub_issues', 'request_issue_approval', 'create_meeting', 'update_meeting'].includes(aiResponse.action)) {
+        } else if (aiResponse.action === 'create_issue') {
+          await sendMessage(chatId, "⏳ Đang tự động tạo Task theo yêu cầu...");
+          try {
+            const result = await executeMcpTool("create_issue", aiResponse.issuePayload, member);
+            await sendMessage(chatId, result.content[0].text);
+          } catch (e: any) {
+            await sendMessage(chatId, `❌ Lỗi khi tạo Task: ${e.message}`);
+          }
+        } else if (aiResponse.action === 'leave_request') {
+          await sendMessage(chatId, "⏳ Đang tự động tạo Đơn xin nghỉ phép...");
+          try {
+            const result = await executeMcpTool("submit_leave_request", aiResponse.leavePayload, member);
+            await sendMessage(chatId, result.content[0].text);
+          } catch (e: any) {
+            await sendMessage(chatId, `❌ Lỗi khi nộp đơn: ${e.message}`);
+          }
+        } else if (['create_project', 'update_issue', 'update_issues', 'check_in_out', 'breakdown_issue', 'update_sub_issues', 'request_issue_approval', 'create_meeting', 'update_meeting'].includes(aiResponse.action)) {
           const actionId = Math.random().toString(36).substring(2, 10);
           actionCache[actionId] = {
             action: aiResponse.action,
-            payload: aiResponse.action === 'leave_request'
-              ? aiResponse.leavePayload
-              : aiResponse.action === 'check_in_out'
+            payload: aiResponse.action === 'check_in_out'
                 ? aiResponse.checkInOutPayload
                 : aiResponse.action === 'breakdown_issue'
                   ? aiResponse.breakdownPayload

@@ -143,16 +143,15 @@ Nhiệm vụ của bạn:
    - Trả về action "update_sub_issues" khi người dùng dán hoặc liệt kê một danh sách các công việc con (subtasks) tự chia để cập nhật/thay thế các công việc con của một công việc lớn.
    - Trả về action "request_issue_approval" khi nhân viên muốn xin lưu trữ hoặc xóa task. (TẠM THỜI: Việc dời deadline không cần xin phép, hãy dùng action "update_issue" để gia hạn luôn).
    - TRƯỜNG HỢP Boss/Admin duyệt (hoặc từ chối) task: TUYỆT ĐỐI trả về action "none", đồng thời trong mục "reply", hãy nhắc nhở Admin phải bấm vào nút "Phê duyệt" hoặc "Từ chối" ở dưới tin nhắn Yêu cầu trước đó chứ không chat trực tiếp.
-   - Trả về action "get_attendance_report" khi người dùng muốn xem báo cáo công, tổng giờ làm của cá nhân hoặc toàn bộ team trong tháng.
-   - Trả về action "get_team_leaves" khi Boss/Admin muốn xem danh sách nhân sự xin nghỉ phép hoặc xin làm remote trong khoảng thời gian nhất định (ví dụ: tuần này, tháng này).
+   - LƯU Ý ĐẶC BIỆT: Đối với việc TRUY VẤN dữ liệu (như xem task của mình, xem lịch sử điểm danh, xem danh sách nghỉ phép), BẠN KHÔNG CẦN TRẢ VỀ JSON ACTION. Hãy sử dụng các native TOOLS (get_my_issues, get_attendance_report, get_team_leaves) được cung cấp sẵn để tự động fetch dữ liệu ngầm, sau đó trả lời thẳng cho người dùng.
    - Nếu người dùng chỉ đang HỎI hoặc TRUY VẤN thông tin thông thường, tuyệt đối KHÔNG được trả về action khác "none".
-   - Trả về action "create_meeting" khi người dùng yêu cầu đặt lịch họp, gặp mặt. Trích xuất thời gian bắt đầu (startTime), thời gian kết thúc (endTime - nếu không nói rõ, mặc định dài 1 tiếng), và danh sách người tham gia (attendees).
-   - Trả về action "update_meeting" khi người dùng yêu cầu dời lịch, hủy lịch (status: 'cancelled'), hoặc cập nhật nội dung cuộc họp.
+   - Trả về action "create_meeting" khi người dùng yêu cầu đặt lịch họp. Trích xuất thời gian bắt đầu (startTime), thời gian kết thúc (endTime - mặc định dài 1 tiếng), và danh sách người tham gia (attendees).
+   - Trả về action "update_meeting" khi người dùng yêu cầu dời lịch, hủy lịch (status: 'cancelled').
 
-Định dạng trả về BẮT BUỘC là JSON khớp với schema sau:
+Định dạng trả về BẮT BUỘC là JSON khớp với schema sau (Ngoại trừ trường hợp bạn đang gọi Tool ngầm):
 {
   "reply": "Câu trả lời của bạn định dạng Markdown sạch",
-  "action": "create_project" | "update_issue" | "create_issue" | "leave_request" | "check_in_out" | "breakdown_issue" | "update_sub_issues" | "request_issue_approval" | "get_attendance_report" | "get_team_leaves" | "create_meeting" | "update_meeting" | "none",
+  "action": "create_project" | "update_issue" | "create_issue" | "leave_request" | "check_in_out" | "breakdown_issue" | "update_sub_issues" | "request_issue_approval" | "create_meeting" | "update_meeting" | "none",
   "taskPayload": { "id": "Mã task (nếu sửa)", "projectId": "Mã ID của dự án tương ứng", "title": "Tiêu đề (nếu tạo)", "assignee": "Người phụ trách", "status": "Trạng thái mới", "deadline": "YYYY-MM-DD", "estimate": số_giờ, "priority": "Độ ưu tiên" },
   "projectPayload": { "id": "Mã dự án (nếu sửa)", "title": "Tên dự án mới", "description": "Mô tả dự án", "status": "Trạng thái mới" },
   "leavePayload": { "leaveType": "sick" | "annual" | "personal", "startDate": "YYYY-MM-DD", "endDate": "YYYY-MM-DD", "reason": "Lý do xin nghỉ" },
@@ -160,8 +159,6 @@ Nhiệm vụ của bạn:
   "breakdownPayload": { "task_id": "Mã ID" },
   "updateSubtasksPayload": { "task_id": "Mã ID", "titles": ["V1", "V2"] },
   "approvalPayload": { "task_id": "Mã ID", "type": "extend" | "archive" | "delete", "new_deadline": "YYYY-MM-DD", "reason": "Ghi chú" },
-  "reportPayload": { "employee_name": "Tên nhân viên", "month": 7, "year": 2026 },
-  "teamLeavesPayload": { "period": "this_week" | "this_month" | "today" },
   "meetingPayload": { "title": "Tiêu đề", "description": "Mô tả", "startTime": "YYYY-MM-DDTHH:mm:ss", "endTime": "YYYY-MM-DDTHH:mm:ss", "attendees": ["email1", "email2"] },
   "updateMeetingPayload": { "meeting_id": "Mã ID", "title": "Tiêu đề", "description": "Mô tả", "startTime": "YYYY-MM-DDTHH:mm:ss", "endTime": "YYYY-MM-DDTHH:mm:ss", "attendees": ["email1", "email2"], "status": "cancelled" }
 }`;
@@ -189,39 +186,133 @@ Nhiệm vụ của bạn:
       if (!reply) {
         throw new Error("Letta Agent returned empty content (possibly only internal monologue).");
       }
-    } catch (lettaError: any) {
-      console.warn("Letta Agent failed or rate limited. Falling back to core-ai-api...", lettaError.message);
+      } catch (lettaError: any) {
+      console.warn("Letta Agent failed or rate limited. Falling back to Gemini Native Tool Calling...", lettaError.message);
       try {
         const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY || 'AIzaSyC7lBGGw_c2sM6RHif2k32E6mAiZBzCUyY'}`;
-        const hubRes = await fetch(geminiUrl, {
-          method: "POST",
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: fullPrompt }] }]
-          }),
-          signal: AbortSignal.timeout(45000)
-        });
+        
+        const toolsDefinition = [{
+          functionDeclarations: [
+            {
+              name: "get_my_issues",
+              description: "Truy vấn danh sách công việc (issues) trên bảng Kanban. Dùng để xem task hiện tại, deadline, project.",
+              parameters: {
+                type: "object",
+                properties: {
+                  employee_name: { type: "string", description: "Tên nhân sự cần lọc. Để trống nếu tự xem của mình." }
+                }
+              }
+            },
+            {
+              name: "get_attendance_report",
+              description: "Xem báo cáo công, tổng giờ làm của cá nhân hoặc toàn bộ team trong tháng.",
+              parameters: {
+                type: "object",
+                properties: {
+                  month: { type: "number", description: "Tháng tra cứu (VD: 7)" },
+                  year: { type: "number", description: "Năm tra cứu (VD: 2026)" },
+                  employee_name: { type: "string", description: "Tên nhân sự. Bỏ trống nếu xem của mình." }
+                }
+              }
+            },
+            {
+              name: "get_team_leaves",
+              description: "Xem danh sách nhân sự xin nghỉ phép hoặc xin làm remote trong khoảng thời gian nhất định.",
+              parameters: {
+                type: "object",
+                properties: {
+                  period: { type: "string", description: "Khoảng thời gian: 'today', 'this_week', 'this_month'" }
+                }
+              }
+            }
+          ]
+        }];
 
-        if (hubRes.ok) {
-          const hubJson = await hubRes.json();
-          let rawText = hubJson.candidates?.[0]?.content?.parts?.[0]?.text || '';
-          
-          let cleanReply = rawText.trim();
-          const jsonMatch = cleanReply.match(/\{[\s\S]*\}/);
-          if (jsonMatch) {
-            cleanReply = jsonMatch[0];
+        let turnCount = 0;
+        let messages: any[] = [{ role: "user", parts: [{ text: fullPrompt }] }];
+        let finalRawText = "";
+
+        while (turnCount < 3) {
+          const hubRes = await fetch(geminiUrl, {
+            method: "POST",
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: messages,
+              tools: toolsDefinition,
+              systemInstruction: { parts: [{ text: "BẠN LÀ AI ASSISTANT STORYMEE. LUÔN LUÔN TRẢ VỀ ĐÚNG ĐỊNH DẠNG JSON SCHEMA ĐƯỢC YÊU CẦU TRONG PROMPT." }] }
+            }),
+            signal: AbortSignal.timeout(45000)
+          });
+
+          if (!hubRes.ok) {
+            const errText = await hubRes.text();
+            throw new Error(`Gemini API returned ${hubRes.status}: ${errText}`);
           }
-          
-          reply = cleanReply;
-          fallbackModel = 'gemini-2.5-flash';
-        } else {
-          const errText = await hubRes.text();
-          throw new Error(`Gemini API returned ${hubRes.status}: ${errText}`);
+
+          const hubJson = await hubRes.json();
+          const candidate = hubJson.candidates?.[0];
+          if (!candidate) break;
+
+          const part = candidate.content?.parts?.[0];
+          if (!part) break;
+
+          if (part.functionCall) {
+            const fnCall = part.functionCall;
+            let toolResultObj: any = { error: "Unknown function" };
+
+            // Thực thi Tool nội bộ
+            if (fnCall.name === "get_my_issues") {
+              try {
+                const issuesRes = await coreApiClient.get('/plane/issues') as any;
+                const rawTasks = issuesRes?.data || [];
+                // Simple filtering
+                const myIssues = rawTasks.filter((t:any) => t.State?.name !== 'Done' && t.State?.name !== 'Completed' && t.State?.name !== 'Cancelled').map((t:any) => ({ id: t.id, title: t.title, status: t.State?.name, assignee: t.Assignee?.fullName }));
+                toolResultObj = { success: true, count: myIssues.length, tasks: myIssues };
+              } catch(e:any) { toolResultObj = { error: e.message }; }
+            } else if (fnCall.name === "get_attendance_report") {
+              try {
+                const attRes = await coreApiClient.get('/hr/attendance') as any;
+                toolResultObj = { success: true, data: attRes.data?.slice(-50) || [] }; // Limit context
+              } catch(e:any) { toolResultObj = { error: e.message }; }
+            } else if (fnCall.name === "get_team_leaves") {
+              try {
+                const leaveRes = await coreApiClient.get('/hr/leave-requests') as any;
+                toolResultObj = { success: true, data: leaveRes.data?.slice(-20) || [] };
+              } catch(e:any) { toolResultObj = { error: e.message }; }
+            }
+
+            // Lưu lại lịch sử hội thoại
+            messages.push(candidate.content);
+            messages.push({
+              role: "function",
+              parts: [{
+                functionResponse: {
+                  name: fnCall.name,
+                  response: { result: toolResultObj }
+                }
+              }]
+            });
+            turnCount++;
+          } else if (part.text) {
+            finalRawText = part.text;
+            break;
+          } else {
+            break; // Fallback
+          }
         }
+
+        let cleanReply = finalRawText.trim();
+        const jsonMatch = cleanReply.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          cleanReply = jsonMatch[0];
+        }
+        
+        reply = cleanReply;
+        fallbackModel = 'gemini-2.5-flash';
       } catch (hubError: any) {
-        console.error("Gemini Fallback cũng thất bại:", hubError.message);
+        console.error("Gemini Native Tool Calling thất bại:", hubError.message);
         return NextResponse.json({ 
-          error: 'Cả hệ thống Letta và OmniRouter dự phòng đều đang quá tải hoặc gặp sự cố.', 
+          error: 'Hệ thống AI đang quá tải hoặc gặp sự cố.', 
           gemini_error: hubError.message,
           stack: hubError.stack
         }, { status: 500 });
