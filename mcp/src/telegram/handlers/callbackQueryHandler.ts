@@ -185,12 +185,13 @@ async function handleCallbackQuery(callbackQuery: any) {
       }
       
       const keyboard = projects.map((p: any) => [{ text: `📁 ${p.name}`, callback_data: `select_project:${p.id}` }]);
+      keyboard.push([{ text: `➡️ Bỏ qua (Dự án mặc định)`, callback_data: `select_project:default` }]);
       await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           chat_id: chatId,
-          text: `📋 *TẠO TASK MỚI*\n\nVui lòng chọn Dự án cho Task:`,
+          text: `📋 *TẠO TASK MỚI*\n\nVui lòng chọn Dự án cho Task (hoặc Bỏ qua để dùng dự án mặc định):`,
           reply_markup: { inline_keyboard: keyboard }
         })
       });

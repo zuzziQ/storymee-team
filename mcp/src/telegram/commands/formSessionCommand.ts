@@ -337,7 +337,7 @@ export const formSessionCommand: TelegramCommand = {
         const resJson = await executeMcpTool("create_issue", {
           title: session.taskTitle,
           description: description,
-          project_id: session.projectId,
+          project_id: session.projectId === 'default' ? undefined : session.projectId,
           assignee: ctx.member.id,
           priority: 'medium'
         }, ctx.member);
