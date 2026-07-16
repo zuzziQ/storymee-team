@@ -343,7 +343,10 @@ case "create_issue": {
         if (lowerAssignee === 'chưa phân công' || lowerAssignee === 'none' || lowerAssignee === 'unassigned') {
           targetUser = null;
         } else {
-          targetUser = members.find((m: any) => m.fullName.toLowerCase() === lowerAssignee);
+          targetUser = members.find((m: any) => m.fullName.toLowerCase() === lowerAssignee || m.id.toLowerCase() === lowerAssignee);
+          if (!targetUser) {
+            targetUser = members.find((m: any) => m.fullName.toLowerCase().includes(lowerAssignee));
+          }
           if (!targetUser) {
             throw new McpError(ErrorCode.InvalidParams, `Không tìm thấy nhân sự ${assignee} trong hệ thống.`);
           }

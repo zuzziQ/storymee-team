@@ -338,7 +338,7 @@ export const formSessionCommand: TelegramCommand = {
           title: session.taskTitle,
           description: description,
           project_id: session.projectId === 'default' ? undefined : session.projectId,
-          assignee: ctx.member.id,
+          assignee: ctx.member.fullName,
           priority: 'medium'
         }, ctx.member);
         
