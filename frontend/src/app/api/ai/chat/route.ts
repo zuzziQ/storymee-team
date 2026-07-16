@@ -232,7 +232,7 @@ Nhiệm vụ của bạn:
         let turnCount = 0;
         let messages: any[] = [{ role: "user", parts: [{ text: fullPrompt }] }];
         let finalRawText = "";
-        let debugTool = null;
+        let debugTool: any = "Deploy verified";
 
         let forceToolConfig = { functionCallingConfig: { mode: "AUTO" } };
         if (text.toLowerCase().includes("task") || text.toLowerCase().includes("công việc")) {
