@@ -1,5 +1,6 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../config/prisma';
+import { PlaneService } from '../services/plane.service';
 
 export class PlaneController {
     
@@ -418,6 +419,49 @@ export class PlaneController {
             });
         } catch (error: any) {
             console.error('reviewIssue error:', error);
+            return reply.status(500).send({ success: false, message: error.message });
+        }
+    }
+
+    static async deleteIssue(req: FastifyRequest, reply: FastifyReply) {
+        try {
+            const { id } = req.params as { id: string };
+
+            const issue = await prisma.plIssue.findUnique({
+                where: { id },
+                include: { Project: { include: { Workspace: true } } }
+            });
+
+            if (!issue) {
+                return reply.status(404).send({ success: false, message: 'Issue not found' });
+            }
+
+            // Gọi sang PlaneService để xóa trên Plane thật
+            const workspaceSlug = issue.Project?.Workspace?.slug || process.env.PLANE_WORKSPACE_SLUG || 'default';
+            if (workspaceSlug && issue.projectId) {
+                await PlaneService.deleteIssue(workspaceSlug, issue.projectId, id);
+            }
+
+            // Xóa ở local DB
+            await prisma.plIssue.delete({
+                where: { id }
+            });
+
+            // Publish event để frontend/services khác cập nhật
+            const fastify: any = req.server;
+            if (fastify.nats) {
+                try {
+                    const { StringCodec } = require('nats');
+                    const sc = StringCodec();
+                    fastify.nats.publish('core.team.issue.deleted', sc.encode(JSON.stringify({ id, projectId: issue.projectId })));
+                } catch (e) {
+                    console.error('Failed to publish NATS event', e);
+                }
+            }
+
+            return reply.send({ success: true, message: "Deleted issue successfully" });
+        } catch (error: any) {
+            console.error("Lỗi deleteIssue:", error);
             return reply.status(500).send({ success: false, message: error.message });
         }
     }
