@@ -5,6 +5,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.fetchAxios = fetchAxios;
 const axios_1 = __importDefault(require("axios"));
+const https_1 = __importDefault(require("https"));
+const http_1 = __importDefault(require("http"));
+const httpsAgent = new https_1.default.Agent({ family: 4 });
+const httpAgent = new http_1.default.Agent({ family: 4 });
 async function fetchAxios(url, options = {}) {
     const method = (options.method || 'GET').toUpperCase();
     const headers = options.headers || {};
@@ -23,7 +27,9 @@ async function fetchAxios(url, options = {}) {
             data,
             timeout: options.timeout || 60000,
             signal: options.signal,
-            responseType: (typeof options.body === 'string' && options.body.includes('stream')) ? 'stream' : undefined
+            responseType: (typeof options.body === 'string' && options.body.includes('stream')) ? 'stream' : undefined,
+            httpsAgent,
+            httpAgent,
         });
         return {
             ok: res.status >= 200 && res.status < 300,

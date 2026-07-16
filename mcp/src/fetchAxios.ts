@@ -1,4 +1,9 @@
 import axios from 'axios';
+import https from 'https';
+import http from 'http';
+
+const httpsAgent = new https.Agent({ family: 4 });
+const httpAgent = new http.Agent({ family: 4 });
 
 export async function fetchAxios(url: string, options: any = {}) {
   const method = (options.method || 'GET').toUpperCase();
@@ -19,7 +24,9 @@ export async function fetchAxios(url: string, options: any = {}) {
       data,
       timeout: options.timeout || 60000,
       signal: options.signal,
-      responseType: (typeof options.body === 'string' && options.body.includes('stream')) ? 'stream' : undefined
+      responseType: (typeof options.body === 'string' && options.body.includes('stream')) ? 'stream' : undefined,
+      httpsAgent,
+      httpAgent,
     });
     return {
       ok: res.status >= 200 && res.status < 300,
