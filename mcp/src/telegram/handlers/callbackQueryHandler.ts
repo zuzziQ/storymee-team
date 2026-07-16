@@ -396,39 +396,7 @@ async function handleCallbackQuery(callbackQuery: any) {
           });
         } catch (e) {}
 
-        // Gửi thông báo cho các Admin duyệt ngay lập tức
-        if (requestId) {
-          const adminEmails = ['kimngan151091@gmail.com', 'lehuyducanh.vn@gmail.com', 'zuzzivn@gmail.com'];
-          console.log("SENDING ADMIN: allMembers count:", allMembers.length, "requestId:", requestId);
-          for (const targetMem of allMembers) {
-            if ((adminEmails.includes((targetMem.email || "").toLowerCase()) || targetMem.telegramUsername?.toLowerCase() === 'mlq007') && targetMem.telegramChatId) {
-              const adminChatId = Number(targetMem.telegramChatId);
-              console.log("Found ADMIN:", targetMem.email, "ChatId:", adminChatId);
-              const leaveTypeStr = payload.leaveType === 'sick' ? 'Nghỉ ốm' : payload.leaveType === 'annual' ? 'Nghỉ phép năm' : payload.leaveType === 'remote' ? 'Đăng ký Remote' : 'Việc riêng';
-              try {
-                await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    chat_id: adminChatId,
-                    text: `🔔 *YÊU CẦU DUYỆT PHÉP MỚI*\n\n• Nhân viên: *${actionMember.fullName}*\n• Loại nghỉ: *${leaveTypeStr}*\n• Thời gian: *${payload.startDate} đến ${payload.endDate}*\n• Lý do: *${payload.reason || 'Không có'}*\n\n👉 Vui lòng duyệt hoặc từ chối yêu cầu này dưới đây:`,
-                    parse_mode: "Markdown",
-                    reply_markup: {
-                      inline_keyboard: [
-                        [
-                          { text: "✅ Duyệt nghỉ", callback_data: `approve_leave:${requestId}` },
-                          { text: "❌ Từ chối", callback_data: `reject_leave:${requestId}` }
-                        ]
-                      ]
-                    }
-                  })
-                });
-              } catch (err) {
-                console.error("Lỗi gửi tin nhắn duyệt cho admin:", err);
-              }
-            }
-          }
-        }
+
       } else if (action === 'update_issue') {
         let estimateVal = payload.estimate;
         if (payload.deadline && (!estimateVal || estimateVal === 0)) {
@@ -828,35 +796,7 @@ async function handleCallbackQuery(callbackQuery: any) {
         });
       } catch (e) {}
 
-      const adminEmails = ['kimngan151091@gmail.com', 'lehuyducanh.vn@gmail.com', 'zuzzivn@gmail.com'];
-      for (const targetMem of allMembers) {
-        if ((adminEmails.includes((targetMem.email || "").toLowerCase()) || targetMem.telegramUsername?.toLowerCase() === 'mlq007') && targetMem.telegramChatId) {
-          const adminChatId = Number(targetMem.telegramChatId);
-          const leaveTypeStr = leaveType === 'sick' ? 'Nghỉ ốm' : leaveType === 'annual' ? 'Nghỉ phép năm' : leaveType === 'remote' ? 'Đăng ký Remote' : 'Việc riêng';
-          
-          try {
-            await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                chat_id: adminChatId,
-                text: `🔔 *YÊU CẦU DUYỆT PHÉP MỚI*\n\n• Nhân viên: *${member.fullName}*\n• Loại nghỉ: *${leaveTypeStr}*\n• Thời gian: *${startDate} đến ${endDate}*\n• Lý do: *${reason || 'Không có'}*\n\n👉 Vui lòng duyệt hoặc từ chối yêu cầu này dưới đây:`,
-                parse_mode: "Markdown",
-                reply_markup: {
-                  inline_keyboard: [
-                    [
-                      { text: "✅ Duyệt nghỉ", callback_data: `approve_leave:${requestId}` },
-                      { text: "❌ Từ chối", callback_data: `reject_leave:${requestId}` }
-                    ]
-                  ]
-                }
-              })
-            });
-          } catch (err) {
-            console.error("Lỗi gửi tin nhắn duyệt cho admin:", err);
-          }
-        }
-      }
+
     } catch (err: any) {
       console.error("Lỗi gọi API leave-request:", err);
       await sendMessage(chatId, `❌ Lỗi: ${err.message || "Không thể khởi tạo phiếu nghỉ phép."}`);
