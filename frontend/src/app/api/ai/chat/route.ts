@@ -234,19 +234,19 @@ Nhiệm vụ của bạn:
         let finalRawText = "";
         let debugTool: any = "Deploy verified";
 
-        let forceToolConfig = { functionCallingConfig: { mode: "AUTO" } };
-        if (text.toLowerCase().includes("task") || text.toLowerCase().includes("công việc")) {
-          forceToolConfig = { functionCallingConfig: { mode: "ANY", allowedFunctionNames: ["get_my_issues"] } };
-        }
-
         while (turnCount < 3) {
+          let currentToolConfig = { functionCallingConfig: { mode: "AUTO" } };
+          if (turnCount === 0 && (message.toLowerCase().includes("task") || message.toLowerCase().includes("công việc"))) {
+            currentToolConfig = { functionCallingConfig: { mode: "ANY", allowedFunctionNames: ["get_my_issues"] } };
+          }
+
           const hubRes = await fetch(geminiUrl, {
             method: "POST",
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               contents: messages,
               tools: toolsDefinition,
-              toolConfig: forceToolConfig,
+              toolConfig: currentToolConfig,
               systemInstruction: { parts: [{ text: "BẠN LÀ AI ASSISTANT STORYMEE. HÃY GỌI TOOL NẾU CẦN LẤY DỮ LIỆU. CHỈ TRẢ VỀ JSON KHI ĐÃ ĐỦ DỮ LIỆU ĐỂ TRẢ LỜI." }] }
             }),
             signal: AbortSignal.timeout(45000)
