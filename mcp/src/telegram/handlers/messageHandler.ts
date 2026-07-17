@@ -66,14 +66,14 @@ export async function handleTelegramMessage(message: any) {
   const originalText = (message.text || message.caption) || "";
   let text = originalText
     .replace(/^(\/[a-zA-Z0-9_]+)@[a-zA-Z0-9_]+/i, '$1')
-    .replace(/^@[a-zA-Z0-9_]+\s*/i, '')
     .trim();
   const isGroup = chatId < 0;
 
   // Hỗ trợ lệnh /ai và tag @bot trong group để bypass Privacy Mode
   let isAiCommand = false;
-  if (/^@[a-zA-Z0-9_]+\s*/i.test(originalText)) {
+  if (/^@.*bot\s*/i.test(originalText) || /^@storymee[a-zA-Z0-9_]*\s*/i.test(originalText)) {
     isAiCommand = true;
+    text = text.replace(/^@[a-zA-Z0-9_]+\s*/i, '').trim();
   } else if (text.toLowerCase().startsWith("/ai ")) {
     text = text.substring(4).trim();
     isAiCommand = true;
