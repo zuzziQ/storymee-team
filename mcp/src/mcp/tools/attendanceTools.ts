@@ -1,0 +1,224 @@
+import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
+import { CoreApiClient, API_ROUTES } from "@storymee/api-client";
+import { fetchAxios } from "../../fetchAxios";
+
+export const ATTENDANCE_TOOLS_SCHEMA = [
+  {
+    name: "check_in_out",
+    description:
+      "Điểm danh check-in/check-out. workType: API tự resolve — full remote HR hoặc đơn remote đã duyệt hôm nay → remote; không cần user chọn. Checkout chỉ cần action/status checkout.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        status: {
+          type: "string",
+          enum: ["present", "late", "absent", "checkin", "checkout"],
+          description: "present/late/absent/checkin = check-in; checkout = check-out. Mặc định present."
+        },
+        notes: { type: "string", description: "Ghi chú điểm danh" },
+        employee_name: { type: "string", description: "Tên nhân sự điểm danh hộ (chỉ Admin/Boss có quyền này)" },
+        action: {
+          type: "string",
+          enum: ["checkin", "checkout", "check-in", "check-out"],
+          description: "Tuỳ chọn: rõ checkin|checkout (ưu tiên hơn status nếu có)"
+        },
+        workType: {
+          type: "string",
+          enum: ["office", "remote"],
+          description: "Tuỳ chọn. Full remote / đơn remote duyệt → API ép remote."
+        }
+      }
+    }
+  },
+  {
+    name: "get_attendance_report",
+    description: "Lấy báo cáo chấm công của bản thân hoặc toàn team trong tháng. (totalHours, số ngày đi làm, số ngày đi muộn, vv)",
+    inputSchema: {
+      type: "object",
+      properties: {
+        employee_name: { type: "string", description: "Tên nhân sự cần tra cứu. Để trống nếu muốn xem của toàn team hoặc cá nhân (tuỳ quyền)." },
+        month: { type: "number", description: "Tháng (1-12). Để trống là tháng hiện tại." },
+        year: { type: "number", description: "Năm (ví dụ: 2026). Để trống là năm hiện tại." }
+      }
+    }
+  }
+];
+
+export async function executeAttendanceTool(name: string, args: any, user: any, isBoss: boolean, apiClient: CoreApiClient, members: any[]): Promise<{ content: Array<{ type: string; text: string }> }> {
+
+  switch (name) {
+case "check_in_out": {
+      const { status, notes, employee_name } = args as any;
+      
+      let targetMember = user;
+      if (employee_name && employee_name.toLowerCase() !== user.fullName.toLowerCase()) {
+        if (!isBoss) {
+          throw new McpError(
+            ErrorCode.InvalidRequest,
+            "TỪ CHỐI TRUY CẬP: Chỉ có Admin/Boss mới có quyền điểm danh hộ nhân sự khác."
+          );
+        }
+        const lowerName = employee_name.toLowerCase();
+        let found = members.find((m: any) => m.fullName.toLowerCase() === lowerName || m.id.toLowerCase() === lowerName);
+        if (!found) {
+          found = members.find((m: any) => m.fullName.toLowerCase().includes(lowerName) || (m.telegramUsername && m.telegramUsername.toLowerCase().includes(lowerName)));
+        }
+        if (!found) {
+          throw new McpError(ErrorCode.InvalidParams, `Không tìm thấy nhân sự ${employee_name} trong hệ thống.`);
+        }
+        targetMember = found;
+      }
+
+      const actionRaw = String(args?.action || status || 'present').toLowerCase().replace(/_/g, '-');
+      const isCheckout = actionRaw === 'checkout' || actionRaw === 'check-out' || actionRaw === 'out';
+
+      let checkinData;
+      try {
+        if (isCheckout) {
+          checkinData = (await apiClient.post(API_ROUTES.HR.ATTENDANCE_CHECKOUT, {
+            memberId: targetMember.id,
+            notes: notes || `Checkout từ Telegram/MCP`
+          })) as any;
+        } else {
+          const st = ['late', 'absent'].includes(String(status || '').toLowerCase())
+            ? String(status).toLowerCase()
+            : 'present';
+          // API resolve workType (full remote HR / approved remote leave / body.workType)
+          const arrangement = String(targetMember.workArrangement || 'office').toLowerCase();
+          const isFullRemote =
+            arrangement === 'remote' ||
+            arrangement === 'full_remote' ||
+            arrangement === 'fully_remote' ||
+            arrangement === 'wfh';
+          const notesLower = String(notes || args?.notes || '').toLowerCase();
+          const explicitWt = String(args?.workType || args?.work_type || '').toLowerCase();
+          const wantRemote =
+            isFullRemote ||
+            explicitWt === 'remote' ||
+            notesLower.includes('remote') ||
+            notesLower.includes('wfh') ||
+            notesLower.includes('từ xa') ||
+            notesLower.includes('tu xa');
+          checkinData = (await apiClient.post(API_ROUTES.HR.ATTENDANCE_CHECKIN, {
+            memberId: targetMember.id,
+            status: st,
+            workType: wantRemote ? 'remote' : (explicitWt === 'office' ? 'office' : undefined),
+            notes:
+              notes ||
+              (isFullRemote
+                ? `Checkin Remote từ Telegram (full remote)`
+                : `Checkin từ Telegram/MCP`),
+          })) as any;
+        }
+      } catch (err: any) {
+        console.error("[attendanceTools] Core API Error:", err);
+        const errorData = err.data || err.response?.data;
+        
+        if (errorData?.status === 'already_checked_in') {
+          return {
+            content: [{
+              type: "text",
+              text: `⚠️ Nhân sự ${targetMember.fullName} đã check-in trước đó rồi.`
+            }]
+          };
+        }
+        
+        if (errorData?.status === 'already_checked_out') {
+          return {
+            content: [{
+              type: "text",
+              text: `⚠️ Nhân sự ${targetMember.fullName} đã check-out trước đó rồi.`
+            }]
+          };
+        }
+        throw new McpError(ErrorCode.InternalError, `Lỗi kết nối điểm danh với Core API. Chi tiết: ${err.message || JSON.stringify(err)}`);
+      }
+      const att = checkinData.data;
+
+      // Định dạng phản hồi
+      const formatTime = (isoStr: string) => {
+        if (!isoStr) return "";
+        return new Date(isoStr).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: "Asia/Ho_Chi_Minh" });
+      };
+
+      const inTime = formatTime(att.checkIn);
+      const outTime = att.checkOut ? formatTime(att.checkOut) : "";
+      
+      const actionType = att.checkOut ? "CHECK-OUT 🚪" : "CHECK-IN 🌅";
+      const wt = att.workType === 'remote' ? '🏠 Remote' : '🏢 Office';
+      const detailStr = att.checkOut
+        ? `Check-in lúc: *${inTime}* | Check-out lúc: *${outTime}*`
+        : `Check-in lúc: *${inTime}*`;
+
+      return {
+        content: [{
+          type: "text",
+          text: `🔔 *ĐIỂM DANH THÀNH CÔNG (${actionType}):*\n• Nhân viên: *${targetMember.fullName}*\n• Loại công: *${wt}*\n• Trạng thái: *${att.status}*\n• ${detailStr}\n• Ghi chú: *${att.notes || "Không có"}*`
+        }]
+      };
+    }
+case "get_attendance_report": {
+      const { employee_name, month, year } = args as any;
+      
+      let targetMem = null;
+      if (employee_name) {
+        targetMem = members.find((m: any) => m.fullName.toLowerCase().includes(employee_name.toLowerCase()));
+        if (!targetMem) {
+          throw new McpError(ErrorCode.InvalidParams, `Không tìm thấy nhân viên tên "${employee_name}" trong hệ thống.`);
+        }
+      } else if (!isBoss) {
+        targetMem = user;
+      }
+
+      const queryPath = targetMem 
+        ? `/internal/v1/team/hr/attendance?memberId=${targetMem.id}`
+        : `/internal/v1/team/hr/attendance`;
+        
+      let attData;
+      try {
+        attData = (await apiClient.get(queryPath)) as any;
+      } catch (err: any) {
+        throw new McpError(ErrorCode.InternalError, "Lỗi fetch dữ liệu chấm công từ hệ thống HR.");
+      }
+      
+      const list = attData.data || [];
+
+      // Filter by month/year
+      const d = new Date();
+      const mTarget = month ? Number(month) : d.getMonth() + 1;
+      const yTarget = year ? Number(year) : d.getFullYear();
+
+      let totalHoursStr = 0;
+      let presentDays = 0;
+      let lateDays = 0;
+
+      list.forEach((item: any) => {
+        const itemD = new Date(item.date);
+        if (itemD.getMonth() + 1 === mTarget && itemD.getFullYear() === yTarget) {
+          totalHoursStr += (item.totalHours || 0);
+          if (item.status === 'present') presentDays++;
+          if (item.status === 'late') lateDays++;
+        }
+      });
+
+      totalHoursStr = Math.round(totalHoursStr * 100) / 100;
+
+      const title = targetMem 
+        ? `Báo cáo công tháng ${mTarget}/${yTarget} của ${targetMem.fullName}`
+        : `Báo cáo tổng hợp công tháng ${mTarget}/${yTarget} của toàn Team`;
+
+      return {
+        content: [{
+          type: "text",
+          text: `📊 *${title}*
+• Tổng giờ làm: **${totalHoursStr} giờ**
+• Số ngày đi đúng giờ: ${presentDays}
+• Số ngày đi muộn: ${lateDays}`
+        }]
+      };
+    }
+
+    default:
+      throw new McpError(ErrorCode.MethodNotFound, `Công cụ task ${name} chưa được hỗ trợ`);
+  }
+}
