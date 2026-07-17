@@ -50,8 +50,12 @@ export function useProjectState() {
         }));
         setProjects(mappedProjects);
         setActiveProjectId(prev => {
+          // Keep valid selection; do not auto-default to first project (StorymeeTeam)
           if (prev && mappedProjects.some((p: any) => p.id === prev)) return prev;
-          return mappedProjects[0]?.id || '';
+          if (prev === 'default_no_project' || prev === 'all' || prev === 'p4') {
+            return 'default_no_project';
+          }
+          return 'default_no_project';
         });
       }
     } catch (err) {

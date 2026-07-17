@@ -1,6 +1,9 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { TeamMember, Task, getInitials } from '../../../constants';
 import { coreApiClient, API_ROUTES } from '../../../../lib/apiClient';
+import { accountStatusLabel, isTeamAdmin } from '@/lib/teamAuth';
+
+export type AccountFilter = 'active' | 'hidden' | 'all';
 
 interface OrgChartProps {
   hrProfileView: 'chart' | 'list';
@@ -15,7 +18,56 @@ interface OrgChartProps {
   setSelectedMemberId: (id: string) => void;
   isAdmin: boolean;
   tasks: Task[];
+  /** active = only working roster; hidden = suspended/rejected/inactive; all = everything */
+  accountFilter?: AccountFilter;
+  setAccountFilter?: (f: AccountFilter) => void;
 }
+
+function isVisibleActive(m: TeamMember): boolean {
+  const st = (m.accountStatus || 'active').toLowerCase();
+  return st === 'active' && m.isActive !== false;
+}
+
+function isHiddenAccount(m: TeamMember): boolean {
+  const st = (m.accountStatus || 'active').toLowerCase();
+  return st === 'suspended' || st === 'rejected' || st === 'pending' || m.isActive === false;
+}
+
+function matchesDept(m: TeamMember, hrDeptFilter: string): boolean {
+  if (hrDeptFilter === 'all') return true;
+  const role = (m.role || '').toLowerCase();
+  if (hrDeptFilter === 'Giám đốc') return role.includes('ceo') || role.includes('founder') || role.includes('director');
+  if (hrDeptFilter === 'Tech') return ['cto', 'developer', 'designer', 'it', 'admin'].some((k) => role.includes(k));
+  if (hrDeptFilter === 'Nội dung')
+    return ['content', 'media', 'editor', 'trợ lý', 'writer', 'biên'].some((k) => role.includes(k));
+  if (hrDeptFilter === 'Marketing') return role.includes('marketing');
+  return true;
+}
+
+function matchesSearch(m: TeamMember, q: string): boolean {
+  if (!q) return true;
+  const s = q.toLowerCase();
+  return (
+    (m.name || m.fullName || '').toLowerCase().includes(s) ||
+    (m.role || '').toLowerCase().includes(s) ||
+    (m.email || '').toLowerCase().includes(s) ||
+    (m.telegramUsername || '').toLowerCase().includes(s)
+  );
+}
+
+const LEAD_EMAILS = {
+  ceo: 'kimngan151091@gmail.com',
+  cto: 'lehuyducanh.vn@gmail.com',
+  lead: 'thanhtutran08@gmail.com',
+  techKids: ['zuzzivn@gmail.com', 'phqhuong.0510@gmail.com'],
+  content: [
+    'jeantran.creative@gmail.com',
+    'nguyenductrungdung.2005@gmail.com',
+    'huongiiiang@gmail.com',
+    'daulinh110124@gmail.com',
+    'lanthao1792003@gmail.com',
+  ],
+};
 
 export default function OrgChart({
   hrProfileView,
@@ -29,20 +81,146 @@ export default function OrgChart({
   selectedMemberId,
   setSelectedMemberId,
   isAdmin,
-  tasks
+  tasks,
+  accountFilter: accountFilterProp,
+  setAccountFilter: setAccountFilterProp,
 }: OrgChartProps) {
+  const [localFilter, setLocalFilter] = useState<AccountFilter>('active');
+  const accountFilter = accountFilterProp ?? localFilter;
+  const setAccountFilter = setAccountFilterProp ?? setLocalFilter;
+
   const [showAddModal, setShowAddModal] = useState(false);
   const [newMember, setNewMember] = useState<Partial<TeamMember>>({
-    name: '', role: 'Nhân sự mới', email: '', color: '#10b981', skills: [], telegramUsername: ''
+    name: '',
+    role: 'Nhân sự mới',
+    email: '',
+    color: '#10b981',
+    skills: [],
+    telegramUsername: '',
   });
+
+  const filtered = useMemo(() => {
+    return teamMembers.filter((m) => {
+      if (accountFilter === 'active' && !isVisibleActive(m)) return false;
+      if (accountFilter === 'hidden' && !isHiddenAccount(m)) return false;
+      // all: show everyone (admin), non-admin still only active
+      if (accountFilter === 'all' && !isAdmin && !isVisibleActive(m)) return false;
+      if (!matchesSearch(m, hrSearchQuery)) return false;
+      if (!matchesDept(m, hrDeptFilter)) return false;
+      return true;
+    });
+  }, [teamMembers, accountFilter, hrSearchQuery, hrDeptFilter, isAdmin]);
+
+  const counts = useMemo(() => {
+    const active = teamMembers.filter(isVisibleActive).length;
+    const hidden = teamMembers.filter(isHiddenAccount).length;
+    return { active, hidden, all: teamMembers.length };
+  }, [teamMembers]);
+
+  const emailIn = (m: TeamMember, list: string[]) =>
+    list.includes((m.email || '').toLowerCase());
+
+  const renderCard = (m: TeamMember, opts?: { wide?: boolean; glow?: string }) => {
+    const isSelected = selectedMemberId === m.id;
+    const st = (m.accountStatus || 'active').toLowerCase();
+    const muted = !isVisibleActive(m);
+    return (
+      <div
+        key={m.id}
+        onClick={() => {
+          if (isAdmin) setSelectedMemberId(m.id);
+        }}
+        className="glass"
+        style={{
+          padding: opts?.wide ? '14px 18px' : '10px 14px',
+          width: opts?.wide ? 220 : '100%',
+          maxWidth: opts?.wide ? 220 : 220,
+          display: 'flex',
+          alignItems: opts?.wide ? 'center' : 'center',
+          flexDirection: opts?.wide ? 'column' : 'row',
+          gap: 10,
+          border: isSelected
+            ? '2px solid #a78bfa'
+            : opts?.glow
+              ? `1px solid ${opts.glow}`
+              : '1px solid var(--border)',
+          boxShadow: isSelected ? '0 0 12px rgba(167,139,250,0.25)' : 'none',
+          cursor: isAdmin ? 'pointer' : 'default',
+          opacity: muted ? 0.55 : 1,
+          position: 'relative',
+          textAlign: opts?.wide ? 'center' : 'left',
+        }}
+      >
+        <div
+          className="avatar"
+          style={{
+            background: (m.color || '#6366f1') + '25',
+            color: m.color || '#6366f1',
+            width: opts?.wide ? 44 : 32,
+            height: opts?.wide ? 44 : 32,
+            fontSize: opts?.wide ? 15 : 11,
+            fontWeight: 700,
+            flexShrink: 0,
+          }}
+        >
+          {getInitials(m.name || m.fullName || '?')}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 600, fontSize: opts?.wide ? 13 : 12, color: '#fafafa' }}>
+            {m.name || m.fullName}
+          </div>
+          <div style={{ fontSize: 9, color: '#71717a' }}>{m.role}</div>
+          {muted && (
+            <div style={{ fontSize: 9, color: st === 'pending' ? '#fbbf24' : '#f87171', marginTop: 2 }}>
+              {accountStatusLabel(st)}
+              {m.isActive === false ? ' · ẩn' : ''}
+            </div>
+          )}
+          {isTeamAdmin(m) && !muted && (
+            <div style={{ fontSize: 8, color: '#a78bfa', marginTop: 2 }}>ADMIN</div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const byEmail = (email: string) =>
+    filtered.filter((m) => (m.email || '').toLowerCase() === email);
+
+  const known = new Set([
+    LEAD_EMAILS.ceo,
+    LEAD_EMAILS.cto,
+    LEAD_EMAILS.lead,
+    ...LEAD_EMAILS.techKids,
+    ...LEAD_EMAILS.content,
+  ]);
+  const others = filtered.filter((m) => !known.has((m.email || '').toLowerCase()));
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, flexWrap: 'wrap', gap: 10 }}>
-        <div style={{ display: 'flex', gap: 4, background: 'rgba(0,0,0,0.2)', padding: 3, borderRadius: 8, border: '1px solid var(--border)' }}>
+      {/* Toolbar */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: 10,
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            gap: 4,
+            background: 'rgba(0,0,0,0.2)',
+            padding: 3,
+            borderRadius: 8,
+            border: '1px solid var(--border)',
+          }}
+        >
           <button
             onClick={() => setHrProfileView('chart')}
-            className='btn-ghost'
+            className="btn-ghost"
             style={{
               padding: '5px 12px',
               fontSize: 11,
@@ -51,14 +229,14 @@ export default function OrgChart({
               background: hrProfileView === 'chart' ? 'rgba(255,255,255,0.06)' : 'transparent',
               color: hrProfileView === 'chart' ? 'white' : '#71717a',
               cursor: 'pointer',
-              fontWeight: hrProfileView === 'chart' ? 600 : 400
+              fontWeight: hrProfileView === 'chart' ? 600 : 400,
             }}
           >
             🌿 Sơ đồ cấu trúc
           </button>
           <button
             onClick={() => setHrProfileView('list')}
-            className='btn-ghost'
+            className="btn-ghost"
             style={{
               padding: '5px 12px',
               fontSize: 11,
@@ -67,14 +245,55 @@ export default function OrgChart({
               background: hrProfileView === 'list' ? 'rgba(255,255,255,0.06)' : 'transparent',
               color: hrProfileView === 'list' ? 'white' : '#71717a',
               cursor: 'pointer',
-              fontWeight: hrProfileView === 'list' ? 600 : 400
+              fontWeight: hrProfileView === 'list' ? 600 : 400,
             }}
           >
-            📋 Danh sách phẳng
+            📋 Danh sách
           </button>
         </div>
 
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          {/* Account visibility filter */}
+          {isAdmin && (
+            <div
+              style={{
+                display: 'flex',
+                gap: 3,
+                background: 'rgba(0,0,0,0.25)',
+                padding: 3,
+                borderRadius: 8,
+                border: '1px solid var(--border)',
+              }}
+            >
+              {(
+                [
+                  { id: 'active', label: `Đang làm (${counts.active})` },
+                  { id: 'hidden', label: `Ẩn/khoá (${counts.hidden})` },
+                  { id: 'all', label: `Tất cả (${counts.all})` },
+                ] as const
+              ).map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => setAccountFilter(f.id)}
+                  style={{
+                    padding: '5px 10px',
+                    fontSize: 10,
+                    borderRadius: 6,
+                    border: 'none',
+                    cursor: 'pointer',
+                    background:
+                      accountFilter === f.id ? 'rgba(167,139,250,0.2)' : 'transparent',
+                    color: accountFilter === f.id ? '#c4b5fd' : '#71717a',
+                    fontWeight: accountFilter === f.id ? 600 : 400,
+                  }}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          )}
+
           {isAdmin && (
             <button
               className="btn-primary"
@@ -85,401 +304,349 @@ export default function OrgChart({
             </button>
           )}
           <input
-            className='input-dark'
-            placeholder='Tìm nhân sự...'
+            className="input-dark"
+            placeholder="Tìm tên / email / @telegram..."
             value={hrSearchQuery}
-            onChange={e => setHrSearchQuery(e.target.value)}
-            style={{ padding: '6px 12px', fontSize: 11, borderRadius: 8, width: 140, background: '#18181b', border: '1px solid var(--border)', color: 'white' }}
+            onChange={(e) => setHrSearchQuery(e.target.value)}
+            style={{
+              padding: '6px 12px',
+              fontSize: 11,
+              borderRadius: 8,
+              width: 180,
+              background: '#18181b',
+              border: '1px solid var(--border)',
+              color: 'white',
+            }}
           />
           <select
             value={hrDeptFilter}
-            onChange={e => setHrDeptFilter(e.target.value)}
-            style={{ background: '#18181b', border: '1px solid var(--border)', color: '#fafafa', borderRadius: 8, padding: '6px 10px', fontSize: 11, outline: 'none', cursor: 'pointer' }}
+            onChange={(e) => setHrDeptFilter(e.target.value)}
+            style={{
+              background: '#18181b',
+              border: '1px solid var(--border)',
+              color: '#fafafa',
+              borderRadius: 8,
+              padding: '6px 10px',
+              fontSize: 11,
+              outline: 'none',
+              cursor: 'pointer',
+            }}
           >
-            <option value='all'>Tất cả ban</option>
-            <option value='Giám đốc'>Ban Giám Đốc</option>
-            <option value='Tech'>Công nghệ & SP</option>
-            <option value='Nội dung'>Nội dung & Media</option>
-            <option value='Marketing'>Marketing</option>
+            <option value="all">Tất cả ban</option>
+            <option value="Giám đốc">Ban Giám Đốc</option>
+            <option value="Tech">Công nghệ & SP</option>
+            <option value="Nội dung">Nội dung & Media</option>
+            <option value="Marketing">Marketing</option>
           </select>
         </div>
       </div>
 
-      {hrProfileView === 'chart' && (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20, padding: '20px 0', overflowX: 'auto', width: '100%' }}>
-          {teamMembers.filter(m => m.isActive !== false && (m?.email || '').toLowerCase() === 'kimngan151091@gmail.com' && (hrSearchQuery === '' || m.name.toLowerCase().includes(hrSearchQuery.toLowerCase()))).map(m => {
-            const isSelected = selectedMemberId === m.id;
-            return (
-              <div
-                key={m.id}
-                onClick={() => { if (isAdmin) setSelectedMemberId(m.id); }}
-                className='glass'
-                style={{
-                  padding: '14px 18px',
-                  width: 220,
-                  border: isSelected ? '2px solid #a78bfa' : '1px solid #f59e0b',
-                  boxShadow: isSelected ? '0 0 15px rgba(167, 139, 250, 0.3)' : '0 0 15px rgba(245, 158, 11, 0.15)',
-                  position: 'relative',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 8,
-                  alignItems: 'center',
-                  textAlign: 'center',
-                  cursor: isAdmin ? 'pointer' : 'default',
-                  transition: 'all 0.2s'
-                }}
-              >
-                <div style={{ position: 'absolute', top: -8, background: '#f59e0b', color: '#111', fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 10 }}>BOARD OF DIRECTORS</div>
-                <div className='avatar' style={{ background: m.color + '25', color: m.color, width: 44, height: 44, fontSize: 16, fontWeight: 700, border: '2px solid ' + m.color }}>
-                  {getInitials(m.name)}
-                </div>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: 13, color: '#fafafa' }}>{m.name}</div>
-                  <div style={{ fontSize: 10, color: '#71717a', marginTop: 1 }}>{m.role}</div>
-                </div>
-                <div style={{ fontSize: 10, color: '#a78bfa', background: 'rgba(167,139,250,0.08)', padding: '2px 8px', borderRadius: 4 }}>
-                  @{m.telegramUsername}
-                </div>
-                {isAdmin && <div style={{ fontSize: 8, color: '#a78bfa', fontWeight: 600 }}>⚡ Click để chỉnh sửa</div>}
-              </div>
-            );
-          })}
-
-          <div style={{ width: 1, height: 18, background: 'var(--border)' }} />
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 30, width: '100%', maxWidth: 900, position: 'relative' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
-              {teamMembers.filter(m => m.isActive !== false && (m?.email || '').toLowerCase() === 'lehuyducanh.vn@gmail.com' && (hrSearchQuery === '' || m.name.toLowerCase().includes(hrSearchQuery.toLowerCase()))).map(m => {
-                const isSelected = selectedMemberId === m.id;
-                return (
-                  <div
-                    key={m.id}
-                    onClick={() => { if (isAdmin) setSelectedMemberId(m.id); }}
-                    className='glass'
-                    style={{
-                      padding: '12px 16px',
-                      width: 200,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 10,
-                      border: isSelected ? '2px solid #a78bfa' : '1px solid rgba(99,102,241,0.3)',
-                      cursor: isAdmin ? 'pointer' : 'default',
-                      transition: 'all 0.2s',
-                      boxShadow: isSelected ? '0 0 10px rgba(167, 139, 250, 0.2)' : 'none'
-                    }}
-                  >
-                    <div className='avatar' style={{ background: m.color + '25', color: m.color, width: 34, height: 34, fontSize: 12 }}>{getInitials(m.name)}</div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 600, fontSize: 12, color: '#fafafa', textOverflow: 'ellipsis', overflow: 'hidden' }}>{m.name}</div>
-                      <div style={{ fontSize: 9, color: '#71717a' }}>{m.role}</div>
-                    </div>
-                  </div>
-                );
-              })}
-
-              <div style={{ width: 1, height: 14, background: 'var(--border)' }} />
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}>
-                {teamMembers.filter(m => m.isActive !== false && ['zuzzivn@gmail.com', 'phqhuong.0510@gmail.com'].includes((m?.email || '').toLowerCase()) && (hrSearchQuery === '' || m.name.toLowerCase().includes(hrSearchQuery.toLowerCase()))).map(m => {
-                  const isSelected = selectedMemberId === m.id;
-                  return (
-                    <div
-                      key={m.id}
-                      onClick={() => { if (isAdmin) setSelectedMemberId(m.id); }}
-                      className='glass'
-                      style={{
-                        padding: '10px 14px',
-                        marginLeft: 15,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 10,
-                        border: isSelected ? '2px solid #a78bfa' : '1px solid var(--border)',
-                        cursor: isAdmin ? 'pointer' : 'default',
-                        transition: 'all 0.2s'
-                      }}
-                    >
-                      <div className='avatar' style={{ background: m.color + '20', color: m.color, width: 28, height: 28, fontSize: 11 }}>{getInitials(m.name)}</div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 500, fontSize: 11, color: '#fafafa' }}>{m.name}</div>
-                        <div style={{ fontSize: 9, color: '#71717a' }}>{m.role}</div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
-              {teamMembers.filter(m => m.isActive !== false && (m?.email || '').toLowerCase() === 'thanhtutran08@gmail.com' && (hrSearchQuery === '' || m.name.toLowerCase().includes(hrSearchQuery.toLowerCase()))).map(m => {
-                const isSelected = selectedMemberId === m.id;
-                return (
-                  <div
-                    key={m.id}
-                    onClick={() => { if (isAdmin) setSelectedMemberId(m.id); }}
-                    className='glass'
-                    style={{
-                      padding: '12px 16px',
-                      width: 200,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 10,
-                      border: isSelected ? '2px solid #a78bfa' : '1px solid rgba(236,72,153,0.3)',
-                      cursor: isAdmin ? 'pointer' : 'default',
-                      transition: 'all 0.2s',
-                      boxShadow: isSelected ? '0 0 10px rgba(167, 139, 250, 0.2)' : 'none'
-                    }}
-                  >
-                    <div className='avatar' style={{ background: m.color + '25', color: m.color, width: 34, height: 34, fontSize: 12 }}>{getInitials(m.name)}</div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 600, fontSize: 12, color: '#fafafa', textOverflow: 'ellipsis', overflow: 'hidden' }}>{m.name}</div>
-                      <div style={{ fontSize: 9, color: '#71717a' }}>{m.role}</div>
-                    </div>
-                  </div>
-                );
-              })}
-
-              <div style={{ width: 1, height: 14, background: 'var(--border)' }} />
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}>
-                {teamMembers.filter(m => m.isActive !== false && ['jeantran.creative@gmail.com', 'nguyenductrungdung.2005@gmail.com', 'huongiiiang@gmail.com', 'daulinh110124@gmail.com', 'lanthao1792003@gmail.com'].includes((m?.email || '').toLowerCase()) && (hrSearchQuery === '' || m.name.toLowerCase().includes(hrSearchQuery.toLowerCase()))).map(m => {
-                  const isSelected = selectedMemberId === m.id;
-                  return (
-                    <div
-                      key={m.id}
-                      onClick={() => { if (isAdmin) setSelectedMemberId(m.id); }}
-                      className='glass'
-                      style={{
-                        padding: '10px 14px',
-                        marginLeft: 15,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 10,
-                        border: isSelected ? '2px solid #a78bfa' : '1px solid var(--border)',
-                        cursor: isAdmin ? 'pointer' : 'default',
-                        transition: 'all 0.2s'
-                      }}
-                    >
-                      <div className='avatar' style={{ background: m.color + '20', color: m.color, width: 28, height: 28, fontSize: 11 }}>{getInitials(m.name)}</div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 500, fontSize: 11, color: '#fafafa' }}>{m.name}</div>
-                        <div style={{ fontSize: 9, color: '#71717a' }}>{m.role}</div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>Nhân sự khác</div>
-              {teamMembers.filter(m => m.isActive !== false && !['kimngan151091@gmail.com', 'lehuyducanh.vn@gmail.com', 'zuzzivn@gmail.com', 'phqhuong.0510@gmail.com', 'thanhtutran08@gmail.com', 'jeantran.creative@gmail.com', 'nguyenductrungdung.2005@gmail.com', 'huongiiiang@gmail.com', 'daulinh110124@gmail.com', 'lanthao1792003@gmail.com'].includes((m?.email || '').toLowerCase()) && (hrSearchQuery === '' || m.name.toLowerCase().includes(hrSearchQuery.toLowerCase()))).map(m => {
-                const isSelected = selectedMemberId === m.id;
-                return (
-                  <div
-                    key={m.id}
-                    onClick={() => { if (isAdmin) setSelectedMemberId(m.id); }}
-                    className='glass'
-                    style={{
-                      padding: '12px 16px',
-                      width: 200,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 12,
-                      border: isSelected ? '2px solid #a78bfa' : '1px solid var(--border)',
-                      cursor: isAdmin ? 'pointer' : 'default',
-                      transition: 'all 0.2s'
-                    }}
-                  >
-                    <div className='avatar' style={{ background: m.color + '25', color: m.color, width: 34, height: 34, fontSize: 12 }}>{getInitials(m.name)}</div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 600, fontSize: 12, color: '#fafafa', textOverflow: 'ellipsis', overflow: 'hidden' }}>{m.name}</div>
-                      <div style={{ fontSize: 9, color: '#71717a' }}>{m.role}</div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+      {accountFilter === 'active' && (
+        <div style={{ fontSize: 11, color: '#52525b' }}>
+          Chỉ hiện tài khoản <strong style={{ color: '#34d399' }}>đang hoạt động</strong>. Bật
+          filter <em>Ẩn/khoá</em> để xem nghỉ việc / suspended / pending.
+        </div>
+      )}
+      {accountFilter === 'hidden' && (
+        <div style={{ fontSize: 11, color: '#fbbf24' }}>
+          Đang xem tài khoản ẩn / khoá / pending / rejected ({filtered.length}).
         </div>
       )}
 
-      {hrProfileView === 'list' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 14 }}>
-          {teamMembers
-            .filter(m => {
-              if (m.isActive === false && !isAdmin) return false;
-              const matchesSearch = m.name.toLowerCase().includes(hrSearchQuery.toLowerCase()) || m.role.toLowerCase().includes(hrSearchQuery.toLowerCase());
-              let matchesDept = true;
-              if (hrDeptFilter !== 'all') {
-                const roleLower = (m.role || '').toLowerCase();
-                if (hrDeptFilter === 'Giám đốc') matchesDept = roleLower.includes('ceo');
-                else if (hrDeptFilter === 'Tech') matchesDept = ['cto', 'developer', 'designer', 'it'].some(keyword => roleLower.includes(keyword));
-                else if (hrDeptFilter === 'Nội dung') matchesDept = ['content', 'media', 'editor', 'trợ lý', 'writer'].some(keyword => roleLower.includes(keyword));
-                else if (hrDeptFilter === 'Marketing') matchesDept = roleLower.includes('marketing');
-              }
-              return matchesSearch && matchesDept;
-            })
-            .map(m => {
-              const myTasks = tasks.filter(t => t.assignee === m.name && t.status !== 'Done');
-              const isSelected = selectedMemberId === m.id;
-              return (
-                <div
-                  key={m.id}
-                  onClick={() => { if (isAdmin) setSelectedMemberId(m.id); }}
-                  className='glass'
-                  style={{
-                    padding: 16,
-                    border: isSelected ? '2px solid #a78bfa' : '1px solid var(--border)',
-                    cursor: isAdmin ? 'pointer' : 'default',
-                    transition: 'all 0.2s',
-                    boxShadow: isSelected ? '0 0 10px rgba(167, 139, 250, 0.2)' : 'none'
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, opacity: m.isActive === false ? 0.5 : 1 }}>
-                    <div className='avatar' style={{ background: m.color + '25', color: m.color, width: 36, height: 36, fontSize: 12, fontWeight: 700, border: '2px solid ' + m.color + '40' }}>
-                      {getInitials(m.name)}
-                    </div>
-                    <div>
-                      <div style={{ fontWeight: 600, fontSize: 13, color: '#fafafa' }}>
-                        {m.name} {m.isActive === false && <span style={{ color: '#ef4444', fontSize: 10, marginLeft: 4 }}>(Đã nghỉ)</span>}
-                      </div>
-                      <div style={{ fontSize: 10, color: '#71717a' }}>{m.role}</div>
-                    </div>
+      {/* Chart — tree for active roster */}
+      {hrProfileView === 'chart' && (
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 16,
+            padding: '12px 0',
+            overflowX: 'auto',
+            width: '100%',
+          }}
+        >
+          {accountFilter === 'hidden' || accountFilter === 'all' ? (
+            // Flat grid when showing hidden/all — no fake hierarchy for inactive
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+                gap: 12,
+                width: '100%',
+              }}
+            >
+              {filtered.length === 0 ? (
+                <div style={{ color: '#52525b', fontSize: 12, gridColumn: '1/-1', textAlign: 'center', padding: 24 }}>
+                  Không có tài khoản khớp filter.
+                </div>
+              ) : (
+                filtered.map((m) => renderCard(m))
+              )}
+            </div>
+          ) : (
+            <>
+              {byEmail(LEAD_EMAILS.ceo).map((m) => (
+                <div key={m.id} style={{ position: 'relative' }}>
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: -8,
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      background: '#f59e0b',
+                      color: '#111',
+                      fontSize: 9,
+                      fontWeight: 700,
+                      padding: '2px 8px',
+                      borderRadius: 10,
+                      zIndex: 1,
+                    }}
+                  >
+                    BOARD
                   </div>
-                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 12 }}>
-                    {m.skills.slice(0, 3).map(s => (
-                      <span key={s} style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: m.color + '15', color: m.color, border: '1px solid ' + m.color + '30' }}>{s}</span>
-                    ))}
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#71717a', borderTop: '1px solid var(--border)', paddingTop: 8 }}>
-                    <span>@{m.telegramUsername}</span>
-                    <span style={{ color: myTasks.length > 3 ? '#ef4444' : '#a1a1aa' }}>{myTasks.length} task mở</span>
+                  {renderCard(m, { wide: true, glow: 'rgba(245,158,11,0.4)' })}
+                </div>
+              ))}
+
+              {byEmail(LEAD_EMAILS.ceo).length > 0 && (
+                <div style={{ width: 1, height: 14, background: 'var(--border)' }} />
+              )}
+
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr 1fr',
+                  gap: 24,
+                  width: '100%',
+                  maxWidth: 920,
+                }}
+              >
+                {/* Tech column */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+                  {byEmail(LEAD_EMAILS.cto).map((m) => renderCard(m, { glow: 'rgba(99,102,241,0.35)' }))}
+                  {byEmail(LEAD_EMAILS.cto).length > 0 && (
+                    <div style={{ width: 1, height: 12, background: 'var(--border)' }} />
+                  )}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
+                    {filtered
+                      .filter((m) => emailIn(m, LEAD_EMAILS.techKids))
+                      .map((m) => renderCard(m))}
                   </div>
                 </div>
-              );
-            })}
+
+                {/* Content column */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+                  {byEmail(LEAD_EMAILS.lead).map((m) =>
+                    renderCard(m, { glow: 'rgba(236,72,153,0.35)' })
+                  )}
+                  {byEmail(LEAD_EMAILS.lead).length > 0 && (
+                    <div style={{ width: 1, height: 12, background: 'var(--border)' }} />
+                  )}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
+                    {filtered
+                      .filter((m) => emailIn(m, LEAD_EMAILS.content))
+                      .map((m) => renderCard(m))}
+                  </div>
+                </div>
+
+                {/* Others */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color: '#a1a1aa',
+                      textTransform: 'uppercase',
+                      letterSpacing: 1,
+                    }}
+                  >
+                    Nhân sự khác
+                  </div>
+                  {others.length === 0 ? (
+                    <div style={{ fontSize: 11, color: '#52525b' }}>—</div>
+                  ) : (
+                    others.map((m) => renderCard(m))
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* List view */}
+      {hrProfileView === 'list' && (
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+            gap: 12,
+          }}
+        >
+          {filtered.length === 0 && (
+            <div style={{ color: '#52525b', fontSize: 12, gridColumn: '1/-1', textAlign: 'center', padding: 30 }}>
+              Không có nhân sự khớp filter.
+            </div>
+          )}
+          {filtered.map((m) => {
+            const myTasks = tasks.filter(
+              (t) => t.assignee === m.name && t.status !== 'Done'
+            );
+            const isSelected = selectedMemberId === m.id;
+            const st = (m.accountStatus || 'active').toLowerCase();
+            const muted = !isVisibleActive(m);
+            return (
+              <div
+                key={m.id}
+                onClick={() => {
+                  if (isAdmin) setSelectedMemberId(m.id);
+                }}
+                className="glass"
+                style={{
+                  padding: 14,
+                  border: isSelected ? '2px solid #a78bfa' : '1px solid var(--border)',
+                  cursor: isAdmin ? 'pointer' : 'default',
+                  opacity: muted ? 0.65 : 1,
+                  boxShadow: isSelected ? '0 0 10px rgba(167,139,250,0.2)' : 'none',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                  <div
+                    className="avatar"
+                    style={{
+                      background: (m.color || '#6366f1') + '25',
+                      color: m.color || '#6366f1',
+                      width: 36,
+                      height: 36,
+                      fontSize: 12,
+                      fontWeight: 700,
+                    }}
+                  >
+                    {getInitials(m.name || m.fullName || '?')}
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 13, color: '#fafafa' }}>
+                      {m.name || m.fullName}{' '}
+                      <span
+                        style={{
+                          fontSize: 9,
+                          color:
+                            st === 'active'
+                              ? '#34d399'
+                              : st === 'pending'
+                                ? '#fbbf24'
+                                : '#f87171',
+                        }}
+                      >
+                        {accountStatusLabel(st)}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 10, color: '#71717a' }}>{m.role}</div>
+                  </div>
+                </div>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    fontSize: 10,
+                    color: '#71717a',
+                    borderTop: '1px solid var(--border)',
+                    paddingTop: 8,
+                  }}
+                >
+                  <span>@{m.telegramUsername || '—'}</span>
+                  <span>{myTasks.length} task mở</span>
+                </div>
+                {isAdmin && (
+                  <div style={{ fontSize: 9, color: '#a78bfa', marginTop: 6 }}>
+                    Click → hồ sơ · duyệt / khoá / xoá
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 
       {showAddModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div className="glass" style={{ width: 400, padding: 24, borderRadius: 16, background: '#18181b', border: '1px solid var(--border)' }}>
-            <h3 style={{ margin: '0 0 16px 0', color: '#fafafa', fontSize: 16 }}>Thêm nhân sự mới</h3>
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.7)',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <div
+            className="glass"
+            style={{
+              width: 400,
+              padding: 24,
+              borderRadius: 16,
+              background: '#18181b',
+              border: '1px solid var(--border)',
+            }}
+          >
+            <h3 style={{ margin: '0 0 16px 0', color: '#fafafa', fontSize: 16 }}>
+              Thêm nhân sự mới
+            </h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div>
-                <label style={{ fontSize: 11, color: '#a1a1aa', display: 'block', marginBottom: 4 }}>Họ tên</label>
-                <input
-                  className="input-dark"
-                  value={newMember.name}
-                  onChange={e => setNewMember({ ...newMember, name: e.target.value })}
-                  style={{ width: '100%', padding: '8px 12px', fontSize: 12, borderRadius: 8 }}
-                  placeholder="Nhập họ tên"
-                />
-              </div>
-              <div>
-                <label style={{ fontSize: 11, color: '#a1a1aa', display: 'block', marginBottom: 4 }}>Email</label>
-                <input
-                  className="input-dark"
-                  value={newMember.email}
-                  onChange={e => setNewMember({ ...newMember, email: e.target.value })}
-                  style={{ width: '100%', padding: '8px 12px', fontSize: 12, borderRadius: 8 }}
-                  placeholder="name@company.com"
-                />
-              </div>
-              <div>
-                <label style={{ fontSize: 11, color: '#a1a1aa', display: 'block', marginBottom: 4 }}>Chức vụ</label>
-                <input
-                  className="input-dark"
-                  value={newMember.role}
-                  onChange={e => setNewMember({ ...newMember, role: e.target.value })}
-                  style={{ width: '100%', padding: '8px 12px', fontSize: 12, borderRadius: 8 }}
-                  placeholder="Ví dụ: Giám đốc, Tech, Marketing..."
-                />
-              </div>
-              <div>
-                <label style={{ fontSize: 11, color: '#a1a1aa', display: 'block', marginBottom: 4 }}>Telegram Username</label>
-                <input
-                  className="input-dark"
-                  value={newMember.telegramUsername}
-                  onChange={e => setNewMember({ ...newMember, telegramUsername: e.target.value })}
-                  style={{ width: '100%', padding: '8px 12px', fontSize: 12, borderRadius: 8 }}
-                  placeholder="@username"
-                />
-              </div>
-              <div>
-                <label style={{ fontSize: 11, color: '#a1a1aa', display: 'block', marginBottom: 4 }}>Hình thức làm việc</label>
-                <select
-                  className="input-dark"
-                  value={newMember.workArrangement || 'office'}
-                  onChange={e => setNewMember({ ...newMember, workArrangement: e.target.value })}
-                  style={{ width: '100%', padding: '8px 12px', fontSize: 12, borderRadius: 8, marginBottom: 12 }}
+              <input
+                className="input-dark"
+                value={newMember.name}
+                onChange={(e) => setNewMember({ ...newMember, name: e.target.value })}
+                style={{ width: '100%', padding: '8px 12px', fontSize: 12, borderRadius: 8 }}
+                placeholder="Họ tên"
+              />
+              <input
+                className="input-dark"
+                value={newMember.email}
+                onChange={(e) => setNewMember({ ...newMember, email: e.target.value })}
+                style={{ width: '100%', padding: '8px 12px', fontSize: 12, borderRadius: 8 }}
+                placeholder="email@company.com"
+              />
+              <input
+                className="input-dark"
+                value={newMember.role}
+                onChange={(e) => setNewMember({ ...newMember, role: e.target.value })}
+                style={{ width: '100%', padding: '8px 12px', fontSize: 12, borderRadius: 8 }}
+                placeholder="Chức vụ"
+              />
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                <button
+                  className="btn"
+                  onClick={() => setShowAddModal(false)}
+                  style={{ padding: '8px 14px', fontSize: 12 }}
                 >
-                  <option value="office">Full-time (Tại văn phòng)</option>
-                  <option value="remote">Làm từ xa (Remote)</option>
-                  <option value="freelance">Tự do (Freelance)</option>
-                </select>
-              </div>
-              <div>
-                <label style={{ fontSize: 11, color: '#a1a1aa', display: 'block', marginBottom: 4 }}>Màu đại diện</label>
-                <input
-                  type="color"
-                  value={newMember.color}
-                  onChange={e => setNewMember({ ...newMember, color: e.target.value })}
-                  style={{ width: '100%', height: 36, border: 'none', background: 'transparent', cursor: 'pointer' }}
-                />
-              </div>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 24 }}>
-              <button
-                className="btn-ghost"
-                onClick={() => setShowAddModal(false)}
-                style={{ padding: '8px 16px', fontSize: 12, borderRadius: 8 }}
-              >
-                Hủy
-              </button>
-              <button
-                className="btn-primary"
-                onClick={async () => {
-                  if (setTeamMembers && newMember.name) {
+                  Huỷ
+                </button>
+                <button
+                  className="btn-primary"
+                  onClick={async () => {
+                    if (!newMember.name || !newMember.email) return;
                     try {
-                      // Backend requires email, auto-generate if empty
-                      const emailToUse = newMember.email || `${newMember.name.replace(/\s+/g, '').toLowerCase()}_${Date.now()}@storymee.local`;
-                      
-                      const res = await coreApiClient.post(API_ROUTES.HR.TEAM_MEMBERS, {
+                      await coreApiClient.post(API_ROUTES.HR.TEAM_MEMBERS, {
                         fullName: newMember.name,
+                        email: newMember.email,
                         role: newMember.role,
-                        email: emailToUse,
                         telegramUsername: newMember.telegramUsername,
                         workArrangement: newMember.workArrangement || 'office',
-                        isActive: true
                       });
-                      
-                      const dbMember = res.data;
-                      const added = {
-                        id: dbMember.id || 'new-' + Date.now(),
-                        name: dbMember.fullName || newMember.name,
-                        role: dbMember.role || newMember.role,
-                        email: dbMember.email || emailToUse,
-                        color: newMember.color,
-                        skills: newMember.skills || [],
-                        telegramUsername: dbMember.telegramUsername || newMember.telegramUsername || '',
-                        workArrangement: dbMember.workArrangement || newMember.workArrangement || 'office',
-                        isActive: true
-                      } as any;
-                      
-                      setTeamMembers(prev => [...prev, added]);
                       setShowAddModal(false);
-                      setNewMember({ name: '', role: 'Nhân sự mới', email: '', color: '#10b981', skills: [], telegramUsername: '' });
-                    } catch (error: any) {
-                      console.error('Failed to create team member:', error);
-                      alert('Lỗi tạo nhân sự: ' + (error.message || 'Unknown error'));
+                      window.location.reload();
+                    } catch (e) {
+                      alert('Không tạo được nhân sự');
                     }
-                  }
-                }}
-                style={{ padding: '8px 16px', fontSize: 12, borderRadius: 8 }}
-              >
-                Tạo mới
-              </button>
+                  }}
+                  style={{ padding: '8px 14px', fontSize: 12 }}
+                >
+                  Tạo
+                </button>
+              </div>
             </div>
           </div>
         </div>

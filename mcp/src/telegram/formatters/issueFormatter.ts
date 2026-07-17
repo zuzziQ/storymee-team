@@ -3,6 +3,11 @@
  * Dùng thống nhất cho: cronJobs, messageHandler, planeTools
  */
 
+/** YYYY-MM-DD theo múi giờ Việt Nam (GMT+7). */
+function todayVnStr(): string {
+  return new Date(Date.now() + 7 * 3600 * 1000).toISOString().substring(0, 10);
+}
+
 /** Escape ký tự đặc biệt trong Markdown mô tả tiêu đề task */
 function esc(text: string): string {
   if (!text) return '';
@@ -37,18 +42,16 @@ export function parseIssue(issue: any, members: any[] = []): FormattedIssue {
   const stateName = issue.State?.name || 'Todo';
 
   const deadlineDate = issue.targetDate ? new Date(issue.targetDate) : null;
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = todayVnStr();
   const deadline = issue.targetDate ? issue.targetDate.split('T')[0] : 'Chưa đặt';
 
-  const now = new Date();
-  now.setHours(23, 59, 59, 999);
-  const soon = new Date();
-  soon.setDate(soon.getDate() + 2);
-  soon.setHours(23, 59, 59, 999);
+  const soon = new Date(Date.now() + 7 * 3600 * 1000);
+  soon.setUTCDate(soon.getUTCDate() + 2);
+  const soonStr = soon.toISOString().substring(0, 10);
 
-  const isOverdue = !!deadlineDate && deadlineDate < new Date(todayStr);
+  const isOverdue = !!deadlineDate && deadline < todayStr;
   const isDueToday = deadline === todayStr;
-  const isDueSoon = !!deadlineDate && !isOverdue && deadlineDate <= soon;
+  const isDueSoon = !!deadlineDate && !isOverdue && deadline !== 'Chưa đặt' && deadline <= soonStr;
 
   const assigneeName = issue.Assignee?.fullName
     || members.find((m: any) => m.id === issue.assigneeId)?.fullName
@@ -109,7 +112,7 @@ export function formatIssueBlock(f: FormattedIssue, showSubs = true): string {
 
 /** Format "Công việc của tôi" đầy đủ cho DM */
 export function formatMyIssuesDM(issues: any[], memberName: string): string {
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = todayVnStr();
   const active = issues.filter(i => !isDoneGroup(i.State?.group || 'unstarted'));
 
   if (active.length === 0) {

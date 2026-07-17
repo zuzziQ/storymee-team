@@ -72,6 +72,12 @@ export interface TeamMember {
   telegramChatId?: number;
   planeMemberId?: string;
   isActive?: boolean;
+  /** pending | active | suspended | rejected — omni_team_members.account_status */
+  accountStatus?: string;
+  accountNote?: string | null;
+  fullName?: string;
+  /** Configurable admin flag (DB is_team_admin) */
+  isTeamAdmin?: boolean;
 }
 export interface ChatMessage { id: string; sender: 'user' | 'ai'; text: string; }
 export interface DraftTask {

@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { getOrCreateConversation, sendMessageToLetta, getLettaHistory } from '@/lib/lettaClient';
 import { coreApiClient } from '@/lib/apiClient';
+import { normalizeLlmAction, pickLlmPayload } from '@/lib/llmActions';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -41,9 +42,25 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'CurrentUser email is required for Letta sync' }, { status: 400 });
     }
 
+    const isTelegramFast =
+      config?.source === 'telegram' ||
+      config?.preferFastLLM === true ||
+      config?.skipLetta === true;
+
     let hrContext = "Chưa có thông tin chấm công/nghỉ phép.";
     try {
       let member = currentUser.id ? currentUser : null;
+      // Telegram already sends counters on currentUser — skip N+1 HR API (saves 200–800ms)
+      if (isTelegramFast && member) {
+        const al = member.annualLeaveLimit ?? 12;
+        const au = member.annualLeaveUsed ?? 0;
+        const rl = member.remoteLimit ?? 4;
+        const ru = member.remoteUsed ?? 0;
+        hrContext =
+          `- Nghỉ phép năm: ${au}/${al} ngày đã dùng.\n` +
+          `- Remote: ${ru}/${rl} ngày đã dùng.\n` +
+          `- (Telegram fast mode: không fetch lại leave/attendance list)`;
+      } else {
       if (!member) {
         try {
           const membersData = await coreApiClient.get('/hr/team-members');
@@ -103,6 +120,7 @@ export async function POST(request: Request) {
           hrContext += `- Báo cáo công tháng ${mTarget}/${yTarget}: Đi làm (${presentDays} ngày), Đi muộn (${lateDays} ngày), Tổng giờ công (${totalHoursStr} giờ).`;
         }
       }
+      }
     } catch (e) {
       console.error("Lỗi lấy HR context:", e);
     }
@@ -150,8 +168,8 @@ Nhiệm vụ của bạn:
    - Trả về action "show_my_issues" khi người dùng muốn xem danh sách công việc của họ (ví dụ: "cho tôi xem task của tôi"). KHÔNG CẦN PAYLOAD.
    - Trả về action "breakdown_issue" khi người dùng muốn phân rã, phân tách hoặc chia nhỏ một công việc lớn (ví dụ: "phân rã task T-103").
    - Trả về action "update_sub_issues" khi người dùng dán hoặc liệt kê một danh sách các công việc con (subtasks) tự chia để cập nhật/thay thế các công việc con của một công việc lớn.
-   - Trả về action "request_issue_approval" khi nhân viên muốn xin lưu trữ hoặc xóa task. (TẠM THỜI: Việc dời deadline không cần xin phép, hãy dùng action "update_issue" để gia hạn luôn).
-   - TRƯỜNG HỢP Boss/Admin duyệt (hoặc từ chối) task: TUYỆT ĐỐI trả về action "none", đồng thời trong mục "reply", hãy nhắc nhở Admin phải bấm vào nút "Phê duyệt" hoặc "Từ chối" ở dưới tin nhắn Yêu cầu trước đó chứ không chat trực tiếp.
+   - User tự Done / archive / xoá task (không xin admin): Done → action "update_issue" status "Done"; archive → action "archive_issue"; xoá vĩnh viễn → action "delete_issue". Dời deadline → "update_issue" luôn.
+   - Admin request CHỈ còn cho leave_request (xin nghỉ / remote / sick / personal).
    - Nếu người dùng chỉ đang HỎI hoặc TRUY VẤN thông tin thông thường, tuyệt đối KHÔNG được trả về action khác "none".
    - Trả về action "create_meeting" khi người dùng yêu cầu đặt lịch họp. Trích xuất thời gian bắt đầu (startTime), thời gian kết thúc (endTime - mặc định dài 1 tiếng), và danh sách người tham gia (attendees).
    - Trả về action "update_meeting" khi người dùng yêu cầu dời lịch, hủy lịch (status: 'cancelled').
@@ -162,34 +180,58 @@ Nhiệm vụ của bạn:
 - KHI ĐÃ CÓ ĐỦ DỮ LIỆU ĐỂ TRẢ LỜI: Định dạng trả về BẮT BUỘC phải là JSON khớp với schema sau:
 {
   "reply": "Câu trả lời của bạn định dạng Markdown sạch",
-  "action": "create_project" | "update_issue" | "create_issue" | "show_my_issues" | "leave_request" | "check_in_out" | "breakdown_issue" | "update_sub_issues" | "request_issue_approval" | "create_meeting" | "update_meeting" | "none",
-  "taskPayload": { "id": "Mã task (nếu sửa)", "project_id": "Mã ID của dự án tương ứng", "title": "Tiêu đề (nếu tạo)", "assignee": "Người phụ trách", "status": "Trạng thái mới", "target_date": "YYYY-MM-DD", "estimate": số_giờ, "priority": "Độ ưu tiên" },
+  "action": "create_project" | "update_issue" | "create_issue" | "show_my_issues" | "leave_request" | "check_in_out" | "breakdown_issue" | "update_sub_issues" | "archive_issue" | "delete_issue" | "create_meeting" | "update_meeting" | "none",
+  "taskPayload": { "id": "Mã task (nếu sửa)", "task_id": "UUID/shortId (archive|delete)", "project_id": "Mã ID của dự án tương ứng", "title": "Tiêu đề (nếu tạo)", "assignee": "Người phụ trách", "status": "Trạng thái mới (Done được tự chuyển)", "target_date": "YYYY-MM-DD", "estimate": số_giờ, "priority": "Độ ưu tiên", "reason": "Lý do archive/xoá" },
   "projectPayload": { "id": "Mã dự án (nếu sửa)", "title": "Tên dự án mới", "description": "Mô tả dự án", "status": "Trạng thái mới" },
-  "leavePayload": { "leaveType": "sick" | "annual" | "personal", "startDate": "YYYY-MM-DD", "endDate": "YYYY-MM-DD", "reason": "Lý do xin nghỉ" },
+  "leavePayload": { "leaveType": "sick" | "annual" | "personal" | "remote", "startDate": "YYYY-MM-DD", "endDate": "YYYY-MM-DD", "reason": "Lý do xin nghỉ" },
   "checkInOutPayload": { "status": "present", "notes": "Ghi chú", "employee_name": "Tên nhân sự" },
   "breakdownPayload": { "task_id": "Mã ID" },
   "updateSubtasksPayload": { "task_id": "Mã ID", "titles": ["V1", "V2"] },
-  "approvalPayload": { "task_id": "Mã ID", "type": "extend" | "archive" | "delete", "new_deadline": "YYYY-MM-DD", "reason": "Ghi chú" },
   "meetingPayload": { "title": "Tiêu đề", "description": "Mô tả", "startTime": "YYYY-MM-DDTHH:mm:ss", "endTime": "YYYY-MM-DDTHH:mm:ss", "attendees": ["email1", "email2"] },
   "updateMeetingPayload": { "meeting_id": "Mã ID", "title": "Tiêu đề", "description": "Mô tả", "startTime": "YYYY-MM-DDTHH:mm:ss", "endTime": "YYYY-MM-DDTHH:mm:ss", "attendees": ["email1", "email2"], "status": "cancelled" }
 }`;
 
-    let lettaConvId = currentUser.lettaConversationId || null;
-    if (!lettaConvId) {
-      try {
-        lettaConvId = await getOrCreateConversation(currentUser.email, currentUser.fullName || currentUser.name);
-      } catch (err: any) {
-        console.warn("Lỗi khởi tạo Letta Conversation (sẽ fallback sang OmniRouter):", err.message);
+    // Telegram fast path: skip Letta (often multi-second / cold) → Gemini Flash directly
+    let lettaConvId: string | null = null;
+    if (!isTelegramFast) {
+      lettaConvId = currentUser.lettaConversationId || null;
+      if (!lettaConvId) {
+        try {
+          lettaConvId = await getOrCreateConversation(currentUser.email, currentUser.fullName || currentUser.name);
+        } catch (err: any) {
+          console.warn("Lỗi khởi tạo Letta Conversation (sẽ fallback sang OmniRouter):", err.message);
+        }
       }
     }
 
-    const fullPrompt = `${systemPrompt}\n\nUser Message: ${message}`;
+    // Shorter prompt for telegram to cut TTFT
+    const telegramSystem = isTelegramFast
+      ? `Bạn là trợ lý StorymeeTeam (Telegram). Trả lời ngắn gọn tiếng Việt, Markdown sạch.
+Ngày: ${(new Date(Date.now() + 7 * 3600000)).toISOString().substring(0, 10)}
+User: ${JSON.stringify({ name: currentUser.fullName || currentUser.name, email: currentUser.email, role: currentUser.role })}
+HR: ${hrContext}
+Projects: ${JSON.stringify((projects || []).slice(0, 15))}
+Roster: ${(companyRules || '').slice(0, 1200)}
+
+Chỉ khi user yêu cầu THAY ĐỔI (tạo/sửa task, Done, archive, xoá, nghỉ, checkin, họp) mới set action ≠ none.
+Done → update_issue status Done. Archive → archive_issue. Xoá → delete_issue. Xin nghỉ/remote → leave_request (cần admin).
+Trả về JSON: {"reply":"...","action":"none|create_issue|update_issue|archive_issue|delete_issue|create_project|show_my_issues|leave_request|check_in_out|create_meeting|update_meeting|list_leave_requests","taskPayload":{},"leavePayload":{},"checkInOutPayload":{},"meetingPayload":{}}
+leavePayload: leaveType annual|remote|sick|personal, startDate, endDate, reason.
+Dùng shortId task (PROJ-n). Không HTML.`
+      : null;
+
+    const fullPrompt = isTelegramFast
+      ? `${telegramSystem}\n\nUser: ${message}`
+      : `${systemPrompt}\n\nUser Message: ${message}`;
     
     let reply: string | null = null;
     let fallbackProvider = '';
     let fallbackModel = '';
 
     try {
+      if (isTelegramFast) {
+        throw new Error("Telegram fast mode — skip Letta");
+      }
       if (!lettaConvId) {
         throw new Error("Không có Letta Conversation ID (bỏ qua Letta).");
       }
@@ -198,9 +240,15 @@ Nhiệm vụ của bạn:
         throw new Error("Letta Agent returned empty content (possibly only internal monologue).");
       }
       } catch (lettaError: any) {
-      console.warn("Letta Agent failed or rate limited. Falling back to Gemini Native Tool Calling...", lettaError.message);
+      console.warn("Letta skipped/failed. Gemini Native...", lettaError.message);
       try {
-        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY || 'AIzaSyC7lBGGw_c2sM6RHif2k32E6mAiZBzCUyY'}`;
+        const model = isTelegramFast
+          ? (process.env.TELEGRAM_GEMINI_MODEL || 'gemini-2.0-flash')
+          : 'gemini-2.5-flash';
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY || ''}`;
+        if (!process.env.GEMINI_API_KEY) {
+          throw new Error('Missing GEMINI_API_KEY');
+        }
         
         const toolsDefinition = [{
           functionDeclarations: [
@@ -243,8 +291,10 @@ Nhiệm vụ của bạn:
         let messages: any[] = [{ role: "user", parts: [{ text: fullPrompt }] }];
         let finalRawText = "";
         let debugTool: any = "Deploy verified";
+        const maxTurns = isTelegramFast ? 2 : 3;
+        const llmTimeout = isTelegramFast ? 28000 : 45000;
 
-        while (turnCount < 3) {
+        while (turnCount < maxTurns) {
           let currentToolConfig: any = { functionCallingConfig: { mode: "AUTO" } };
 
           const hubRes = await fetch(geminiUrl, {
@@ -252,11 +302,20 @@ Nhiệm vụ của bạn:
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               contents: messages,
-              tools: toolsDefinition,
+              tools: isTelegramFast ? toolsDefinition : toolsDefinition,
               toolConfig: currentToolConfig,
-              systemInstruction: { parts: [{ text: "BẠN LÀ AI ASSISTANT STORYMEE. HÃY GỌI TOOL NẾU CẦN LẤY DỮ LIỆU. CHỈ TRẢ VỀ JSON KHI ĐÃ ĐỦ DỮ LIỆU ĐỂ TRẢ LỜI." }] }
+              systemInstruction: {
+                parts: [{
+                  text: isTelegramFast
+                    ? "Storymee Telegram assistant. Prefer JSON final answer. Call tools only if needed for live data. Keep replies short."
+                    : "BẠN LÀ AI ASSISTANT STORYMEE. HÃY GỌI TOOL NẾU CẦN LẤY DỮ LIỆU. CHỈ TRẢ VỀ JSON KHI ĐÃ ĐỦ DỮ LIỆU ĐỂ TRẢ LỜI."
+                }]
+              },
+              generationConfig: isTelegramFast
+                ? { temperature: 0.3, maxOutputTokens: 1024 }
+                : undefined,
             }),
-            signal: AbortSignal.timeout(45000)
+            signal: AbortSignal.timeout(llmTimeout)
           });
 
           if (!hubRes.ok) {
@@ -279,19 +338,43 @@ Nhiệm vụ của bạn:
             if (fnCall.name === "get_my_issues") {
               try {
                 const issuesRes = await coreApiClient.get('/plane/issues') as any;
-                // Only return minimal info to save tokens
-                const minimal = (issuesRes.data || []).map((t:any) => ({id: t.id, shortId: t.shortId || `${t.Project?.identifier}-${t.sequenceId}`, title: t.title, status: t.State?.name, parentId: t.parentId}));
+                let list = issuesRes.data || [];
+                // Telegram: only current user's open tasks (smaller + faster)
+                if (isTelegramFast && currentUser?.id) {
+                  list = list.filter((t: any) => t.assigneeId === currentUser.id || t.Assignee?.id === currentUser.id);
+                }
+                const minimal = list.slice(0, isTelegramFast ? 40 : 80).map((t: any) => ({
+                  shortId: `${t.Project?.identifier || 'ID'}-${t.sequenceId}`,
+                  title: t.title,
+                  status: t.State?.name,
+                  deadline: t.targetDate ? String(t.targetDate).split('T')[0] : null,
+                }));
                 toolResultObj = { success: true, data: minimal };
               } catch(e:any) { toolResultObj = { error: e.message }; }
             } else if (fnCall.name === "get_attendance_report") {
               try {
-                const attRes = await coreApiClient.get('/hr/attendance') as any;
-                toolResultObj = { success: true, data: attRes.data?.slice(-50) || [] }; // Limit context
+                const q = isTelegramFast && currentUser?.id
+                  ? `/hr/attendance?memberId=${currentUser.id}`
+                  : '/hr/attendance';
+                const attRes = await coreApiClient.get(q) as any;
+                toolResultObj = { success: true, data: attRes.data?.slice(-30) || [] };
               } catch(e:any) { toolResultObj = { error: e.message }; }
             } else if (fnCall.name === "get_team_leaves") {
               try {
                 const leaveRes = await coreApiClient.get('/hr/leave-requests') as any;
-                toolResultObj = { success: true, data: leaveRes.data?.slice(-20) || [] };
+                let leaves = leaveRes.data || [];
+                if (isTelegramFast) leaves = leaves.filter((l: any) => l.status === 'pending' || l.memberId === currentUser?.id);
+                toolResultObj = {
+                  success: true,
+                  data: leaves.slice(0, 15).map((l: any) => ({
+                    id: l.id,
+                    name: l.member?.fullName,
+                    type: l.leaveType,
+                    status: l.status,
+                    from: l.startDate,
+                    to: l.endDate,
+                  })),
+                };
               } catch(e:any) { toolResultObj = { error: e.message }; }
             }
 
@@ -340,7 +423,7 @@ Nhiệm vụ của bạn:
       cleanReply = jsonMatch[0];
     }
     
-    let result;
+    let result: any;
     try {
       result = JSON.parse(cleanReply);
     } catch (e: any) {
@@ -350,6 +433,12 @@ Nhiệm vụ của bạn:
         reply: reply,
         action: "none"
       };
+    }
+    // Normalize LLM aliases → FE/MCP vocabulary
+    const normalized = normalizeLlmAction(result.action);
+    result.action = normalized;
+    if (normalized === 'archive_issue' || normalized === 'delete_issue') {
+      result.taskPayload = pickLlmPayload(normalized, result);
     }
     
     const sentTokens = Math.round(message.length * 0.75 + 1500);

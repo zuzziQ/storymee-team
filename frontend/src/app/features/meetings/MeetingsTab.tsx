@@ -8,7 +8,7 @@ interface MeetingsTabProps {
   teamMembers?: TeamMember[];
 }
 
-export default function MeetingsTab({ meetings, setMeetings, teamMembers = [] }: MeetingsTabProps) {
+export default function MeetingsTab({ meetings, setMeetings, teamMembers = [], activeUser }: MeetingsTabProps & { activeUser?: TeamMember }) {
   const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(meetings.length > 0 ? meetings[0].id : null);
   const [isEditingDocs, setIsEditingDocs] = useState(false);
   const [docInputs, setDocInputs] = useState<{ title: string; url: string }[]>([]);
@@ -17,11 +17,59 @@ export default function MeetingsTab({ meetings, setMeetings, teamMembers = [] }:
   const [outputInputs, setOutputInputs] = useState<{ title: string; url: string }[]>([]);
 
   const [saving, setSaving] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
+  const [createForm, setCreateForm] = useState({
+    title: '',
+    description: '',
+    startTime: '',
+    endTime: '',
+    meetLink: '',
+    attendees: [] as string[],
+  });
 
   const [isEditingMeeting, setIsEditingMeeting] = useState(false);
   const [meetingInputs, setMeetingInputs] = useState<{title: string; description: string; meetLink: string; attendees: string[]}>({
     title: '', description: '', meetLink: '', attendees: []
   });
+
+  const handleCreateMeeting = async () => {
+    if (!createForm.title.trim() || !createForm.startTime) {
+      alert('Cần tiêu đề và thời gian bắt đầu');
+      return;
+    }
+    const hostId = activeUser?.id || teamMembers[0]?.id;
+    if (!hostId) {
+      alert('Không xác định host (cần đăng nhập user có id DB)');
+      return;
+    }
+    const start = new Date(createForm.startTime);
+    const end = createForm.endTime
+      ? new Date(createForm.endTime)
+      : new Date(start.getTime() + 60 * 60 * 1000);
+    setSaving(true);
+    try {
+      const res: any = await coreApiClient.post(API_ROUTES.HR.MEETINGS, {
+        title: createForm.title,
+        description: createForm.description,
+        startTime: start.toISOString(),
+        endTime: end.toISOString(),
+        hostId,
+        meetLink: createForm.meetLink || undefined,
+        attendees: createForm.attendees,
+      });
+      if (res?.status === 'success' && res.data) {
+        setMeetings((prev) => [res.data, ...prev]);
+        setSelectedMeetingId(res.data.id);
+        setShowCreate(false);
+        setCreateForm({ title: '', description: '', startTime: '', endTime: '', meetLink: '', attendees: [] });
+      } else {
+        alert(res?.message || 'Tạo lịch họp thất bại');
+      }
+    } catch (e: any) {
+      alert(e?.data?.message || e?.message || 'Lỗi tạo lịch họp');
+    }
+    setSaving(false);
+  };
 
   const handleEditMeeting = () => {
     if (!selected) return;
@@ -116,9 +164,104 @@ export default function MeetingsTab({ meetings, setMeetings, teamMembers = [] }:
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: 24, height: '100%' }}>
       {/* CỘT TRÁI: DANH SÁCH LỊCH HỌP */}
       <div className='glass' style={{ padding: 24, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
-        <h2 style={{ fontSize: 18, color: '#fafafa', margin: '0 0 20px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span>📅</span> Lịch họp & Sự kiện
-        </h2>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, gap: 12 }}>
+          <h2 style={{ fontSize: 18, color: '#fafafa', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span>📅</span> Lịch họp & Sự kiện
+          </h2>
+          <button
+            className="btn-primary"
+            onClick={() => setShowCreate((v) => !v)}
+            style={{ fontSize: 12, padding: '8px 14px', borderRadius: 8 }}
+          >
+            {showCreate ? 'Đóng' : '+ Tạo lịch họp'}
+          </button>
+        </div>
+
+        {showCreate && (
+          <div className="glass" style={{ padding: 16, marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <input
+              placeholder="Tiêu đề cuộc họp *"
+              value={createForm.title}
+              onChange={(e) => setCreateForm({ ...createForm, title: e.target.value })}
+              style={{ padding: 10, borderRadius: 8, border: '1px solid var(--border)', background: 'rgba(0,0,0,0.25)', color: '#fafafa' }}
+            />
+            <textarea
+              placeholder="Mô tả"
+              value={createForm.description}
+              onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
+              rows={2}
+              style={{ padding: 10, borderRadius: 8, border: '1px solid var(--border)', background: 'rgba(0,0,0,0.25)', color: '#fafafa' }}
+            />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <label style={{ fontSize: 11, color: '#a1a1aa' }}>
+                Bắt đầu *
+                <input
+                  type="datetime-local"
+                  value={createForm.startTime}
+                  onChange={(e) => setCreateForm({ ...createForm, startTime: e.target.value })}
+                  style={{ width: '100%', marginTop: 4, padding: 8, borderRadius: 8, border: '1px solid var(--border)', background: 'rgba(0,0,0,0.25)', color: '#fafafa' }}
+                />
+              </label>
+              <label style={{ fontSize: 11, color: '#a1a1aa' }}>
+                Kết thúc
+                <input
+                  type="datetime-local"
+                  value={createForm.endTime}
+                  onChange={(e) => setCreateForm({ ...createForm, endTime: e.target.value })}
+                  style={{ width: '100%', marginTop: 4, padding: 8, borderRadius: 8, border: '1px solid var(--border)', background: 'rgba(0,0,0,0.25)', color: '#fafafa' }}
+                />
+              </label>
+            </div>
+            <input
+              placeholder="Link Meet / Zoom (tuỳ chọn)"
+              value={createForm.meetLink}
+              onChange={(e) => setCreateForm({ ...createForm, meetLink: e.target.value })}
+              style={{ padding: 10, borderRadius: 8, border: '1px solid var(--border)', background: 'rgba(0,0,0,0.25)', color: '#fafafa' }}
+            />
+            <div>
+              <div style={{ fontSize: 11, color: '#a1a1aa', marginBottom: 6 }}>Người tham dự</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 120, overflowY: 'auto' }}>
+                {teamMembers.filter((m) => (m.accountStatus || 'active') === 'active').map((m) => {
+                  const checked = createForm.attendees.includes(m.id);
+                  return (
+                    <label
+                      key={m.id}
+                      style={{
+                        fontSize: 11,
+                        padding: '4px 8px',
+                        borderRadius: 6,
+                        border: `1px solid ${checked ? '#a78bfa' : 'var(--border)'}`,
+                        background: checked ? 'rgba(167,139,250,0.15)' : 'transparent',
+                        color: '#e4e4e7',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4,
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => {
+                          setCreateForm((f) => ({
+                            ...f,
+                            attendees: checked
+                              ? f.attendees.filter((id) => id !== m.id)
+                              : [...f.attendees, m.id],
+                          }));
+                        }}
+                      />
+                      {m.name || m.fullName}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+            <button className="btn-primary" disabled={saving} onClick={handleCreateMeeting} style={{ padding: 10, borderRadius: 8 }}>
+              {saving ? 'Đang tạo…' : 'Lưu lịch họp'}
+            </button>
+          </div>
+        )}
         
         {sortedMeetings.length === 0 ? (
           <div style={{ color: '#71717a', fontSize: 13 }}>Không có lịch họp nào.</div>

@@ -10,7 +10,8 @@ const planeRoutes: FastifyPluginAsync = async (fastify) => {
     fastify.get('/issues', PlaneController.getIssues);
     fastify.post('/issues', PlaneController.createIssue);
     fastify.patch('/issues/:id', PlaneController.updateIssue);
-    fastify.post('/issues/:id/review', PlaneController.reviewIssue); // Admin duyệt task
+    fastify.post('/issues/:id/review', PlaneController.reviewIssue); // Admin duyệt task (SSOT)
+    fastify.post('/issues/:id/request-archive', PlaneController.requestArchive); // Employee xin archive (PlIssue)
     fastify.delete('/issues/:id', PlaneController.deleteIssue);
 };
 

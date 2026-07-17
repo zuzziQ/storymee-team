@@ -22,11 +22,12 @@ export class MeetingController {
         title, description, startTime, endTime, hostId, attendees, meetLink
       });
 
-      // TODO: Publish event via NATS
       try {
         const nats = (req.server as any).nats;
         if (nats) {
-          nats.publish('core.team.meeting.created', JSON.stringify({ meeting }));
+          const { StringCodec } = require('nats');
+          const sc = StringCodec();
+          nats.publish('core.team.meeting.created', sc.encode(JSON.stringify({ meeting })));
         }
       } catch (e) {
         req.log.error('Failed to publish meeting NATS event:', e);
@@ -48,11 +49,12 @@ export class MeetingController {
         title, description, startTime, endTime, attendees, meetLink, status, documents, outputUrls
       });
 
-      // TODO: Publish event via NATS
       try {
         const nats = (req.server as any).nats;
         if (nats) {
-          nats.publish('core.team.meeting.updated', JSON.stringify({ meeting }));
+          const { StringCodec } = require('nats');
+          const sc = StringCodec();
+          nats.publish('core.team.meeting.updated', sc.encode(JSON.stringify({ meeting })));
         }
       } catch (e) {
         req.log.error('Failed to publish meeting updated NATS event:', e);

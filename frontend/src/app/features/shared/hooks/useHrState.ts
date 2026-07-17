@@ -1,7 +1,9 @@
 import { useState } from 'react';
+import toast from 'react-hot-toast';
 import { TeamMember } from '../../../constants';
 import { coreApiClient } from '../../../../lib/apiClient';
 import { API_ROUTES } from '@/lib/apiClient';
+import { mapLeaveFromApi } from '@/lib/leaveApi';
 
 export function useHrState() {
   const [dbError, setDbError] = useState<string | null>(null);
@@ -9,7 +11,7 @@ export function useHrState() {
   const [attendanceList, setAttendanceList] = useState<any[]>([]);
   const [leavesPending, setLeavesPending] = useState<any[]>([]);
   const [selectedMemberId, setSelectedMemberId] = useState<string>('m2');
-  const [hrSubTab, setHrSubTab] = useState<'profile' | 'attendance' | 'leaves' | 'payroll' | 'importer'>('profile');
+  const [hrSubTab, setHrSubTab] = useState<'profile' | 'attendance' | 'leaves' | 'payroll' | 'importer' | 'accounts' | 'settings'>('profile');
   const [hrProfileView, setHrProfileView] = useState<'chart' | 'list'>('chart');
   const [hrSearchQuery, setHrSearchQuery] = useState('');
   const [hrDeptFilter, setHrDeptFilter] = useState('all');
@@ -18,11 +20,33 @@ export function useHrState() {
     setActiveUser: (u: TeamMember) => void,
     activeUserEmail?: string
   ) => {
+    let viewerQ = '';
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('st_user');
+        if (stored) {
+          const u = JSON.parse(stored);
+          if (u?.email) viewerQ = `&viewerEmail=${encodeURIComponent(u.email)}`;
+          else if (u?.id) viewerQ = `&viewerId=${encodeURIComponent(u.id)}`;
+        }
+      } catch {}
+    }
+    if (!viewerQ && activeUserEmail) {
+      viewerQ = `&viewerEmail=${encodeURIComponent(activeUserEmail)}`;
+    }
+
     try {
       setDbError(null);
-      const membersData = await coreApiClient.get(API_ROUTES.HR.TEAM_MEMBERS);
+      const membersData = await coreApiClient.get(
+        `${API_ROUTES.HR.TEAM_MEMBERS}?status=all${viewerQ}`
+      );
       if ((membersData.status === 'success' || membersData.success === true) && Array.isArray(membersData.data)) {
-        const mappedMembers = membersData.data.map((m: any) => ({ ...m, name: m.fullName }));
+        const mappedMembers = membersData.data.map((m: any) => ({
+          ...m,
+          name: m.fullName || m.name,
+          accountStatus: m.accountStatus || (m.isActive === false ? 'suspended' : 'active'),
+          isTeamAdmin: m.isTeamAdmin === true,
+        }));
         setTeamMembers(mappedMembers);
 
         let targetEmail = activeUserEmail;
@@ -50,7 +74,9 @@ export function useHrState() {
     }
 
     try {
-      const attendanceData = await coreApiClient.get(API_ROUTES.HR.ATTENDANCE);
+      const attendanceData = await coreApiClient.get(
+        `${API_ROUTES.HR.ATTENDANCE}${viewerQ ? `?${viewerQ.slice(1)}` : ''}`
+      );
       if ((attendanceData.status === 'success' || attendanceData.success === true) && Array.isArray(attendanceData.data)) {
         setAttendanceList(attendanceData.data);
       }
@@ -61,21 +87,7 @@ export function useHrState() {
     try {
       const leavesData = await coreApiClient.get(API_ROUTES.HR.LEAVE_REQUESTS);
       if ((leavesData.status === 'success' || leavesData.success === true) && Array.isArray(leavesData.data)) {
-        const mappedLeaves = leavesData.data.map((l: any) => ({
-          id: l.id,
-          name: l.member?.fullName || 'Không rõ',
-          type: l.leaveType === 'remote' ? 'Remote' : l.leaveType === 'annual' ? 'Leave' : l.leaveType,
-          date: l.startDate ? new Date(l.startDate).toLocaleDateString('vi-VN') : '',
-          dateEnd: l.endDate ? new Date(l.endDate).toLocaleDateString('vi-VN') : '',
-          reason: l.reason || '',
-          handover: '',
-          days: l.endDate && l.startDate
-            ? Math.max(1, Math.round((new Date(l.endDate).getTime() - new Date(l.startDate).getTime()) / (1000 * 3600 * 24)))
-            : 1,
-          status: l.status === 'approved' ? 'Approved' : l.status === 'rejected' ? 'Rejected' : 'Pending',
-          memberId: l.memberId
-        }));
-        setLeavesPending(mappedLeaves);
+        setLeavesPending(leavesData.data.map(mapLeaveFromApi));
       }
     } catch (err) {
       console.error('Lỗi fetch leave requests:', err);
@@ -84,16 +96,28 @@ export function useHrState() {
 
   const handleCheckinOffice = async (memberId: string, notes?: string, workType?: string) => {
     try {
+      // Prefer explicit workType; if missing, derive from member workArrangement.
+      // API still enforces: full remote + approved remote leave → remote.
+      const member = teamMembers.find((m) => m.id === memberId);
+      const resolved =
+        workType ||
+        (member?.workArrangement === 'remote' ? 'remote' : 'office');
       const res: any = await coreApiClient.post(API_ROUTES.HR.ATTENDANCE_CHECKIN, {
         memberId,
-        notes: notes || 'Check-in từ Web Portal',
-        workType: workType || 'office'
+        notes: notes || (resolved === 'remote' ? 'Check-in Remote từ Web Portal' : 'Check-in từ Web Portal'),
+        workType: resolved,
       });
       if (res?.status === 'already_checked_in') {
         alert('⚠️ Bạn đã check-in rồi!');
         return;
       }
-      alert('✅ Check-in thành công!');
+      const wt = res?.resolvedWorkType || res?.data?.workType || resolved;
+      const why = res?.resolveReason;
+      alert(
+        `✅ Check-in thành công (${wt === 'remote' ? '🏠 Remote' : '🏢 Office'})` +
+          (why === 'approved_remote_leave' ? '\n(Đơn remote đã duyệt hôm nay)' : '') +
+          (why === 'full_remote_hr' ? '\n(Full remote theo HR)' : '')
+      );
     } catch (err: any) {
       console.error('Lỗi check-in từ web portal:', err);
       if (err?.data?.status === 'already_checked_in') {
@@ -120,22 +144,28 @@ export function useHrState() {
   const handleApproveLeave = async (id: string, onSuccess?: () => void) => {
     try {
       await coreApiClient.post(`${API_ROUTES.HR.LEAVE_REQUESTS}/${id}/approve`, { status: 'approved' });
-      alert('🎉 Đã phê duyệt đơn nghỉ phép/remote thành công trên Database!');
+      toast.success('Đã duyệt đơn nghỉ/remote');
+      setLeavesPending((prev) =>
+        prev.map((l) => (l.id === id ? { ...l, status: 'Approved' } : l))
+      );
       onSuccess?.();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Lỗi duyệt phép:', err);
-      alert('Không thể kết nối đến máy chủ để duyệt phép.');
+      toast.error(err?.data?.message || 'Không duyệt được đơn');
     }
   };
 
   const handleRejectLeave = async (id: string, onSuccess?: () => void) => {
     try {
       await coreApiClient.post(`${API_ROUTES.HR.LEAVE_REQUESTS}/${id}/approve`, { status: 'rejected' });
-      alert('❌ Đã từ chối đơn nghỉ phép/remote thành công!');
+      toast.success('Đã từ chối đơn');
+      setLeavesPending((prev) =>
+        prev.map((l) => (l.id === id ? { ...l, status: 'Rejected' } : l))
+      );
       onSuccess?.();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Lỗi từ chối phép:', err);
-      alert('Không thể kết nối đến máy chủ để từ chối phép.');
+      toast.error(err?.data?.message || 'Không từ chối được đơn');
     }
   };
 

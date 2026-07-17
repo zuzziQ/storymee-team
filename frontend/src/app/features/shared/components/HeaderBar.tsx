@@ -1,6 +1,7 @@
 import React from 'react';
 import { Plus, Bell, LogOut, ChevronDown, Check, User } from 'lucide-react';
 import { TeamMember, Project, Announcement, getInitials } from '../../../constants';
+import BroadcastNotify from './BroadcastNotify';
 
 interface HeaderBarProps {
   tab: string;
@@ -23,10 +24,11 @@ interface HeaderBarProps {
   teamMembers: TeamMember[];
   setSelectedMemberId: (id: string) => void;
   setTab: (tab: string) => void;
-  setHrSubTab: (subTab: 'profile' | 'attendance' | 'leaves' | 'payroll' | 'importer') => void;
+  setHrSubTab: (subTab: 'profile' | 'attendance' | 'leaves' | 'payroll' | 'importer' | 'accounts' | 'settings') => void;
   handleCheckinOffice: (memberId: string, notes?: string, workType?: string) => Promise<void>;
   handleCheckoutOffice: (memberId: string, notes?: string) => Promise<void>;
   attendanceList: any[];
+  onAnnouncementsRefresh?: () => void;
 }
 
 export default function HeaderBar({
@@ -53,7 +55,8 @@ export default function HeaderBar({
   handleCheckoutOffice,
   attendanceList,
   appNotifications = [],
-  setAppNotifications
+  setAppNotifications,
+  onAnnouncementsRefresh
 }: HeaderBarProps) {
   const relevantAnnouncements = announcements.filter(a => !a.targetUserId || a.targetUserId === activeUser?.id);
   const unreadAnnouncements = relevantAnnouncements.filter(a => !(a.readBy || []).includes(activeUser?.id || ''));
@@ -120,6 +123,7 @@ export default function HeaderBar({
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <BroadcastNotify activeUser={activeUser} onCreated={onAnnouncementsRefresh} />
         {/* Quick Check-in/out Header Widget */}
         {hasCheckedOut ? (
            <button
@@ -151,16 +155,25 @@ export default function HeaderBar({
            <button
              onClick={async () => {
                if (activeUser) {
-                 await handleCheckinOffice(activeUser?.id, 'Check-in từ Header Bar', 'office');
+                 const wt = activeUser.workArrangement === 'remote' ? 'remote' : 'office';
+                 await handleCheckinOffice(
+                   activeUser?.id,
+                   wt === 'remote' ? 'Check-in Remote từ Header Bar' : 'Check-in từ Header Bar',
+                   wt
+                 );
                }
              }}
              style={{
                padding: '6px 12px', fontSize: 11, fontWeight: 600, borderRadius: 8, border: 'none',
-               background: 'linear-gradient(135deg, #22c55e, #16a34a)', color: 'white', cursor: 'pointer',
+               background: activeUser?.workArrangement === 'remote'
+                 ? 'linear-gradient(135deg, #22c55e, #16a34a)'
+                 : 'linear-gradient(135deg, #22c55e, #16a34a)',
+               color: 'white', cursor: 'pointer',
                display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.2s'
              }}
            >
-             <span>🕒</span> Check-in Văn phòng
+             <span>{activeUser?.workArrangement === 'remote' ? '🏠' : '🕒'}</span>
+             {activeUser?.workArrangement === 'remote' ? 'Check-in Remote' : 'Check-in Văn phòng'}
            </button>
         )}
 

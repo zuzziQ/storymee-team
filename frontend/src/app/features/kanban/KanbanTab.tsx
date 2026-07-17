@@ -7,7 +7,7 @@ import {
 
 // ===================== KANBAN CARD =====================
 function TaskCard({
-  task, onClick, onDragStart, onDragEnd, projects, isAdmin, activeUserEmail, onArchiveDirect, onRequestArchive
+  task, onClick, onDragStart, onDragEnd, projects, isAdmin, activeUserEmail, onArchiveDirect, onRequestArchive, onDeleteHard
 }: {
   task: Task;
   onClick: () => void;
@@ -18,6 +18,7 @@ function TaskCard({
   activeUserEmail: string;
   onArchiveDirect: (task: Task) => void;
   onRequestArchive: (task: Task) => void;
+  onDeleteHard?: (task: Task) => void;
 }) {
   const [canDrag, setCanDrag] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -78,10 +79,10 @@ function TaskCard({
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           {/* Action buttons (shown on hover) */}
           {hovered && (
-            isAdmin ? (
+            <>
               <button
                 onClick={(e) => { e.stopPropagation(); onArchiveDirect(task); }}
-                title="Lưu trữ task (Admin)"
+                title="Lưu trữ task (ẩn khỏi Kanban)"
                 style={{
                   padding: '2px 5px', borderRadius: 4, border: 'none', cursor: 'pointer',
                   background: 'rgba(245,158,11,0.15)', color: '#f59e0b',
@@ -90,19 +91,20 @@ function TaskCard({
               >
                 <Archive size={10} /> Lưu trữ
               </button>
-            ) : (
-              <button
-                onClick={(e) => { e.stopPropagation(); onRequestArchive(task); }}
-                title="Yêu cầu archive task (chờ Admin duyệt)"
-                style={{
-                  padding: '2px 5px', borderRadius: 4, border: 'none', cursor: 'pointer',
-                  background: 'rgba(245,158,11,0.15)', color: '#f59e0b',
-                  display: 'flex', alignItems: 'center', gap: 2, fontSize: 9, fontWeight: 600
-                }}
-              >
-                <Archive size={10} /> Archive
-              </button>
-            )
+              {onDeleteHard && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onDeleteHard(task); }}
+                  title="Xoá vĩnh viễn"
+                  style={{
+                    padding: '2px 5px', borderRadius: 4, border: 'none', cursor: 'pointer',
+                    background: 'rgba(239,68,68,0.15)', color: '#ef4444',
+                    display: 'flex', alignItems: 'center', gap: 2, fontSize: 9, fontWeight: 600
+                  }}
+                >
+                  <Trash2 size={10} /> Xoá
+                </button>
+              )}
+            </>
           )}
           <span style={{ fontSize: 10, color: '#71717a', display: 'flex', alignItems: 'center', gap: 3 }}>
             <Clock size={10} />{task.deadline ? task.deadline.replace('T', ' ') : ''}
@@ -146,6 +148,7 @@ interface KanbanTabProps {
   activeUserEmail: string;
   onArchiveTaskDirect: (task: Task) => void;
   onRequestArchive: (task: Task) => void;
+  onDeleteTaskHard?: (task: Task) => void;
   handleUpdateTaskStatus?: (id: string, status: string) => void;
   handleCreateTask?: (title: string, assignee: string, estimate: number, priority: any, status?: string) => Promise<void> | void;
 }
@@ -160,6 +163,7 @@ export default function KanbanTab({
   activeUserEmail,
   onArchiveTaskDirect,
   onRequestArchive,
+  onDeleteTaskHard,
   handleCreateTask
 }: KanbanTabProps) {
   const [dragOverCol, setDragOverCol] = useState<string | null>(null);
@@ -273,6 +277,7 @@ export default function KanbanTab({
                     activeUserEmail={activeUserEmail}
                     onArchiveDirect={onArchiveTaskDirect}
                     onRequestArchive={handleRequestArchiveWithPrompt}
+                    onDeleteHard={onDeleteTaskHard}
                   />
                 </div>
               ))}

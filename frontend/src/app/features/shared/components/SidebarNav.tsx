@@ -1,12 +1,13 @@
 import React from 'react';
 import { LayoutDashboard, Layers, KanbanSquare, Bot, Users, Zap, Settings, Sparkles, Calendar } from 'lucide-react';
 import { TeamMember } from '../../../constants';
+import { isTeamAdmin } from '@/lib/teamAuth';
 
 interface SidebarNavProps {
   tab: string;
   setTab: (tab: string) => void;
-  hrSubTab: 'profile' | 'attendance' | 'leaves' | 'payroll' | 'importer';
-  setHrSubTab: (subTab: 'profile' | 'attendance' | 'leaves' | 'payroll' | 'importer') => void;
+  hrSubTab: 'profile' | 'attendance' | 'leaves' | 'payroll' | 'importer' | 'accounts';
+  setHrSubTab: (subTab: 'profile' | 'attendance' | 'leaves' | 'payroll' | 'importer' | 'accounts') => void;
   activeUser: TeamMember;
 }
 
@@ -27,7 +28,7 @@ export default function SidebarNav({
   setHrSubTab,
   activeUser
 }: SidebarNavProps) {
-  const isAdmin = ['kimngan151091@gmail.com', 'lehuyducanh.vn@gmail.com', 'zuzzivn@gmail.com'].includes((activeUser?.email || '').toLowerCase());
+  const isAdmin = isTeamAdmin(activeUser);
 
   return (
     <aside style={{ width: 240, borderRight: '1px solid var(--border)', background: 'var(--bg-surface)', padding: 16, display: 'flex', flexDirection: 'column', gap: 20, flexShrink: 0 }}>

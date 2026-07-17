@@ -2,14 +2,8 @@ import { useState } from 'react';
 import { Task, TeamMember, Project, Priority } from '../../../constants';
 import { coreApiClient } from '../../../../lib/apiClient';
 import { API_ROUTES } from '@/lib/apiClient';
-
-function mapIssueStatus(nameLower: string, group: string): string {
-  if (nameLower === 'backlog' || group === 'backlog') return 'Backlog';
-  if (nameLower === 'in review' || nameLower === 'in_review') return 'In Review';
-  if (nameLower === 'in progress' || nameLower === 'working' || group === 'started') return 'In Progress';
-  if (nameLower === 'done' || nameLower === 'completed' || group === 'completed' || group === 'cancelled') return 'Done';
-  return 'Todo';
-}
+import { mapIssueStatus, toApiStatus } from '@/lib/taskStatus';
+import { resolveCreateProjectId } from '@/lib/projectInbox';
 
 const formatLocalTime = (isoString: string) => {
   if (!isoString) return '';
@@ -88,11 +82,7 @@ export function useTaskState() {
   ) => {
     setTasks(prev => prev.map(t => t.id === task.id ? task : t));
     try {
-      const statusMapping: Record<string, string> = {
-        'Backlog': 'backlog', 'Todo': 'pending', 'In Progress': 'working',
-        'In Review': 'in_review', 'Done': 'done'
-      };
-      const apiStatus = statusMapping[task.status] || 'pending';
+      const apiStatus = toApiStatus(task.status);
       const matchedMember = teamMembers.find(m => m.name === task.assignee);
       const subtaskId = task.dbId || task.id;
       let isoTargetDate: string | undefined;
@@ -103,7 +93,6 @@ export function useTaskState() {
         } catch {}
       }
       await coreApiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${subtaskId}`, {
-        name: task.title || undefined, // plane uses name in patch according to Plane API? Wait, Plane API issues uses `name` or `title`? Above in handleCreateTask it uses `title`.
         title: task.title || undefined,
         status: apiStatus,
         assigneeId: matchedMember ? matchedMember.id : undefined,
@@ -131,21 +120,18 @@ export function useTaskState() {
   ) => {
     try {
       const matchedMember = teamMembers.find(m => m.name === assignee);
-      const targetProjectId = activeProjectId !== 'default_no_project'
-        ? activeProjectId
-        : (projects.length > 1 ? projects[1].id : null);
-      if (!targetProjectId) {
-        alert('Không tìm thấy dự án nào hợp lệ để tạo Issue.');
-        return;
-      }
-      await coreApiClient.post(API_ROUTES.PLANE.ISSUES, {
+      // Filter "all" / no selection → DFLT (Không thuộc dự án nào), NEVER projects[0]/StorymeeTeam
+      const targetProjectId = resolveCreateProjectId(activeProjectId, projects as any);
+      const body: any = {
         title,
         priority: priority.toLowerCase(),
         assigneeId: matchedMember ? matchedMember.id : null,
-        projectId: targetProjectId,
         estimateHours: estimate || undefined,
         status: status
-      });
+      };
+      // Omit projectId if still null — API resolves inbox DFLT
+      if (targetProjectId) body.projectId = targetProjectId;
+      await coreApiClient.post(API_ROUTES.PLANE.ISSUES, body);
       onRefresh();
     } catch (err) {
       console.error('Lỗi tạo task:', err);
@@ -200,18 +186,47 @@ export function useTaskState() {
     }
   };
 
+  /** Hard-delete — assignee hoặc admin (API enforce). Cascade subtasks. */
+  const handleDeleteTaskHard = async (
+    task: { id: string; dbId?: string; title?: string },
+    actor: { id?: string; email?: string },
+    onRefresh: () => void
+  ) => {
+    const dbId = task.dbId || task.id;
+    const ok = window.confirm(
+      `⚠️ XOÁ VĨNH VIỄN task "${task.title || task.id}"?\n\nThao tác này không thể hoàn tác (cả subtask con). Nên dùng Archive nếu chỉ muốn ẩn.`
+    );
+    if (!ok) return;
+    try {
+      await coreApiClient.delete(API_ROUTES.PLANE.issueDelete(dbId), {
+        actorId: actor.id,
+        actorEmail: actor.email,
+      } as any);
+      setTasks((prev) => prev.filter((t) => t.id !== task.id && t.dbId !== dbId));
+      onRefresh();
+    } catch (err: any) {
+      console.error('Lỗi xoá task:', err);
+      alert(
+        'Không thể xoá task: ' +
+          (err?.data?.message || err?.message || String(err))
+      );
+    }
+  };
+
   const handleRequestArchive = async (
     task: { id: string; dbId?: string },
     reason: string,
     onRefresh: () => void
   ) => {
+    // SSOT: PlIssue via /plane/issues/:id/request-archive (không dùng legacy /hr/tasks SubTask)
     const dbId = task.dbId || task.id;
     try {
-      await coreApiClient.post(`${API_ROUTES.HR.TASKS}/${dbId}/request-archive`, { reason });
-      setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: 'In Review' as any } : t));
+      await coreApiClient.post(`${API_ROUTES.PLANE.ISSUES}/${dbId}/request-archive`, { reason });
       alert('✅ Đã gửi yêu cầu archive. Admin sẽ xem xét và xác nhận.');
+      onRefresh();
     } catch (err) {
       console.error('Lỗi gửi yêu cầu archive:', err);
+      alert('Không thể gửi yêu cầu archive: ' + String((err as any)?.message || err));
     }
   };
 
@@ -253,7 +268,7 @@ export function useTaskState() {
     onRefresh: () => void
   ) => {
     try {
-      await coreApiClient.post(`${API_ROUTES.PLANE.ISSUES}/${taskDbId}/review`, {
+      await coreApiClient.post(API_ROUTES.PLANE.issueReview(taskDbId), {
         decision,
         reviewerId,
         reviewNote,
@@ -280,6 +295,7 @@ export function useTaskState() {
     handleCreateSubtask,
     handleUpdateSubtaskState,
     handleArchiveTaskDirect,
+    handleDeleteTaskHard,
     handleRequestArchive,
     handleSubmitForReview,
     handleReviewDecision,

@@ -1,12 +1,22 @@
-import React from 'react';
-import { Clock, Users, TrendingUp, Calendar } from 'lucide-react';
+import React, { useMemo } from 'react';
+import { Clock, Users, AlertTriangle, CheckCircle2, ListTodo, Calendar } from 'lucide-react';
 import {
-  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  CartesianGrid
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+  Cell,
 } from 'recharts';
 import {
-  Task, TeamMember, Announcement, Meeting,
-  getPriorityDot, getStatusClass
+  Task,
+  TeamMember,
+  Announcement,
+  Meeting,
+  getPriorityDot,
+  getStatusClass,
 } from '../../constants';
 
 interface DashboardTabProps {
@@ -26,6 +36,14 @@ interface DashboardTabProps {
   setTab: (tab: string) => void;
 }
 
+const STATUS_COLORS: Record<string, string> = {
+  Backlog: '#71717a',
+  Todo: '#3b82f6',
+  'In Progress': '#f59e0b',
+  'In Review': '#a78bfa',
+  Done: '#22c55e',
+};
+
 export default function DashboardTab({
   overviewSubTab,
   setOverviewSubTab,
@@ -34,270 +52,395 @@ export default function DashboardTab({
   activeUser,
   teamMembers,
   tasks,
-  filteredTasks,
   leavesPending,
   announcements,
   meetings = [],
   attendanceList,
   setSelectedTask,
-  setTab
+  setTab,
 }: DashboardTabProps) {
-  // Tính toán tình hình hôm nay từ dữ liệu thực tế
   const now = new Date();
   const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   const todayLabel = now.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
+  const todayVn = new Date(Date.now() + 7 * 3600 * 1000).toISOString().substring(0, 10);
 
-  const todayAttendance = attendanceList.filter(a => a.date?.startsWith(todayStr));
-  const officeCount = todayAttendance.filter(a => a.workType === 'office').length;
-  const remoteCount = todayAttendance.filter(a => a.workType === 'remote').length;
-  const todayLeaveMembers = leavesPending.filter(l => {
-    if (!l.date) return false;
-    // date được format về dd/MM/yyyy từ fetchDbData
-    const parts = l.date.split('/');
-    if (parts.length !== 3) return false;
-    const lDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
-    return lDate === todayStr;
-  });
-  const leaveCount = todayLeaveMembers.length;
+  const todayAttendance = attendanceList.filter((a) => a.date?.startsWith(todayStr));
+  const officeCount = todayAttendance.filter((a) => a.workType === 'office').length;
+  const remoteCount = todayAttendance.filter((a) => a.workType === 'remote').length;
 
-  const remoteMemberNames = todayAttendance
-    .filter(a => a.workType === 'remote')
-    .map(a => a.member?.fullName || '?');
-  const leaveMemberNames = todayLeaveMembers.map(l => l.name);
+  const myTasks = useMemo(
+    () => tasks.filter((t) => t.assignee === activeUser.name || t.assigneeId === activeUser.id),
+    [tasks, activeUser]
+  );
+
+  const openTasks = useMemo(
+    () => tasks.filter((t) => t.status !== 'Done' && t.status !== 'Backlog'),
+    [tasks]
+  );
+
+  const overdueAll = useMemo(
+    () =>
+      openTasks.filter((t) => {
+        if (!t.deadline || t.deadline === 'None') return false;
+        return t.deadline.split('T')[0] < todayVn;
+      }),
+    [openTasks, todayVn]
+  );
+
+  const dueToday = useMemo(
+    () =>
+      openTasks.filter((t) => t.deadline && t.deadline.split('T')[0] === todayVn),
+    [openTasks, todayVn]
+  );
+
+  const statusChart = useMemo(() => {
+    const order = ['Todo', 'In Progress', 'In Review', 'Done', 'Backlog'];
+    return order.map((s) => ({
+      name: s === 'In Progress' ? 'Doing' : s === 'In Review' ? 'Review' : s,
+      full: s,
+      count: tasks.filter((t) => t.status === s).length,
+    }));
+  }, [tasks]);
+
+  const workloadChart = useMemo(() => {
+    const activeMembers = teamMembers.filter(
+      (m) => m.isActive !== false && (m.accountStatus || 'active') === 'active'
+    );
+    return activeMembers
+      .map((m) => {
+        const open = tasks.filter(
+          (t) =>
+            (t.assignee === m.name || t.assigneeId === m.id) &&
+            t.status !== 'Done'
+        ).length;
+        return { name: (m.name || '').split(' ').slice(-1)[0] || m.name, full: m.name, open };
+      })
+      .filter((r) => r.open > 0)
+      .sort((a, b) => b.open - a.open)
+      .slice(0, 8);
+  }, [teamMembers, tasks]);
+
+  const myProgress = myTasks.filter((t) => t.status === 'In Progress').length;
+  const myReview = myTasks.filter((t) => t.status === 'In Review').length;
+  const myDone = myTasks.filter((t) => t.status === 'Done').length;
+  const myOverdue = myTasks.filter(
+    (t) => t.status !== 'Done' && t.deadline && t.deadline.split('T')[0] < todayVn
+  ).length;
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      {/* Overview Header & Filter / Sub-tab Selector */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.01)', padding: '12px 16px', borderRadius: 12, border: '1px solid var(--border)', flexWrap: 'wrap', gap: 12 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Header */}
+      <div
+        className="glass"
+        style={{
+          padding: '14px 18px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: 12,
+        }}
+      >
         <div>
-          <div style={{ fontSize: 14, fontWeight: 600, color: '#fafafa' }}>Chào sếp và các nhân sự Storymee!</div>
-          <div style={{ fontSize: 11, color: '#71717a', marginTop: 2 }}>Trang tổng hợp nhanh công việc cá nhân và tiến trình của dự án.</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: '#fafafa' }}>
+            Tổng quan · {todayLabel}
+          </div>
+          <div style={{ fontSize: 11, color: '#71717a', marginTop: 2 }}>
+            Công việc, deadline & hoạt động team — không phụ thuộc estimate giờ.
+          </div>
         </div>
-
-        <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
-          {/* Sub-selectors */}
-          <div style={{ display: 'flex', gap: 4, background: 'rgba(0,0,0,0.2)', padding: 3, borderRadius: 8, border: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <div
+            style={{
+              display: 'flex',
+              gap: 3,
+              background: 'rgba(0,0,0,0.25)',
+              padding: 3,
+              borderRadius: 8,
+              border: '1px solid var(--border)',
+            }}
+          >
             {[
-              { id: 'all', label: '📊 Tất cả' },
-              { id: 'mine', label: '👤 Của tôi' },
-              { id: 'team', label: '👥 Của team' }
-            ].map(opt => (
+              { id: 'all', label: 'Tất cả' },
+              { id: 'mine', label: 'Của tôi' },
+              { id: 'team', label: 'Team' },
+            ].map((opt) => (
               <button
                 key={opt.id}
+                type="button"
                 onClick={() => setOverviewSubTab(opt.id as any)}
-                className="btn-ghost"
                 style={{
-                  padding: '5px 12px',
+                  padding: '6px 12px',
                   fontSize: 11,
                   borderRadius: 6,
                   border: 'none',
-                  background: overviewSubTab === opt.id ? 'rgba(255,255,255,0.06)' : 'transparent',
-                  color: overviewSubTab === opt.id ? 'white' : '#71717a',
                   cursor: 'pointer',
-                  fontWeight: overviewSubTab === opt.id ? 600 : 400
+                  background:
+                    overviewSubTab === opt.id ? 'rgba(167,139,250,0.2)' : 'transparent',
+                  color: overviewSubTab === opt.id ? '#e9d5ff' : '#71717a',
+                  fontWeight: overviewSubTab === opt.id ? 600 : 400,
                 }}
               >
                 {opt.label}
               </button>
             ))}
           </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 11, color: '#71717a' }}>Phạm vi:</span>
-            <select
-              value={timeFilter}
-              onChange={e => setTimeFilter(e.target.value as any)}
-              style={{
-                background: 'var(--bg-muted)',
-                border: '1px solid var(--border)',
-                color: '#fafafa',
-                fontSize: 12,
-                fontWeight: 500,
-                padding: '6px 12px',
-                borderRadius: 8,
-                outline: 'none',
-                cursor: 'pointer'
-              }}
-            >
-              <option value="sprint">📅 Cả Sprint hiện tại</option>
-              <option value="week">📅 Tuần này</option>
-              <option value="next-week">📅 Tuần sau</option>
-            </select>
-          </div>
+          <select
+            value={timeFilter}
+            onChange={(e) => setTimeFilter(e.target.value as any)}
+            style={{
+              background: 'var(--bg-muted)',
+              border: '1px solid var(--border)',
+              color: '#fafafa',
+              fontSize: 12,
+              padding: '6px 12px',
+              borderRadius: 8,
+              outline: 'none',
+            }}
+          >
+            <option value="sprint">Sprint</option>
+            <option value="week">Tuần này</option>
+            <option value="next-week">Tuần sau</option>
+          </select>
         </div>
       </div>
 
-      {/* Main Layout Grid */}
-      <div style={{ 
-        display: 'grid', 
-        gridTemplateColumns: overviewSubTab === 'all' ? '1.2fr 0.8fr' : '1fr', 
-        gap: 20, 
-        alignItems: 'start' 
-      }}>
-        
-        {/* LEFT COLUMN: GÓC CÁ NHÂN (MY WORKSPACE) */}
+      {/* KPI cards */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+          gap: 12,
+        }}
+      >
+        {[
+          {
+            label: 'Task mở (team)',
+            value: openTasks.length,
+            color: '#6366f1',
+            icon: <ListTodo size={16} />,
+            onClick: () => setTab('kanban'),
+          },
+          {
+            label: 'Quá hạn',
+            value: overdueAll.length,
+            color: '#ef4444',
+            icon: <AlertTriangle size={16} />,
+            onClick: () => setTab('kanban'),
+          },
+          {
+            label: 'Deadline hôm nay',
+            value: dueToday.length,
+            color: '#f59e0b',
+            icon: <Clock size={16} />,
+            onClick: () => setTab('kanban'),
+          },
+          {
+            label: 'Check-in hôm nay',
+            value: officeCount + remoteCount,
+            color: '#22c55e',
+            icon: <Users size={16} />,
+            onClick: () => setTab('hr'),
+          },
+          {
+            label: 'Đơn phép pending',
+            value: leavesPending.filter((l) => l.status === 'pending' || !l.status).length,
+            color: '#a78bfa',
+            icon: <Calendar size={16} />,
+            onClick: () => setTab('hr'),
+          },
+          {
+            label: 'Của tôi · Doing',
+            value: myProgress,
+            color: '#38bdf8',
+            icon: <CheckCircle2 size={16} />,
+            onClick: () => setOverviewSubTab('mine'),
+          },
+        ].map((c) => (
+          <button
+            key={c.label}
+            type="button"
+            className="glass"
+            onClick={c.onClick}
+            style={{
+              padding: '14px 16px',
+              textAlign: 'left',
+              border: '1px solid var(--border)',
+              cursor: 'pointer',
+              background: 'transparent',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#71717a' }}>
+              <span style={{ fontSize: 11 }}>{c.label}</span>
+              <span style={{ color: c.color }}>{c.icon}</span>
+            </div>
+            <div style={{ fontSize: 24, fontWeight: 700, color: c.color, marginTop: 6 }}>
+              {c.value}
+            </div>
+          </button>
+        ))}
+      </div>
+
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: overviewSubTab === 'all' ? '1.1fr 0.9fr' : '1fr',
+          gap: 16,
+          alignItems: 'start',
+        }}
+      >
+        {/* LEFT — my work */}
         {(overviewSubTab === 'all' || overviewSubTab === 'mine') && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#a78bfa', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 6 }}>
-              👤 Góc của tôi ({activeUser.name})
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#a78bfa', letterSpacing: '0.04em' }}>
+              👤 CỦA TÔI · {activeUser.name}
             </div>
 
-            {/* Stats counters */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-              {(() => {
-                const myTasks = tasks.filter(t => t.assignee === activeUser.name);
-                const progress = myTasks.filter(t => t.status === 'In Progress').length;
-                const review = myTasks.filter(t => t.status === 'In Review').length;
-                const done = myTasks.filter(t => t.status === 'Done').length;
-                return (
-                  <>
-                    <div className="glass" style={{ padding: '14px 16px' }}>
-                      <span style={{ fontSize: 11, color: '#71717a' }}>Đang thực hiện</span>
-                      <div style={{ fontSize: 22, fontWeight: 700, color: '#6366f1', marginTop: 4 }}>{progress}</div>
-                    </div>
-                    <div className="glass" style={{ padding: '14px 16px' }}>
-                      <span style={{ fontSize: 11, color: '#71717a' }}>Chờ review</span>
-                      <div style={{ fontSize: 22, fontWeight: 700, color: '#f59e0b', marginTop: 4 }}>{review}</div>
-                    </div>
-                    <div className="glass" style={{ padding: '14px 16px' }}>
-                      <span style={{ fontSize: 11, color: '#71717a' }}>Hoàn thành</span>
-                      <div style={{ fontSize: 22, fontWeight: 700, color: '#22c55e', marginTop: 4 }}>{done}</div>
-                    </div>
-                  </>
-                );
-              })()}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+              {[
+                { l: 'Doing', v: myProgress, c: '#f59e0b' },
+                { l: 'Review', v: myReview, c: '#a78bfa' },
+                { l: 'Done', v: myDone, c: '#22c55e' },
+                { l: 'Quá hạn', v: myOverdue, c: '#ef4444' },
+              ].map((x) => (
+                <div key={x.l} className="glass" style={{ padding: '12px 14px' }}>
+                  <div style={{ fontSize: 10, color: '#71717a' }}>{x.l}</div>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: x.c, marginTop: 4 }}>{x.v}</div>
+                </div>
+              ))}
             </div>
 
-            {/* HRM Quotas */}
-            <div className="glass" style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: '#fafafa' }}>Hạn mức công & Phép cá nhân</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+            <div className="glass" style={{ padding: 16 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#fafafa', marginBottom: 10 }}>
+                Hạn mức phép / remote
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#a1a1aa', marginBottom: 4 }}>
-                    <span>Nghỉ phép thường niên</span>
-                    <span style={{ fontWeight: 600 }}>{activeUser.annualLeaveUsed} / {activeUser.annualLeaveLimit} ngày</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#a1a1aa' }}>
+                    <span>Phép năm</span>
+                    <span>
+                      {activeUser.annualLeaveUsed ?? 0}/{activeUser.annualLeaveLimit ?? 12}
+                    </span>
                   </div>
-                  <div className="progress-bar" style={{ height: 4 }}>
-                    <div className="progress-bar-fill" style={{ width: `${Math.min(100, (activeUser.annualLeaveUsed / (activeUser.annualLeaveLimit || 12)) * 100)}%`, background: '#f59e0b' }} />
+                  <div className="progress-bar" style={{ height: 4, marginTop: 6 }}>
+                    <div
+                      className="progress-bar-fill"
+                      style={{
+                        width: `${Math.min(
+                          100,
+                          ((activeUser.annualLeaveUsed || 0) / (activeUser.annualLeaveLimit || 12)) * 100
+                        )}%`,
+                        background: '#f59e0b',
+                      }}
+                    />
                   </div>
                 </div>
                 <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#a1a1aa', marginBottom: 4 }}>
-                    <span>Làm việc từ xa (Remote)</span>
-                    <span style={{ fontWeight: 600 }}>{activeUser.remoteUsed} / {activeUser.remoteLimit} ngày</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#a1a1aa' }}>
+                    <span>Remote</span>
+                    <span>
+                      {activeUser.workArrangement === 'remote'
+                        ? 'Full remote'
+                        : `${activeUser.remoteUsed ?? 0}/${activeUser.remoteLimit ?? 4}`}
+                    </span>
                   </div>
-                  <div className="progress-bar" style={{ height: 4 }}>
-                    <div className="progress-bar-fill" style={{ width: `${Math.min(100, (activeUser.remoteUsed / (activeUser.remoteLimit || 4)) * 100)}%`, background: '#8b5cf6' }} />
+                  <div className="progress-bar" style={{ height: 4, marginTop: 6 }}>
+                    <div
+                      className="progress-bar-fill"
+                      style={{
+                        width:
+                          activeUser.workArrangement === 'remote'
+                            ? '100%'
+                            : `${Math.min(
+                                100,
+                                ((activeUser.remoteUsed || 0) / (activeUser.remoteLimit || 4)) * 100
+                              )}%`,
+                        background: '#8b5cf6',
+                      }}
+                    />
                   </div>
                 </div>
               </div>
             </div>
 
-            
-            {/* My Tasks List (Dynamic categorization) */}
+            {/* My open tasks by urgency */}
             {(() => {
-              const now = new Date();
-              // Calculate start and end of week (Monday to Sunday)
-              const dayOfWeek = now.getDay(); // 0 is Sunday, 1 is Monday
-              const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-              
-              const startOfWeek = new Date(now);
-              startOfWeek.setDate(now.getDate() + diffToMonday);
-              startOfWeek.setHours(0,0,0,0);
-              
-              const endOfWeek = new Date(startOfWeek);
-              endOfWeek.setDate(startOfWeek.getDate() + 6);
-              endOfWeek.setHours(23,59,59,999);
-
-              const todayStr = now.toISOString().split('T')[0];
-              const sowStr = startOfWeek.toISOString().split('T')[0];
-              const eowStr = endOfWeek.toISOString().split('T')[0];
-
-              // Filter tasks based on overviewSubTab
-              // If 'all' or 'mine', show my tasks. If 'team' (wait, the left column is only shown if 'all' or 'mine', but let's allow 'team' viewing all tasks in the left if we want? No, left column is "Góc của tôi" or all tasks if we want. Let's just show My Tasks if 'mine', and ALL tasks if 'team' or 'all' but in the left column? No, left column says "👤 Góc của tôi".)
-              // Actually, user wants "phần graph tiến trình của team, của tôi như cũ" which means keeping Left for Me, Right for Team.
-              const targetTasks = tasks.filter(t => t.assignee === activeUser.name);
-
-              const overdue: Task[] = [];
-              const today: Task[] = [];
-              const thisWeek: Task[] = [];
-              const upcoming: Task[] = [];
-
-              targetTasks.forEach(t => {
-                if (t.status === 'Done') return; // Skip done tasks
-                if (!t.deadline) {
-                  upcoming.push(t);
-                  return;
-                }
-                
-                if (t.deadline < todayStr) {
-                  overdue.push(t);
-                } else if (t.deadline === todayStr) {
-                  today.push(t);
-                } else if (t.deadline >= sowStr && t.deadline <= eowStr) {
-                  thisWeek.push(t);
-                } else {
-                  upcoming.push(t);
-                }
-              });
-
-              // Sort by deadline
-              const sortByDeadline = (a: Task, b: Task) => (a.deadline || '9999').localeCompare(b.deadline || '9999');
-              overdue.sort(sortByDeadline);
-              today.sort(sortByDeadline);
-              thisWeek.sort(sortByDeadline);
-              upcoming.sort(sortByDeadline);
-
-              const renderGroup = (title: string, list: Task[], color: string, icon: string) => {
-                if (list.length === 0) return null;
-                return (
-                  <div style={{ marginBottom: 16 }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: color, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-                      {icon} {title} ({list.length})
+              const open = myTasks.filter((t) => t.status !== 'Done');
+              const overdue = open.filter(
+                (t) => t.deadline && t.deadline.split('T')[0] < todayVn
+              );
+              const today = open.filter((t) => t.deadline && t.deadline.split('T')[0] === todayVn);
+              const rest = open.filter(
+                (t) =>
+                  !t.deadline ||
+                  t.deadline === 'None' ||
+                  t.deadline.split('T')[0] > todayVn
+              );
+              const render = (title: string, list: Task[], color: string) =>
+                list.length === 0 ? null : (
+                  <div key={title} style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color, marginBottom: 6 }}>
+                      {title} ({list.length})
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {list.map(t => (
-                        <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: 'var(--bg-muted)', borderRadius: 8, border: '1px solid var(--border)', justifyContent: 'space-between' }}>
-                          <span style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0 }} className={getPriorityDot(t.priority)} />
-                          <span style={{ flex: 1, fontSize: 12, color: '#fafafa', fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} onClick={() => setSelectedTask(t)}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {list.slice(0, 6).map((t) => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => setSelectedTask(t)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 8,
+                            padding: '8px 10px',
+                            background: 'var(--bg-muted)',
+                            borderRadius: 8,
+                            border: '1px solid var(--border)',
+                            cursor: 'pointer',
+                            textAlign: 'left',
+                            width: '100%',
+                            color: 'inherit',
+                          }}
+                        >
+                          <span
+                            style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0 }}
+                            className={getPriorityDot(t.priority)}
+                          />
+                          <span
+                            style={{
+                              flex: 1,
+                              fontSize: 12,
+                              color: '#fafafa',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
                             {t.title}
                           </span>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                            {overviewSubTab !== 'mine' && (
-                              <div className="avatar" style={{ width: 18, height: 18, fontSize: 8, background: 'rgba(255,255,255,0.1)', color: '#fafafa' }}>
-                                {t.assignee.substring(0,2).toUpperCase()}
-                              </div>
-                            )}
-                            <span className={`badge ${getStatusClass(t.status)}`} style={{ fontSize: 9, padding: '2px 6px' }}>{t.status}</span>
-                            <span style={{ fontSize: 10, color: t.deadline < todayStr ? '#ef4444' : '#71717a', width: 45, textAlign: 'right' }}>
-                              {t.deadline ? t.deadline.split('-').reverse().slice(0,2).join('/') : '---'}
-                            </span>
-                          </div>
-                        </div>
+                          <span className={`badge ${getStatusClass(t.status)}`} style={{ fontSize: 9 }}>
+                            {t.status}
+                          </span>
+                        </button>
                       ))}
                     </div>
                   </div>
                 );
-              };
-
-              const hasAny = overdue.length > 0 || today.length > 0 || thisWeek.length > 0 || upcoming.length > 0;
-
               return (
-                <div className="glass" style={{ padding: '20px' }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 14 }}>
-                    {'Nhiệm vụ của tôi'}
+                <div className="glass" style={{ padding: 16 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: '#fafafa' }}>
+                    Việc của tôi
                   </div>
-                  
-                  {!hasAny ? (
-                    <div style={{ textAlign: 'center', color: '#52525b', padding: '30px 0', fontSize: 12 }}>
-                      Tuyệt vời! Không có nhiệm vụ nào tồn đọng 🎉
+                  {open.length === 0 ? (
+                    <div style={{ textAlign: 'center', color: '#52525b', padding: 20, fontSize: 12 }}>
+                      Không có task mở 🎉
                     </div>
                   ) : (
-                    <div>
-                      {renderGroup('Quá hạn', overdue, '#ef4444', '⚠️')}
-                      {renderGroup('Hôm nay', today, '#f59e0b', '🔥')}
-                      {renderGroup('Trong tuần này', thisWeek, '#3b82f6', '📅')}
-                      {renderGroup('Sắp tới / Chưa hẹn ngày', upcoming, '#8b5cf6', '⏳')}
-                    </div>
+                    <>
+                      {render('⚠️ Quá hạn', overdue, '#ef4444')}
+                      {render('🔥 Hôm nay', today, '#f59e0b')}
+                      {render('📌 Đang mở', rest, '#818cf8')}
+                    </>
                   )}
                 </div>
               );
@@ -305,193 +448,154 @@ export default function DashboardTab({
           </div>
         )}
 
-        {/* RIGHT COLUMN: GÓC TẬP THỂ (TEAM DASHBOARD) */}
+        {/* RIGHT — team */}
         {(overviewSubTab === 'all' || overviewSubTab === 'team') && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#818cf8', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Users size={14} /> Góc của Team
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#818cf8', letterSpacing: '0.04em' }}>
+              👥 TEAM
             </div>
 
-            {/* Upcoming Meetings */}
-            {meetings && meetings.length > 0 && (
-              <div className="glass" style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#fafafa', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Calendar size={14} color="#818cf8" /> Lịch họp trong ngày & sắp tới
+            {/* Status distribution — replaces burndown */}
+            <div className="glass" style={{ padding: 16 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#fafafa', marginBottom: 4 }}>
+                Phân bố trạng thái task
+              </div>
+              <div style={{ fontSize: 10, color: '#52525b', marginBottom: 10 }}>
+                Theo số lượng issue (không dùng estimate giờ)
+              </div>
+              <ResponsiveContainer width="100%" height={160}>
+                <BarChart data={statusChart} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                  <XAxis dataKey="name" tick={{ fill: '#71717a', fontSize: 10 }} />
+                  <YAxis allowDecimals={false} tick={{ fill: '#71717a', fontSize: 10 }} />
+                  <Tooltip
+                    contentStyle={{
+                      background: '#18181b',
+                      border: '1px solid #333',
+                      borderRadius: 8,
+                      fontSize: 12,
+                    }}
+                  />
+                  <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                    {statusChart.map((e) => (
+                      <Cell key={e.full} fill={STATUS_COLORS[e.full] || '#6366f1'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Workload by person */}
+            <div className="glass" style={{ padding: 16 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#fafafa', marginBottom: 4 }}>
+                Workload (task mở / người)
+              </div>
+              <div style={{ fontSize: 10, color: '#52525b', marginBottom: 10 }}>
+                Top người đang giữ nhiều việc nhất
+              </div>
+              {workloadChart.length === 0 ? (
+                <div style={{ color: '#52525b', fontSize: 12, textAlign: 'center', padding: 16 }}>
+                  Chưa có task mở
                 </div>
-                {meetings.slice(0, 5).map((m: any) => {
+              ) : (
+                <ResponsiveContainer width="100%" height={160}>
+                  <BarChart
+                    data={workloadChart}
+                    layout="vertical"
+                    margin={{ top: 0, right: 12, left: 8, bottom: 0 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                    <XAxis type="number" allowDecimals={false} tick={{ fill: '#71717a', fontSize: 10 }} />
+                    <YAxis
+                      type="category"
+                      dataKey="name"
+                      width={56}
+                      tick={{ fill: '#a1a1aa', fontSize: 10 }}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        background: '#18181b',
+                        border: '1px solid #333',
+                        borderRadius: 8,
+                        fontSize: 12,
+                      }}
+                    />
+                    <Bar dataKey="open" fill="#6366f1" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+
+            {/* Attendance today */}
+            <div className="glass" style={{ padding: 16 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#fafafa', marginBottom: 10 }}>
+                Hoạt động hôm nay ({todayLabel})
+              </div>
+              <div style={{ display: 'flex', gap: 12 }}>
+                <div style={{ flex: 1, textAlign: 'center' }}>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: '#22c55e' }}>{officeCount}</div>
+                  <div style={{ fontSize: 10, color: '#71717a' }}>Văn phòng</div>
+                </div>
+                <div style={{ flex: 1, textAlign: 'center', borderLeft: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: '#8b5cf6' }}>{remoteCount}</div>
+                  <div style={{ fontSize: 10, color: '#71717a' }}>Remote</div>
+                </div>
+                <div style={{ flex: 1, textAlign: 'center', borderLeft: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: '#f59e0b' }}>
+                    {leavesPending.filter((l) => (l.status || 'pending') === 'pending').length}
+                  </div>
+                  <div style={{ fontSize: 10, color: '#71717a' }}>Phép chờ</div>
+                </div>
+              </div>
+            </div>
+
+            {meetings && meetings.length > 0 && (
+              <div className="glass" style={{ padding: 16 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#fafafa', marginBottom: 10 }}>
+                  📅 Lịch họp gần
+                </div>
+                {meetings.slice(0, 4).map((m: any) => {
                   const start = new Date(m.startTime);
                   return (
-                    <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'rgba(99,102,241,0.07)', borderRadius: 8, border: '1px solid rgba(99,102,241,0.2)' }}>
-                      <div>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: '#fafafa' }}>{m.title}</div>
-                        <div style={{ fontSize: 10, color: '#71717a', marginTop: 2 }}>
-                          🎤 {m.host?.name || m.host?.fullName || 'Storymee'} · {m.meetLink ? <a href={m.meetLink} target="_blank" rel="noreferrer" style={{ color: '#818cf8' }}>Meet Link</a> : 'Chưa có link'}
-                        </div>
-                      </div>
-                      <div style={{ fontSize: 11, color: '#818cf8', fontWeight: 600, textAlign: 'right', flexShrink: 0 }}>
-                        <div>{start.toLocaleDateString('vi-VN')}</div>
-                        <div>{start.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</div>
-                      </div>
+                    <div
+                      key={m.id}
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        padding: '8px 0',
+                        borderBottom: '1px solid rgba(255,255,255,0.04)',
+                        fontSize: 12,
+                      }}
+                    >
+                      <span style={{ color: '#fafafa' }}>{m.title}</span>
+                      <span style={{ color: '#818cf8', flexShrink: 0 }}>
+                        {start.toLocaleString('vi-VN', {
+                          day: '2-digit',
+                          month: '2-digit',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </span>
                     </div>
                   );
                 })}
               </div>
             )}
 
-            {/* Team Status Today */}
-            <div className="glass" style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: '#fafafa' }}>Tình hình hoạt động hôm nay ({todayLabel})</div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.04)', paddingBottom: 8 }}>
-                <div style={{ textAlign: 'center', flex: 1 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: '#22c55e' }}>{officeCount}</div>
-                  <div style={{ fontSize: 9, color: '#71717a', marginTop: 2 }}>Tại văn phòng</div>
+            {announcements && announcements.length > 0 && (
+              <div className="glass" style={{ padding: 16 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#fafafa', marginBottom: 8 }}>
+                  📢 Thông báo
                 </div>
-                <div style={{ textAlign: 'center', flex: 1, borderLeft: '1px solid rgba(255,255,255,0.06)', borderRight: '1px solid rgba(255,255,255,0.06)' }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: '#8b5cf6' }}>{remoteCount}</div>
-                  <div style={{ fontSize: 9, color: '#71717a', marginTop: 2 }}>Làm remote</div>
-                </div>
-                <div style={{ textAlign: 'center', flex: 1 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: '#f59e0b' }}>{leaveCount}</div>
-                  <div style={{ fontSize: 9, color: '#71717a', marginTop: 2 }}>Nghỉ phép</div>
-                </div>
+                {announcements.slice(0, 3).map((a: any) => (
+                  <div key={a.id} style={{ fontSize: 12, color: '#a1a1aa', marginBottom: 6 }}>
+                    <strong style={{ color: '#e4e4e7' }}>{a.title}</strong>
+                  </div>
+                ))}
               </div>
-
-              {/* Detail members status */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 11 }}>
-                {remoteMemberNames.length > 0 && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#a1a1aa' }}>
-                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#8b5cf6' }} />
-                    <span>Remote:</span>
-                    <span style={{ color: '#fafafa', fontWeight: 500 }}>{remoteMemberNames.join(', ')}</span>
-                  </div>
-                )}
-                {leaveMemberNames.length > 0 && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#a1a1aa' }}>
-                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#f59e0b' }} />
-                    <span>Nghỉ phép:</span>
-                    <span style={{ color: '#fafafa', fontWeight: 500 }}>{leaveMemberNames.join(', ')}</span>
-                  </div>
-                )}
-                {officeCount === 0 && remoteCount === 0 && leaveCount === 0 && (
-                  <div style={{ color: '#52525b', fontSize: 11 }}>Chưa có dữ liệu điểm danh hôm nay.</div>
-                )}
-              </div>
-            </div>
-
-
-            {/* Burndown Chart with dynamic computation */}
-            {(() => {
-              // We compute the burndown for the current week (Monday -> Sunday)
-              const now = new Date();
-              const day = now.getDay();
-              const diffToMon = day === 0 ? -6 : 1 - day;
-              const startOfWeek = new Date(now);
-              startOfWeek.setDate(now.getDate() + diffToMon);
-              startOfWeek.setHours(0,0,0,0);
-              
-              const endOfWeek = new Date(startOfWeek);
-              endOfWeek.setDate(startOfWeek.getDate() + 6);
-              endOfWeek.setHours(23,59,59,999);
-              
-              const sowStr = startOfWeek.toISOString().split('T')[0];
-              const eowStr = endOfWeek.toISOString().split('T')[0];
-              const todayStr = now.toISOString().split('T')[0];
-
-              // Tasks in this sprint/week
-              // Assume tasks array contains all tasks. We only care about tasks that have a deadline in this week OR were completed this week.
-              const weekTasks = tasks.filter(t => {
-                if (t.deadline >= sowStr && t.deadline <= eowStr) return true;
-                // If it was reviewed this week, count it
-                if (t.status === 'Done' && t.reviewedAt) {
-                  const reviewedDate = t.reviewedAt.split('T')[0];
-                  if (reviewedDate >= sowStr && reviewedDate <= eowStr) return true;
-                }
-                return false;
-              });
-
-              // Total ideal hours = sum of all weekTasks estimates
-              const totalEstimate = weekTasks.reduce((sum, t) => sum + (t.estimate || 0), 0);
-
-              const daysOfWeek = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
-              let remainingActual = totalEstimate;
-
-              const dynamicBurndown = daysOfWeek.map((dayLabel, i) => {
-                const currentDate = new Date(startOfWeek);
-                currentDate.setDate(startOfWeek.getDate() + i);
-                const currentStr = currentDate.toISOString().split('T')[0];
-                
-                // Ideal line linearly goes down
-                const ideal = Math.max(0, totalEstimate - (totalEstimate / 6) * i);
-                
-                let actual = null;
-                if (currentStr <= todayStr) {
-                  // To find remaining actual at the END of this day:
-                  // Subtract tasks that were completed ON OR BEFORE this day
-                  const completedEstimate = weekTasks.filter(t => {
-                    if (t.status !== 'Done') return false;
-                    const rd = t.reviewedAt ? t.reviewedAt.split('T')[0] : '1970-01-01';
-                    return rd <= currentStr;
-                  }).reduce((sum, t) => sum + (t.estimate || 0), 0);
-                  
-                  actual = Math.max(0, totalEstimate - completedEstimate);
-                }
-
-                return { day: dayLabel, ideal: Math.round(ideal * 10) / 10, actual: actual !== null ? Math.round(actual * 10) / 10 : null };
-              });
-
-              return (
-                <div className="glass" style={{ padding: '20px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <TrendingUp size={14} color="#6366f1" /> Biểu đồ Tiến độ Cháy việc thực tế
-                  </div>
-                  
-                  <ResponsiveContainer width="100%" height={150}>
-                    <LineChart data={dynamicBurndown} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                      <XAxis dataKey="day" tick={{ fill: '#71717a', fontSize: 10 }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fill: '#71717a', fontSize: 10 }} axisLine={false} tickLine={false} />
-                      <Tooltip contentStyle={{ background: '#18181b', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, fontSize: 12 }} />
-                      <Line type="monotone" dataKey="ideal" stroke="#3f3f46" strokeDasharray="4 4" dot={false} strokeWidth={1.5} name="Lý tưởng (h)" />
-                      <Line type="monotone" dataKey="actual" stroke="#6366f1" dot={{ fill: '#6366f1', r: 3 }} strokeWidth={2} connectNulls={false} name="Thực tế (h)" />
-                    </LineChart>
-                  </ResponsiveContainer>
-                  
-                  <div style={{ fontSize: 10, color: '#71717a', lineHeight: 1.4, background: 'rgba(255,255,255,0.02)', padding: 10, borderRadius: 8, border: '1px solid rgba(255,255,255,0.04)' }}>
-                    💡 **Giải thích đơn giản:** Đường đứt nét màu xám thể hiện tiến độ chuẩn lý thuyết. Đường màu tím thể hiện tiến độ đốt task thực tế của team dựa vào tổng Estimate. Nếu đường màu tím **nằm dưới** đường đứt nét, nghĩa là team đang chạy nhanh hơn kế hoạch!
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Workload Overload warnings */}
-            {(() => {
-              const overloaded = teamMembers.map(m => {
-                const totalHrs = filteredTasks.filter(t => t.assignee === m.name && t.status !== 'Done').reduce((s, t) => s + t.estimate, 0);
-                return { name: m.name, hrs: totalHrs, color: m.color };
-              }).filter(x => x.hrs > 30);
-
-              return overloaded.length > 0 ? (
-                <div className="glass" style={{ padding: '14px 18px', border: '1px solid rgba(239,68,68,0.2)', background: 'rgba(239,68,68,0.02)' }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: '#ef4444', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-                    ⚠️ Cảnh báo phân bổ quá tải (&gt;30h)
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {overloaded.map(x => (
-                      <div key={x.name} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
-                        <span style={{ color: '#fafafa', fontWeight: 500 }}>{x.name}</span>
-                        <span style={{ color: '#ef4444', fontWeight: 600 }}>{x.hrs}h việc đang mở</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null;
-            })()}
-
-
-
+            )}
           </div>
         )}
-
       </div>
     </div>
   );

@@ -5,13 +5,28 @@ import { fetchAxios } from "../../fetchAxios";
 export const ATTENDANCE_TOOLS_SCHEMA = [
   {
     name: "check_in_out",
-    description: "Điểm danh hàng ngày: thực hiện check-in hoặc check-out cho nhân sự. Lần check đầu tiên trong ngày là check-in, lần thứ hai là check-out.",
+    description:
+      "Điểm danh check-in/check-out. workType: API tự resolve — full remote HR hoặc đơn remote đã duyệt hôm nay → remote; không cần user chọn. Checkout chỉ cần action/status checkout.",
     inputSchema: {
       type: "object",
       properties: {
-        status: { type: "string", enum: ["present", "late", "absent"], description: "Trạng thái đi làm (mặc định present)" },
+        status: {
+          type: "string",
+          enum: ["present", "late", "absent", "checkin", "checkout"],
+          description: "present/late/absent/checkin = check-in; checkout = check-out. Mặc định present."
+        },
         notes: { type: "string", description: "Ghi chú điểm danh" },
-        employee_name: { type: "string", description: "Tên nhân sự điểm danh hộ (chỉ Admin/Boss có quyền này)" }
+        employee_name: { type: "string", description: "Tên nhân sự điểm danh hộ (chỉ Admin/Boss có quyền này)" },
+        action: {
+          type: "string",
+          enum: ["checkin", "checkout", "check-in", "check-out"],
+          description: "Tuỳ chọn: rõ checkin|checkout (ưu tiên hơn status nếu có)"
+        },
+        workType: {
+          type: "string",
+          enum: ["office", "remote"],
+          description: "Tuỳ chọn. Full remote / đơn remote duyệt → API ép remote."
+        }
       }
     }
   },
@@ -54,18 +69,45 @@ case "check_in_out": {
         targetMember = found;
       }
 
+      const actionRaw = String(args?.action || status || 'present').toLowerCase().replace(/_/g, '-');
+      const isCheckout = actionRaw === 'checkout' || actionRaw === 'check-out' || actionRaw === 'out';
+
       let checkinData;
       try {
-        if (status === 'checkout') {
+        if (isCheckout) {
           checkinData = (await apiClient.post(API_ROUTES.HR.ATTENDANCE_CHECKOUT, {
             memberId: targetMember.id,
-            notes: notes || `Checkout từ Telegram`
+            notes: notes || `Checkout từ Telegram/MCP`
           })) as any;
         } else {
+          const st = ['late', 'absent'].includes(String(status || '').toLowerCase())
+            ? String(status).toLowerCase()
+            : 'present';
+          // API resolve workType (full remote HR / approved remote leave / body.workType)
+          const arrangement = String(targetMember.workArrangement || 'office').toLowerCase();
+          const isFullRemote =
+            arrangement === 'remote' ||
+            arrangement === 'full_remote' ||
+            arrangement === 'fully_remote' ||
+            arrangement === 'wfh';
+          const notesLower = String(notes || args?.notes || '').toLowerCase();
+          const explicitWt = String(args?.workType || args?.work_type || '').toLowerCase();
+          const wantRemote =
+            isFullRemote ||
+            explicitWt === 'remote' ||
+            notesLower.includes('remote') ||
+            notesLower.includes('wfh') ||
+            notesLower.includes('từ xa') ||
+            notesLower.includes('tu xa');
           checkinData = (await apiClient.post(API_ROUTES.HR.ATTENDANCE_CHECKIN, {
             memberId: targetMember.id,
-            status: status || "present",
-            notes: notes || `Checkin từ Telegram`
+            status: st,
+            workType: wantRemote ? 'remote' : (explicitWt === 'office' ? 'office' : undefined),
+            notes:
+              notes ||
+              (isFullRemote
+                ? `Checkin Remote từ Telegram (full remote)`
+                : `Checkin từ Telegram/MCP`),
           })) as any;
         }
       } catch (err: any) {
@@ -103,6 +145,7 @@ case "check_in_out": {
       const outTime = att.checkOut ? formatTime(att.checkOut) : "";
       
       const actionType = att.checkOut ? "CHECK-OUT 🚪" : "CHECK-IN 🌅";
+      const wt = att.workType === 'remote' ? '🏠 Remote' : '🏢 Office';
       const detailStr = att.checkOut
         ? `Check-in lúc: *${inTime}* | Check-out lúc: *${outTime}*`
         : `Check-in lúc: *${inTime}*`;
@@ -110,7 +153,7 @@ case "check_in_out": {
       return {
         content: [{
           type: "text",
-          text: `🔔 *ĐIỂM DANH THÀNH CÔNG (${actionType}):*\n• Nhân viên: *${targetMember.fullName}*\n• Trạng thái: *${att.status}*\n• ${detailStr}\n• Ghi chú: *${att.notes || "Không có"}*`
+          text: `🔔 *ĐIỂM DANH THÀNH CÔNG (${actionType}):*\n• Nhân viên: *${targetMember.fullName}*\n• Loại công: *${wt}*\n• Trạng thái: *${att.status}*\n• ${detailStr}\n• Ghi chú: *${att.notes || "Không có"}*`
         }]
       };
     }

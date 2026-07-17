@@ -56,39 +56,56 @@ export const registerCommand: TelegramCommand = {
               return true;
             }
             
-            // Nếu email tồn tại nhưng chưa liên kết Telegram -> Thực hiện liên kết hồ sơ sẵn có
-            await sendMessage(chatId, "⏳ Đang liên kết tài khoản Telegram của bạn với hồ sơ sẵn có...");
+            // Liên kết Telegram qua register (giữ pending nếu chưa duyệt)
+            await sendMessage(chatId, "⏳ Đang liên kết Telegram với hồ sơ sẵn có...");
             try {
-                await apiClient.post(API_ROUTES.HR.TEAM_MEMBERS, {
-                  ...existingEmailMember,
+                const res: any = await apiClient.post(`${API_ROUTES.HR.TEAM_MEMBERS}/register`, {
+                  email,
+                  fullName: existingEmailMember.fullName || fullName,
                   telegramUsername: username,
-                  telegramChatId: chatId
+                  telegramChatId: chatId,
                 });
-                await sendMessage(chatId, `🎉 **Liên kết tài khoản thành công!**\n\n• Họ tên: **${existingEmailMember.fullName}**\n• Email: **${existingEmailMember.email}**\n• Chức vụ: **${existingEmailMember.role || 'Nhân viên'}**\n• Telegram: **@${username}**\n\nBạn đã có thể sử dụng tất cả các lệnh của bot.`, KEYBOARD_MAIN);
+                const st = res?.data?.accountStatus || existingEmailMember.accountStatus || 'pending';
+                if (st === 'active') {
+                  await sendMessage(chatId, `🎉 **Liên kết thành công!**\n\n• **${existingEmailMember.fullName}**\n• Email: \`${email}\`\n• Telegram: **@${username}**\n\nBạn có thể dùng bot.`, KEYBOARD_MAIN);
+                } else {
+                  await sendMessage(chatId, `🔗 Đã gắn Telegram, nhưng tài khoản đang **${st}** — chờ Admin duyệt/mở khoá.`, KEYBOARD_MAIN);
+                }
               } catch (err: any) {
                 console.error('[registerCommand] API POST (Link) Error:', err);
-                await sendMessage(chatId, "❌ Lỗi: Cổng đăng ký từ chối liên kết tài khoản.");
+                await sendMessage(chatId, `❌ Lỗi liên kết: ${err?.data?.message || err?.message || 'từ chối'}`);
                 throw err;
               }
             return true;
           }
       }
 
-      // 3. Nếu là email hoàn toàn mới -> Tạo mới nhân sự mới
-      await sendMessage(chatId, "⏳ Đang tạo hồ sơ nhân sự mới trên hệ thống...");
+      // 3. Email mới → đăng ký PENDING, chờ Admin duyệt (không vào app ngay)
+      await sendMessage(chatId, "⏳ Đang gửi yêu cầu đăng ký (chờ Admin duyệt)...");
       try {
-          await apiClient.post(API_ROUTES.HR.TEAM_MEMBERS, {
+          const res: any = await apiClient.post(`${API_ROUTES.HR.TEAM_MEMBERS}/register`, {
             email,
             fullName,
             telegramUsername: username,
             telegramChatId: chatId,
             role: "Nhân sự mới",
-            skills: []
           });
-          await sendMessage(chatId, `🎉 **Đăng ký nhân sự mới thành công!**\n\n• Họ tên: **${fullName}**\n• Email: **${email}**\n• Telegram: **@${username}**\n• Chat ID: **${chatId}**\n\nHệ thống đã tự động tạo hồ sơ của bạn. Bạn đã có thể bắt đầu sử dụng bot!`, KEYBOARD_MAIN);
+          const st = res?.data?.accountStatus || res?.accountStatus || 'pending';
+          if (st === 'pending') {
+            await sendMessage(
+              chatId,
+              `📝 **Đã gửi đăng ký — chờ Admin duyệt**\n\n` +
+              `• Họ tên: **${fullName}**\n• Email: **${email}**\n• Telegram: **@${username}**\n\n` +
+              `Bạn **chưa** đăng nhập được StorymeeTeam / dùng đủ bot cho đến khi Admin duyệt.\n` +
+              `Admin sẽ nhận thông báo và duyệt trên web HR.`,
+              KEYBOARD_MAIN
+            );
+          } else {
+            await sendMessage(chatId, `✅ ${res?.message || 'Đăng ký / liên kết thành công.'}`, KEYBOARD_MAIN);
+          }
         } catch (err: any) {
           console.error('[registerCommand] API POST Error:', err);
-          await sendMessage(chatId, "❌ Lỗi: Cổng đăng ký từ chối tạo tài khoản mới.");
+          await sendMessage(chatId, `❌ Lỗi đăng ký: ${err?.data?.message || err?.message || 'Cổng từ chối tạo tài khoản.'}`);
           throw err;
         }
     } catch (err) {

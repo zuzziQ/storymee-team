@@ -7,7 +7,14 @@ const httpAgent = new http.Agent({ family: 4 });
 
 export async function fetchAxios(url: string, options: any = {}) {
   const method = (options.method || 'GET').toUpperCase();
-  const headers = options.headers || {};
+  // CF Error 1010 if UA missing/blocked — always set bot UA for public hub
+  const headers = {
+    'User-Agent':
+      process.env.STORYMEE_HTTP_UA ||
+      'StorymeeTeam-MCP/1.0 (+https://storymee.com; telegram-bot)',
+    Accept: 'application/json, text/plain, */*',
+    ...(options.headers || {}),
+  };
   let data = options.body;
   
   if (typeof data === 'string') {

@@ -48,12 +48,12 @@ const DEFAULT_SETTINGS: GlobalSettings = {
     hubUrl: process.env.STORYMEE_HUB_URL || 'http://storymee-hub:5100',
     hubApiKey: process.env.HUB_API_KEY || 'world-asset',
     sdkUrl: 'https://bapi.vidtory.net',
-    sdkApiKey: 'vidtory_fabb11dcc0394635325a51b4f9d4c17970b04ac3707a1d5f61a8f5924cf4e7a6',
+    sdkApiKey: '',
     promptProvider: 'cliproxy',
     mediaProvider: 'auto',
     universalNegativePrompt: '',
     gatewayType: 'hub',
-    geminiApiKey: 'AIzaSyC7lBGGw_c2sM6RHif2k32E6mAiZBzCUyY',
+    geminiApiKey: '',
 
     zlproxyKey: process.env.ZLPROXY_KEY || process.env.ZLPROXY_API_KEY || '',
     useZlproxyForGflow: false,
@@ -79,7 +79,7 @@ const DEFAULT_SETTINGS: GlobalSettings = {
     useLangGraphWorkflow: true
 };
 
-const DEFAULT_GEMINI_KEY = 'AIzaSyC7lBGGw_c2sM6RHif2k32E6mAiZBzCUyY';
+const DEFAULT_GEMINI_KEY = '';
 
 
 export class SettingsService {
@@ -176,7 +176,7 @@ export class SettingsService {
             mediaProvider,
             universalNegativePrompt: newSettings.universalNegativePrompt !== undefined ? newSettings.universalNegativePrompt : current.universalNegativePrompt,
             gatewayType,
-            geminiApiKey: newSettings.geminiApiKey || current.geminiApiKey || 'AIzaSyC7lBGGw_c2sM6RHif2k32E6mAiZBzCUyY',
+            geminiApiKey: newSettings.geminiApiKey || current.geminiApiKey || '',
             
             zlproxyKey: newSettings.zlproxyKey !== undefined ? newSettings.zlproxyKey : current.zlproxyKey,
             useZlproxyForGflow: newSettings.useZlproxyForGflow !== undefined ? newSettings.useZlproxyForGflow : current.useZlproxyForGflow,

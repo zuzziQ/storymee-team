@@ -53,103 +53,29 @@ export class AdminController {
     }
 
     /**
-     * POST /omnitask/
-     * Tạo Task mẹ (container) + SubTask con thực tế (gắn assignee, deadline, priority).
-     * Body: {
-     *   title: string,
-     *   description?: string,
-     *   projectId?: string,       // optional - nếu không có thì task không thuộc dự án nào
-     *   subtasks?: [{
-     *     title: string,
-     *     suggestedAssigneeName?: string,
-     *     estimatedHours?: number,
-     *     priority?: string,
-     *     deadlineDays?: number,
-     *     deadline?: string,
-     *   }]
-     * }
-     * Nếu không có subtasks thì tự tạo 1 SubTask từ title của task mẹ.
+     * @deprecated FROZEN 2026-07-17 — dual-write omni_tasks/omni_sub_tasks.
+     * SSOT Kanban: POST /internal/v1/team/plane/issues
+     * See: 00-Ecosystem-Docs/01-architecture/team/team-work-management.md
      */
     static async createTask(req: any, reply: any) {
-        try {
-            const { title, description, projectId, subtasks } = req.body;
-            if (!title) return reply.code(400).send({ status: 'error', message: 'Title is required' });
-
-            // 1. Tạo Task mẹ (container) - projectId optional
-            const parentTask = await prisma.task.create({
-                data: {
-                    title,
-                    description: description || null,
-                    projectId: projectId || null,
-                    source: 'telegram',
-                }
-            });
-
-            // 2. Chuẩn bị danh sách subtask
-            const subtaskDefs = Array.isArray(subtasks) && subtasks.length > 0
-                ? subtasks
-                : [{ title, description: description || null }];
-
-            // 3. Đếm SubTask hiện có để auto-increment ID
-            const currentCount = await prisma.subTask.count();
-
-            const createdSubtasks = [];
-            for (let i = 0; i < subtaskDefs.length; i++) {
-                const sub = subtaskDefs[i];
-
-                // Tìm assignee theo tên (fuzzy, case-insensitive)
-                let assigneeId: string | null = null;
-                if (sub.suggestedAssigneeName) {
-                    const found = await prisma.teamMember.findFirst({
-                        where: {
-                            fullName: {
-                                contains: sub.suggestedAssigneeName.trim(),
-                                mode: 'insensitive'
-                            }
-                        }
-                    });
-                    if (found) assigneeId = found.id;
-                }
-
-                // Tính deadline từ deadlineDays hoặc deadline ISO string
-                let deadlineDate: Date | null = null;
-                if (sub.deadlineDays && sub.deadlineDays > 0) {
-                    deadlineDate = new Date();
-                    deadlineDate.setDate(deadlineDate.getDate() + Math.round(sub.deadlineDays));
-                } else if (sub.deadline) {
-                    deadlineDate = new Date(sub.deadline);
-                }
-
-                const idx = currentCount + i + 101;
-                const planeTaskId = 'T-' + String(idx).padStart(3, '0');
-
-                const created = await prisma.subTask.create({
-                    data: {
-                        taskId: parentTask.id,
-                        title: sub.title || title,
-                        description: sub.description || description || 'Tạo tự động qua Model Context Protocol (MCP)',
-                        assigneeId,
-                        estimatedHours: sub.estimatedHours || 4,
-                        priority: (sub.priority || 'medium').toLowerCase(),
-                        status: 'pending',
-                        deadline: deadlineDate,
-                        planeTaskId
-                    },
-                    include: { Assignee: true }
-                });
-
-                createdSubtasks.push(created);
-            }
-
-            reply.code(201).send({
-                status: 'success',
-                data: {
-                    ...parentTask,
-                    subTasks: createdSubtasks
-                }
-            });
-        } catch (error) {
-            throw error;
-        }
+        return reply.code(410).send({
+            status: 'error',
+            success: false,
+            code: 'LEGACY_TASK_CREATE_FROZEN',
+            message:
+                'Legacy OmniTask create (omni_tasks/omni_sub_tasks) đã bị đóng băng. ' +
+                'Dùng SSOT: POST /internal/v1/team/plane/issues với body { title, projectId, assigneeId?, priority?, targetDate? }.',
+            migrateTo: {
+                method: 'POST',
+                path: '/internal/v1/team/plane/issues',
+                example: {
+                    title: 'Task title',
+                    projectId: '<pl_project uuid>',
+                    assigneeId: '<team_member uuid optional>',
+                    priority: 'medium',
+                    status: 'todo',
+                },
+            },
+        });
     }
 }

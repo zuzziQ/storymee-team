@@ -9,31 +9,7 @@ import { CoreApiClient, API_ROUTES } from "@storymee/api-client";
 
 dotenv.config();
 
-// --- CACHE HỆ THỐNG ---
-const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
-let membersCache: { data: any[], timestamp: number } | null = null;
-
-export async function getCachedMembers(): Promise<any[]> {
-  const now = Date.now();
-  if (membersCache && (now - membersCache.timestamp < CACHE_TTL)) {
-    return membersCache.data;
-  }
-  
-  try {
-    const json = await apiClient.get(API_ROUTES.HR.TEAM_MEMBERS) as any;
-    const dataArr = Array.isArray(json) ? json : (json?.data || []);
-    if (Array.isArray(dataArr)) {
-      const now = Date.now();
-      membersCache = { data: dataArr, timestamp: now };
-      return dataArr;
-    }
-  } catch (err) {
-    console.error("Lỗi fetch team-members:", err);
-  }
-  return membersCache ? membersCache.data : [];
-}
-
-// ----------------------
+// --- CACHE (declared after apiClient below) ---
 
 
 export function calculateWorkingHours(start: Date, end: Date): number {
@@ -89,9 +65,68 @@ export function calculateWorkingHours(start: Date, end: Date): number {
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const TELEGRAM_API = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
 const WEB_PORTAL_URL = process.env.WEB_PORTAL_URL || "http://localhost:3010";
-const OMNIROUTER_API_URL = process.env.OMNIROUTER_API_URL || `${WEB_PORTAL_URL}/api/ai/chat`;
 const CORE_API_URL = process.env.CORE_API_URL || "http://localhost:5100";
+// Team chat on core-ai-api (not FE)
+const OMNIROUTER_API_URL =
+  process.env.OMNIROUTER_API_URL ||
+  `${CORE_API_URL.replace(/\/+$/, '')}/internal/v1/ai/team/chat`;
 let apiClient = new CoreApiClient({ baseURL: CORE_API_URL + '/internal/v1/team', enforceApiPrefix: false });
+
+// --- CACHE HỆ THỐNG (sau apiClient) ---
+const CACHE_TTL = 5 * 60 * 1000;
+let membersCache: { data: any[]; timestamp: number } | null = null;
+let projectsCache: { data: any[]; timestamp: number } | null = null;
+let issuesCache: { data: any[]; timestamp: number } | null = null;
+const PROJECTS_TTL = 3 * 60 * 1000;
+const ISSUES_TTL = 25 * 1000;
+
+export async function getCachedMembers(): Promise<any[]> {
+  const now = Date.now();
+  if (membersCache && now - membersCache.timestamp < CACHE_TTL) return membersCache.data;
+  try {
+    const json = (await apiClient.get(`${API_ROUTES.HR.TEAM_MEMBERS}?status=all`)) as any;
+    const dataArr = Array.isArray(json) ? json : json?.data || [];
+    if (Array.isArray(dataArr)) {
+      membersCache = { data: dataArr, timestamp: now };
+      return dataArr;
+    }
+  } catch (err) {
+    console.error('Lỗi fetch team-members:', err);
+  }
+  return membersCache ? membersCache.data : [];
+}
+
+export async function getCachedProjects(): Promise<any[]> {
+  const now = Date.now();
+  if (projectsCache && now - projectsCache.timestamp < PROJECTS_TTL) return projectsCache.data;
+  try {
+    const json = (await apiClient.get(API_ROUTES.PLANE.PROJECTS)) as any;
+    const data = Array.isArray(json) ? json : json?.data || [];
+    projectsCache = { data, timestamp: now };
+    return data;
+  } catch (e) {
+    console.error('getCachedProjects', e);
+    return projectsCache?.data || [];
+  }
+}
+
+export async function getCachedIssues(): Promise<any[]> {
+  const now = Date.now();
+  if (issuesCache && now - issuesCache.timestamp < ISSUES_TTL) return issuesCache.data;
+  try {
+    const json = (await apiClient.get(API_ROUTES.PLANE.ISSUES)) as any;
+    const data = Array.isArray(json) ? json : json?.data || [];
+    issuesCache = { data, timestamp: now };
+    return data;
+  } catch (e) {
+    console.error('getCachedIssues', e);
+    return issuesCache?.data || [];
+  }
+}
+
+export function invalidateIssuesCache() {
+  issuesCache = null;
+}
 
 interface ChatMessage {
   role: "user" | "model";

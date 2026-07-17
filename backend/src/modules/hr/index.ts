@@ -8,9 +8,20 @@ import { AdminController } from '../../controllers/admin.controller';
 
 const plugin: FastifyPluginAsync = async (fastify) => {
 
-// Team members routes
+// Team members / internal accounts (omni_team_members)
 fastify.get('/team-members', HrController.getTeamMembers);
 fastify.post('/team-members', HrController.upsertTeamMember);
+fastify.post('/team-members/register', HrController.registerTeamMember);
+fastify.post('/team-members/:id/approve', HrController.approveMember);
+fastify.post('/team-members/:id/reject', HrController.rejectMember);
+fastify.post('/team-members/:id/suspend', HrController.suspendMember);
+fastify.post('/team-members/:id/set-admin', HrController.setMemberAdmin);
+fastify.delete('/team-members/:id', HrController.deleteMember);
+// Login gate — only active accounts
+fastify.get('/auth/lookup', HrController.authLookup);
+// Privacy / team settings (admin configurable)
+fastify.get('/settings/privacy', HrController.getPrivacySettings);
+fastify.patch('/settings/privacy', HrController.updatePrivacySettings);
 
 // Subtasks routes
 fastify.get('/subtasks', HrController.getSubtasks);
@@ -44,6 +55,7 @@ fastify.post('/meetings', MeetingController.createMeeting);
 fastify.patch('/meetings/:id', MeetingController.updateMeeting);
 fastify.get('/announcements', AnnouncementController.getAnnouncements);
 fastify.post('/announcements', AnnouncementController.createAnnouncement);
+fastify.post('/announcements/:id/read', AnnouncementController.markAsRead);
 
 };
 export default plugin;

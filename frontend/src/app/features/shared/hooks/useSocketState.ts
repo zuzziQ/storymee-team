@@ -1,8 +1,41 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Announcement, TeamMember, Meeting } from '../../../constants';
-import { io } from 'socket.io-client';
-import { fetchAxios } from '@/lib/fetchAxios';
+import { io, Socket } from 'socket.io-client';
 import { coreApiClient } from '@/lib/apiClient';
+import { isTeamAdmin } from '@/lib/teamAuth';
+
+function mapAnnouncement(a: any): Announcement {
+  return {
+    id: a.id,
+    title: a.title || '',
+    content: a.content || '',
+    sender: a.sender?.fullName || a.sender || 'Hệ thống',
+    date: a.createdAt || a.date || new Date().toISOString(),
+    readBy: Array.isArray(a.readBy) ? a.readBy : [],
+    targetUserId: a.targetUserId || undefined,
+  };
+}
+
+function mapMeeting(m: any): Meeting {
+  return {
+    ...m,
+    host: m.host
+      ? { id: m.host.id, name: m.host.fullName || m.host.name, fullName: m.host.fullName }
+      : m.host,
+    attendees: Array.isArray(m.attendees) ? m.attendees : [],
+    documents: Array.isArray(m.documents) ? m.documents : [],
+    outputUrls: Array.isArray(m.outputUrls) ? m.outputUrls : [],
+  };
+}
+
+/** Socket URL: same host as team API (hub/dev-hub), not Next.js origin. */
+function resolveSocketBase(): string {
+  const raw =
+    process.env.NEXT_PUBLIC_API_URL ||
+    process.env.NEXT_PUBLIC_CORE_API_URL ||
+    'https://dev-hub.storymee.com';
+  return raw.replace(/\/+$/, '').replace(/\/internal\/v1\/team\/?$/, '');
+}
 
 export function useSocketState(
   authReady: boolean,
@@ -13,13 +46,13 @@ export function useSocketState(
   const [showNotifications, setShowNotifications] = useState(false);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [meetings, setMeetings] = useState<Meeting[]>([]);
-
+  const socketRef = useRef<Socket | null>(null);
 
   const fetchServerMeetings = async () => {
     try {
-      const res = await coreApiClient.get('/hr/meetings');
-      if (res?.status === 'success') {
-        setMeetings(res.data);
+      const res: any = await coreApiClient.get('/hr/meetings');
+      if (res?.status === 'success' && Array.isArray(res.data)) {
+        setMeetings(res.data.map(mapMeeting));
       }
     } catch (err) {
       console.error('Lỗi fetch meetings:', err);
@@ -28,178 +61,224 @@ export function useSocketState(
 
   const fetchServerAnnouncements = async () => {
     try {
-      const res = await coreApiClient.get('/hr/announcements');
-      if (res.data?.status === 'success') {
-        setAnnouncements(res.data.data);
+      // coreApiClient returns body directly: { status, data }
+      const res: any = await coreApiClient.get('/hr/announcements');
+      if (res?.status === 'success' && Array.isArray(res.data)) {
+        setAnnouncements(res.data.map(mapAnnouncement));
+      } else if (Array.isArray(res?.data?.data)) {
+        // defensive nested shape
+        setAnnouncements(res.data.data.map(mapAnnouncement));
       }
     } catch (err) {
       console.error('Lỗi fetch announcements:', err);
     }
   };
 
-  // Poll meetings mỗi 30 giây và push notification khi sắp tới
+  // Poll meetings mỗi 60s — nhắc ~15 phút trước
   useEffect(() => {
     if (!authReady || !activeUser) return;
     const notifiedIds = new Set<string>();
 
     const checkUpcomingMeetings = async () => {
       try {
-        const res = await coreApiClient.get('/hr/meetings');
-        if (res?.status !== 'success') return;
-        const allMeetings: Meeting[] = res.data;
+        const res: any = await coreApiClient.get('/hr/meetings');
+        if (res?.status !== 'success' || !Array.isArray(res.data)) return;
+        const allMeetings: Meeting[] = res.data.map(mapMeeting);
         setMeetings(allMeetings);
 
         const nowMs = Date.now();
         allMeetings.forEach((m: any) => {
           const startMs = new Date(m.startTime || m.start_time || m.createdAt).getTime();
+          if (Number.isNaN(startMs)) return;
           const diffMin = Math.floor((startMs - nowMs) / 60000);
-          // Nhắc khi còn 14–16 phút, chỉ nhắc 1 lần
           if (diffMin >= 14 && diffMin <= 16 && !notifiedIds.has(m.id)) {
             notifiedIds.add(m.id);
-            const timeStr = new Date(startMs).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-            setAppNotifications(prev => {
-              const updated = [{
-                id: Date.now(),
-                title: '📅 Lịch họp sắp bắt đầu',
-                message: `"${m.title || 'Cuộc họp'}" bắt đầu lúc ${timeStr} — còn 15 phút`,
-                type: 'meeting',
-                timestamp: new Date(),
-                read: false,
-              }, ...prev];
+            const timeStr = new Date(startMs).toLocaleTimeString('vi-VN', {
+              hour: '2-digit',
+              minute: '2-digit',
+            });
+            setAppNotifications((prev) => {
+              const updated = [
+                {
+                  id: Date.now(),
+                  title: '📅 Lịch họp sắp bắt đầu',
+                  message: `"${m.title || 'Cuộc họp'}" lúc ${timeStr} — còn ~15 phút`,
+                  type: 'meeting',
+                  timestamp: new Date(),
+                  read: false,
+                },
+                ...prev,
+              ];
               localStorage.setItem('storymee_app_notifications', JSON.stringify(updated));
               return updated;
             });
             setShowNotifications(true);
           }
         });
-      } catch {}
+      } catch {
+        /* ignore poll errors */
+      }
     };
 
     checkUpcomingMeetings();
-    const interval = setInterval(checkUpcomingMeetings, 60_000); // mỗi 60 giây
+    const interval = setInterval(checkUpcomingMeetings, 60_000);
     return () => clearInterval(interval);
   }, [authReady, activeUser]);
 
   useEffect(() => {
     if (!authReady || !activeUser) return;
 
-    // Restore notifications from localStorage
     if (typeof window !== 'undefined') {
       const savedNotifs = localStorage.getItem('storymee_app_notifications');
       if (savedNotifs) {
-        try { setAppNotifications(JSON.parse(savedNotifs)); } catch {}
+        try {
+          setAppNotifications(JSON.parse(savedNotifs));
+        } catch {
+          /* ignore */
+        }
       }
     }
 
     fetchServerAnnouncements();
     fetchServerMeetings();
 
-    const socket = io('/internal/v1/team/socket.io', {
+    const base = resolveSocketBase();
+    const socket = io(base, {
       path: '/internal/v1/team/socket.io',
-      transports: ['websocket', 'polling']
+      transports: ['websocket', 'polling'],
+      withCredentials: false,
     });
+    socketRef.current = socket;
 
     const addNotif = (notif: any) => {
-      setAppNotifications(prev => {
-        const updated = [{ ...notif, id: Date.now(), timestamp: new Date() }, ...prev];
+      setAppNotifications((prev) => {
+        const updated = [{ ...notif, id: Date.now(), timestamp: new Date() }, ...prev].slice(0, 50);
         localStorage.setItem('storymee_app_notifications', JSON.stringify(updated));
         return updated;
       });
       setShowNotifications(true);
     };
 
-    const dismissNotifByAction = (action: string, taskIdOrLeaveId?: string) => {
-      setAppNotifications(prev => {
-        const updated = prev.map(n => {
-          if (n.action === action && n.id_ref === taskIdOrLeaveId) {
-            return { ...n, read: true };
-          }
-          return n;
-        });
-        localStorage.setItem('storymee_app_notifications', JSON.stringify(updated));
-        return updated;
-      });
-    };
+    const admin = isTeamAdmin(activeUser);
 
-    // Task approval request (admin/manager only)
-    socket.on('task_request_approval', (data) => {
-      if (activeUser.role === 'admin' || activeUser.role === 'manager') {
-        addNotif({
-          title: 'Yêu cầu duyệt Task',
-          message: `Nhân sự ${data.employee_name} vừa xin duyệt hoàn thành task ${data.task_id}`,
-          action: 'request_approval',
-          id_ref: data.task_id
-        });
-      }
+    socket.on('connect', () => {
+      console.log('[Socket] connected', socket.id);
     });
 
-    // Real-time Kanban sync (NATS → Socket.io)
     socket.on('issue_updated', () => {
       fetchDbData();
     });
 
-    // Leave request notification (admin/manager only)
-    socket.on('leave_request_approval', (data) => {
-      if (activeUser.role === 'admin' || activeUser.role === 'manager') {
+    // NATS core.team.announcement.created → subject mapped announcement_created
+    socket.on('announcement_created', (data: any) => {
+      const ann = data?.announcement || data;
+      if (ann) {
+        const mapped = mapAnnouncement(ann);
+        setAnnouncements((prev) => {
+          if (prev.some((p) => p.id === mapped.id)) return prev;
+          return [mapped, ...prev];
+        });
+        if (!mapped.targetUserId || mapped.targetUserId === activeUser.id) {
+          addNotif({
+            title: '📢 Thông báo mới',
+            message: mapped.title,
+            type: 'announcement',
+          });
+        }
+      }
+      fetchServerAnnouncements();
+    });
+
+    socket.on('meeting_created', (data: any) => {
+      fetchServerMeetings();
+      const m = data?.meeting || data;
+      if (m?.title) {
         addNotif({
-          title: 'Yêu cầu nghỉ phép',
-          message: `Nhân sự ${data.employee_name} vừa xin nghỉ phép`,
-          action: 'leave_request',
-          id_ref: data.employee_name
+          title: '📅 Lịch họp mới',
+          message: m.title,
+          type: 'meeting',
         });
       }
     });
 
-    // Task approved
-    socket.on('task_approved', (data) => {
-      dismissNotifByAction('request_approval', data.task_id);
-      if (data.employee_name === activeUser.name) {
-        addNotif({ title: 'Duyệt Task', message: `Task ${data.task_id} của bạn đã được DUYỆT!`, type: 'success' });
+    socket.on('meeting_updated', () => {
+      fetchServerMeetings();
+    });
+
+    socket.on('task_request_approval', (data) => {
+      if (admin) {
+        addNotif({
+          title: 'Yêu cầu duyệt Task',
+          message: `Xin duyệt task ${data.task_id || data.task?.title || ''}`,
+          action: 'request_approval',
+          id_ref: data.task_id,
+        });
       }
     });
 
-    // Task rejected
-    socket.on('task_rejected', (data) => {
-      dismissNotifByAction('request_approval', data.task_id);
-      if (data.employee_name === activeUser.name) {
-        addNotif({ title: 'Từ chối Task', message: `Task ${data.task_id} của bạn ĐÃ BỊ TỪ CHỐI!`, type: 'error' });
+    socket.on('leave_request', (data) => {
+      if (admin) {
+        addNotif({
+          title: 'Yêu cầu nghỉ phép',
+          message: data?.leaveRequest?.member?.fullName
+            ? `${data.leaveRequest.member.fullName} xin nghỉ`
+            : 'Có đơn nghỉ phép mới',
+          action: 'leave_request',
+        });
       }
     });
 
-    // Leave approved (legacy event)
-    socket.on('leave_approved', (data) => {
-      dismissNotifByAction('leave_request', data.employee_name);
-      if (data.employee_name === activeUser.name) {
-        addNotif({ title: 'Duyệt Nghỉ phép', message: `Yêu cầu nghỉ phép của bạn đã được DUYỆT!`, type: 'success' });
+    // Hub may forward as leave_request_approval (legacy naming)
+    socket.on('leave_request_approval', (data) => {
+      if (admin) {
+        addNotif({
+          title: 'Yêu cầu nghỉ phép',
+          message: `Nhân sự ${data.employee_name || ''} vừa xin nghỉ phép`,
+          action: 'leave_request',
+        });
       }
     });
 
-    // Leave rejected (legacy event)
-    socket.on('leave_rejected', (data) => {
-      dismissNotifByAction('leave_request', data.employee_name);
-      if (data.employee_name === activeUser.name) {
-        addNotif({ title: 'Từ chối Nghỉ phép', message: `Yêu cầu nghỉ phép của bạn ĐÃ BỊ TỪ CHỐI!`, type: 'error' });
-      }
-    });
-
-    // TC-L05: NATS emit 'core.team.leave.resolved' → Socket.io forward 'leave_resolved'
     socket.on('leave_resolved', (data) => {
       const memberName = data?.leaveRequest?.member?.fullName || '';
       const leaveStatus = data?.leaveRequest?.status;
       fetchDbData();
-      if (memberName === activeUser.name) {
+      if (
+        memberName &&
+        (memberName === activeUser.name ||
+          memberName === (activeUser as any).fullName)
+      ) {
         if (leaveStatus === 'approved') {
-          addNotif({ title: '✅ Đơn nghỉ phép được duyệt', message: 'Admin đã phê duyệt đơn nghỉ phép của bạn.', type: 'success' });
+          addNotif({
+            title: '✅ Đơn nghỉ phép được duyệt',
+            message: 'Admin đã phê duyệt đơn nghỉ phép của bạn.',
+            type: 'success',
+          });
         } else if (leaveStatus === 'rejected') {
-          addNotif({ title: '❌ Đơn nghỉ phép bị từ chối', message: 'Admin đã từ chối đơn nghỉ phép của bạn.', type: 'error' });
+          addNotif({
+            title: '❌ Đơn nghỉ phép bị từ chối',
+            message: 'Admin đã từ chối đơn nghỉ phép của bạn.',
+            type: 'error',
+          });
         }
+      }
+    });
+
+    socket.on('account_registered', () => {
+      if (admin) {
+        addNotif({
+          title: '🆕 Đăng ký tài khoản',
+          message: 'Có yêu cầu đăng ký nội bộ mới — vào HR → Tài khoản nội bộ để duyệt.',
+          type: 'account',
+        });
       }
     });
 
     return () => {
       socket.disconnect();
+      socketRef.current = null;
     };
-  }, [authReady, activeUser]);
+  }, [authReady, activeUser?.id, activeUser?.email]);
 
   return {
     appNotifications,

@@ -1,5 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { TeamMember, getInitials } from '../../../constants';
+import {
+  accountStatusLabel,
+  canViewPrivateFields,
+  DEFAULT_PRIVACY,
+  isTeamAdmin,
+} from '@/lib/teamAuth';
+import { runMemberAccountAction } from './MemberApprovals';
 
 interface ProfileFormProps {
   myMember: TeamMember;
@@ -7,6 +14,9 @@ interface ProfileFormProps {
   setTeamMembers: React.Dispatch<React.SetStateAction<TeamMember[]>>;
   handleSaveMyProfile: (member: TeamMember) => void;
   isAdmin?: boolean;
+  /** Viewer (logged-in user) for privacy checks when viewing peers */
+  viewer?: TeamMember | null;
+  onRefreshHr?: () => void;
 }
 
 export default function ProfileForm({
@@ -14,8 +24,30 @@ export default function ProfileForm({
   isEditingSelf,
   setTeamMembers,
   handleSaveMyProfile,
-  isAdmin
+  isAdmin,
+  viewer,
+  onRefreshHr,
 }: ProfileFormProps) {
+  const [busy, setBusy] = useState(false);
+  const priv = canViewPrivateFields(viewer || (isEditingSelf ? myMember : null), myMember, DEFAULT_PRIVACY);
+  const showBank = isEditingSelf || !!isAdmin || priv.bank;
+  const showSalary = !!isAdmin || isEditingSelf || priv.salary;
+  const st = (myMember.accountStatus || 'active').toLowerCase();
+  const statusColor =
+    st === 'active' ? '#34d399' : st === 'pending' ? '#fbbf24' : '#f87171';
+
+  const accountAction = async (action: 'approve' | 'reject' | 'suspend' | 'delete') => {
+    if (!viewer || !isAdmin) return;
+    setBusy(true);
+    try {
+      await runMemberAccountAction(myMember.id, action, viewer, () => onRefreshHr?.());
+    } catch (e: any) {
+      alert(e?.data?.message || e?.message || 'Thao tác thất bại');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className='glass' style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14, height: 'fit-content' }}>
       <div>
@@ -125,35 +157,49 @@ export default function ProfileForm({
           <span style={{ fontSize: 9, color: '#71717a' }}>Dùng ID chat Telegram để nhận thông báo trực tiếp từ bot.</span>
         </div>
 
-        {/* Bank Name */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <span style={{ fontSize: 10, color: '#71717a', fontWeight: 500 }}>Ngân hàng nhận lương</span>
-          <input
-            className='input-dark'
-            placeholder='Ví dụ: Techcombank, Vietcombank...'
-            value={myMember.bankName || ''}
-            onChange={e => {
-              const val = e.target.value;
-              setTeamMembers(prev => prev.map(m => m.id === myMember.id ? { ...m, bankName: val } : m));
+        {/* Bank — privacy: self or admin only by default */}
+        {showBank ? (
+          <>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span style={{ fontSize: 10, color: '#71717a', fontWeight: 500 }}>Ngân hàng nhận lương</span>
+              <input
+                className='input-dark'
+                placeholder='Ví dụ: Techcombank, Vietcombank...'
+                value={myMember.bankName || ''}
+                onChange={e => {
+                  const val = e.target.value;
+                  setTeamMembers(prev => prev.map(m => m.id === myMember.id ? { ...m, bankName: val } : m));
+                }}
+                style={{ padding: '8px 12px', fontSize: 12, borderRadius: 8 }}
+              />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span style={{ fontSize: 10, color: '#71717a', fontWeight: 500 }}>Số tài khoản ngân hàng</span>
+              <input
+                className='input-dark'
+                placeholder='Nhập số tài khoản nhận lương...'
+                value={myMember.bankAccount || ''}
+                onChange={e => {
+                  const val = e.target.value;
+                  setTeamMembers(prev => prev.map(m => m.id === myMember.id ? { ...m, bankAccount: val } : m));
+                }}
+                style={{ padding: '8px 12px', fontSize: 12, borderRadius: 8 }}
+              />
+            </div>
+          </>
+        ) : (
+          <div
+            style={{
+              padding: '10px 12px',
+              borderRadius: 8,
+              border: '1px dashed var(--border)',
+              fontSize: 11,
+              color: '#71717a',
             }}
-            style={{ padding: '8px 12px', fontSize: 12, borderRadius: 8 }}
-          />
-        </div>
-
-        {/* Bank Account */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <span style={{ fontSize: 10, color: '#71717a', fontWeight: 500 }}>Số tài khoản ngân hàng</span>
-          <input
-            className='input-dark'
-            placeholder='Nhập số tài khoản nhận lương...'
-            value={myMember.bankAccount || ''}
-            onChange={e => {
-              const val = e.target.value;
-              setTeamMembers(prev => prev.map(m => m.id === myMember.id ? { ...m, bankAccount: val } : m));
-            }}
-            style={{ padding: '8px 12px', fontSize: 12, borderRadius: 8 }}
-          />
-        </div>
+          >
+            🔒 Thông tin ngân hàng được ẩn (privacy đội ngũ). Chỉ Admin hoặc chủ hồ sơ xem được.
+          </div>
+        )}
 
         {/* HR Configuration */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '12px', background: 'rgba(236,72,153,0.05)', border: '1px solid rgba(236,72,153,0.2)', borderRadius: 10, marginTop: 8 }}>
@@ -217,7 +263,7 @@ export default function ProfileForm({
             </div>
           </div>
           
-          {isAdmin && (
+          {showSalary && isAdmin && (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <span style={{ fontSize: 10, color: '#71717a', fontWeight: 500 }}>Lương Gross (VNĐ)</span>
@@ -257,26 +303,112 @@ export default function ProfileForm({
           Lưu hồ sơ {isEditingSelf ? 'cá nhân' : 'nhân sự'}
         </button>
 
-          {isAdmin && (
-            <div style={{ marginTop: 12, padding: 12, border: '1px solid rgba(239,68,68,0.2)', background: 'rgba(239,68,68,0.05)', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div>
-                <strong style={{ fontSize: 12, color: '#ef4444', display: 'block' }}>Vô hiệu hóa nhân sự</strong>
-                <span style={{ fontSize: 10, color: '#71717a' }}>Nhân sự này sẽ bị ẩn khỏi sơ đồ tổ chức.</span>
-              </div>
-              <button
-                className="btn-ghost"
-                onClick={() => {
-                  const newStatus = myMember.isActive === false ? true : false;
-                  const updated = { ...myMember, isActive: newStatus };
-                  setTeamMembers(prev => prev.map(m => m.id === myMember.id ? updated : m));
-                  handleSaveMyProfile(updated);
-                }}
-                style={{ padding: '6px 12px', fontSize: 11, borderRadius: 6, border: '1px solid #ef4444', color: '#ef4444', background: myMember.isActive === false ? '#ef444420' : 'transparent', fontWeight: 600, cursor: 'pointer' }}
-              >
-                {myMember.isActive === false ? 'Đã vô hiệu hóa (Nhấn để Khôi phục)' : 'Vô hiệu hóa (Nghỉ việc)'}
-              </button>
+        {/* Account lifecycle — merged from "Tài khoản nội bộ" */}
+        {isAdmin && (
+          <div
+            style={{
+              marginTop: 12,
+              padding: 12,
+              border: '1px solid rgba(167,139,250,0.25)',
+              background: 'rgba(167,139,250,0.06)',
+              borderRadius: 10,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 10,
+            }}
+          >
+            <div>
+              <strong style={{ fontSize: 12, color: '#c4b5fd', display: 'block' }}>
+                🔐 Quản lý tài khoản
+              </strong>
+              <span style={{ fontSize: 10, color: '#71717a' }}>
+                Trạng thái DB:{' '}
+                <span style={{ color: statusColor, fontWeight: 600 }}>
+                  {accountStatusLabel(st)}
+                </span>
+                {isTeamAdmin(myMember) ? ' · ADMIN' : ''}
+                {myMember.isActive === false ? ' · ẩn sơ đồ' : ''}
+              </span>
             </div>
-          )}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {st !== 'active' && (
+                <button
+                  disabled={busy}
+                  onClick={() => accountAction('approve')}
+                  style={{
+                    fontSize: 11,
+                    padding: '6px 10px',
+                    borderRadius: 6,
+                    border: '1px solid rgba(52,211,153,0.4)',
+                    color: '#34d399',
+                    background: 'rgba(52,211,153,0.08)',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                  }}
+                >
+                  {st === 'pending' ? 'Duyệt' : 'Kích hoạt lại'}
+                </button>
+              )}
+              {st === 'pending' && (
+                <button
+                  disabled={busy}
+                  onClick={() => accountAction('reject')}
+                  style={{
+                    fontSize: 11,
+                    padding: '6px 10px',
+                    borderRadius: 6,
+                    border: '1px solid rgba(248,113,113,0.4)',
+                    color: '#f87171',
+                    background: 'transparent',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                  }}
+                >
+                  Từ chối
+                </button>
+              )}
+              {st === 'active' && !isEditingSelf && (
+                <button
+                  disabled={busy}
+                  onClick={() => accountAction('suspend')}
+                  style={{
+                    fontSize: 11,
+                    padding: '6px 10px',
+                    borderRadius: 6,
+                    border: '1px solid rgba(251,191,36,0.4)',
+                    color: '#fbbf24',
+                    background: 'transparent',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                  }}
+                >
+                  Khoá tài khoản
+                </button>
+              )}
+              {!isEditingSelf && (
+                <button
+                  disabled={busy}
+                  onClick={() => accountAction('delete')}
+                  style={{
+                    fontSize: 11,
+                    padding: '6px 10px',
+                    borderRadius: 6,
+                    border: '1px solid rgba(239,68,68,0.4)',
+                    color: '#ef4444',
+                    background: 'rgba(239,68,68,0.06)',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                  }}
+                >
+                  Xoá / Khoá mềm
+                </button>
+              )}
+            </div>
+            <div style={{ fontSize: 9, color: '#52525b' }}>
+              Duyệt/Khoá/Xoá gộp tại hồ sơ — không cần tab Tài khoản riêng.
+            </div>
+          </div>
+        )}
 
       </div>
     </div>

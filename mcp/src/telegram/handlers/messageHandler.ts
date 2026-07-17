@@ -1,7 +1,8 @@
 import { fetchAxios } from '../../fetchAxios';
 import { CoreApiClient, API_ROUTES } from "@storymee/api-client";
 import { 
-  getCachedMembers, createCalendarKeyboard, sendMessage, sendChatAction,
+  getCachedMembers, getCachedProjects, getCachedIssues, invalidateIssuesCache,
+  createCalendarKeyboard, sendMessage, sendChatAction,
   formatTelegramText, userFormSession, processingActions, 
   actionCache, chatHistories, KEYBOARD_MAIN, KEYBOARD_UNAUTHORIZED, 
   calculateWorkingHours, checkRealtimeOverdueDeadlines 
@@ -9,6 +10,7 @@ import {
 import { executeMcpTool } from '../../index';
 import { formatMyIssuesDM, isDoneGroup, parseIssue } from '../formatters/issueFormatter';
 import { outputSessions, pendingOutputByUsername } from '../../sessionStore';
+import { classifyIntentFast, buildSlimRoster } from '../fastIntent';
 import * as dotenv from "dotenv";
 
 dotenv.config();
@@ -16,7 +18,15 @@ dotenv.config();
 const TELEGRAM_API = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}`;
 const CORE_API_URL = process.env.CORE_API_URL || "http://localhost:5100";
 const WEB_PORTAL_URL = process.env.WEB_PORTAL_URL || "https://dev-hub.storymee.com";
-const OMNIROUTER_API_URL = process.env.OMNIROUTER_API_URL || "https://dev-hub.storymee.com/api/ai/chat";
+// Backend Ubuntu: core-ai-api via hub (no FE required)
+// e.g. http://127.0.0.1:5100/internal/v1/ai/team/chat  or  https://dev-hub.storymee.com/internal/v1/ai/team/chat
+const OMNIROUTER_API_URL =
+  process.env.OMNIROUTER_API_URL ||
+  `${(process.env.CORE_API_URL || 'http://127.0.0.1:5100').replace(/\/+$/, '')}/internal/v1/ai/team/chat`;
+/** Skip Gemini Flash first-pass (default true — heuristic is enough) */
+const USE_FLASH_INTENT = process.env.TELEGRAM_USE_FLASH_INTENT === '1';
+const LLM_TIMEOUT_MS = Number(process.env.TELEGRAM_LLM_TIMEOUT_MS || 35000);
+const HISTORY_TURNS = Number(process.env.TELEGRAM_HISTORY_TURNS || 6);
 const apiClient = new CoreApiClient({ baseURL: CORE_API_URL + '/internal/v1/team', enforceApiPrefix: false });
 
 async function getTelegramFileUrl(fileId: string): Promise<string | null> {
@@ -30,6 +40,11 @@ async function getTelegramFileUrl(fileId: string): Promise<string | null> {
   return null;
 }
 
+/**
+ * Nộp output + chuyển In Review (SSOT).
+ * Backend PlaneController fire NATS core.team.task.submitted_for_review → bot notify admins.
+ * Không dual-notify trực tiếp từ đây (tránh double message).
+ */
 async function finalizeOutputSession(chatId: number, session: any, member: any) {
   if (!session) return;
   outputSessions.delete(chatId);
@@ -37,26 +52,16 @@ async function finalizeOutputSession(chatId: number, session: any, member: any) 
   const outputUrls = session.urls;
   try {
     await apiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${session.issueId}`, {
+      status: 'in_review',
       outputContent,
       outputUrls,
-      submittedById: session.memberId,
+      submittedById: session.memberId || member?.id,
     });
-  } catch (e) { console.error('[finalizeOutputSession] PATCH error:', e); }
-  const ADMIN_EMAILS = ['kimngan151091@gmail.com', 'lehuyducanh.vn@gmail.com', 'zuzzivn@gmail.com'];
-  try {
-    const allMembersForNotify = await getCachedMembers();
-    const admins = allMembersForNotify.filter((m: any) => ADMIN_EMAILS.includes((m.email || '').toLowerCase()) && m.telegramChatId);
-    const urlsText = outputUrls.length > 0 ? `\n*Files/Links:*\n${outputUrls.join('\n')}` : '';
-    const notifyText = `KET QUA CAN DUYET:\n- Task: *${session.issueShortId}* -- ${session.issueTitle}\n- Nguoi nop: *${member.fullName}*\n\nNoi dung:\n${outputContent}${urlsText}`;
-    for (const admin of admins) {
-      await sendMessage(Number(admin.telegramChatId), notifyText, {
-        inline_keyboard: [[
-          { text: 'Duyet (Done)', callback_data: `review_approve:${session.issueId}` },
-          { text: 'Tu choi', callback_data: `review_reject:${session.issueId}` }
-        ]]
-      });
-    }
-  } catch (e) { console.error('[finalizeOutputSession] notify admin error:', e); }
+  } catch (e) {
+    console.error('[finalizeOutputSession] PATCH error:', e);
+    await sendMessage(chatId, `Loi khi nop ket qua. Vui long thu lai.`, KEYBOARD_MAIN);
+    return;
+  }
   await sendMessage(chatId, `Da gui ket qua task *${session.issueShortId}* cho Admin duyet.\nBan se nhan thong bao khi Admin xac nhan.`, KEYBOARD_MAIN);
 }
 
@@ -115,13 +120,7 @@ export async function handleTelegramMessage(message: any) {
   }
 
 
-  // PRE-FETCH Projects để tiết kiệm Tool Call cho LLM
-  const prefetchProjectsPromise = apiClient.get(API_ROUTES.PLANE.PROJECTS).catch(err => {
-    console.error("Lỗi prefetch projects:", err);
-    return null;
-  });
-
-  // A. Định danh người dùng qua Postgres API
+  // A. Định danh người dùng (cache 5 phút — không block prefetch nặng trước auth)
   let member: any = null;
   let allMembers: any[] = [];
   try {
@@ -129,7 +128,7 @@ export async function handleTelegramMessage(message: any) {
     if (allMembers && allMembers.length > 0) {
       const cleanUsername = (username || "").replace(/^@/, "").toLowerCase().trim();
       member = allMembers.find((m: any) => {
-        if (m.telegramChatId && m.telegramChatId === chatId) {
+        if (m.telegramChatId && Number(m.telegramChatId) === Number(chatId)) {
           return true;
         }
         if (cleanUsername) {
@@ -165,6 +164,21 @@ export async function handleTelegramMessage(message: any) {
     return;
   }
 
+  // Gate: only active accounts use full bot (pending/rejected/suspended blocked)
+  const acctStatus = (member.accountStatus || (member.isActive === false ? 'suspended' : 'active')).toLowerCase();
+  if (acctStatus !== 'active') {
+    if (!isGroup) {
+      const msg =
+        acctStatus === 'pending'
+          ? `⏳ Tài khoản **${member.fullName}** đang *chờ Admin duyệt*. Bạn chưa dùng được bot/StorymeeTeam.\nAdmin sẽ thông báo khi duyệt.`
+          : acctStatus === 'rejected'
+            ? `❌ Tài khoản bị *từ chối*. Liên hệ Admin nếu cần hỗ trợ.`
+            : `🔒 Tài khoản đang *bị khoá* (${acctStatus}). Liên hệ Admin.`;
+      await sendMessage(chatId, msg, KEYBOARD_UNAUTHORIZED);
+    }
+    return;
+  }
+
   // Group commands
   if (isGroup && (lowerText === "/menu" || lowerText.startsWith("/menu@"))) {
     await sendMessage(chatId, "🤖 *STORYMEE TEAM BOT*\nĐể sử dụng bot trong nhóm, vui lòng gõ `/` để chọn lệnh hoặc dùng trực tiếp:\n\n/checkin - Điểm danh vào ca\n/checkout - Điểm danh ra về\n/cong_viec - Xem việc của tôi\n/lichhop - Quản lý lịch họp\n/dang_ky - Xin nghỉ phép / remote\n/check_team - Tiến độ công việc nhóm\n/team_status - Trạng thái check-in hôm nay\n/subtask [ID] - Phân rã task bằng AI\n\n_(Lưu ý: Bạn cũng có thể tag bot kèm câu hỏi tiếng Việt để nhờ AI hỗ trợ)_", { remove_keyboard: true });
@@ -177,15 +191,16 @@ export async function handleTelegramMessage(message: any) {
       console.log(`[Postgres API] Đang cập nhật chat_id ${chatId} cho @${username}...`);
       try {
           await apiClient.post(API_ROUTES.HR.TEAM_MEMBERS, {
+            mode: 'self',
+            actorEmail: member.email,
             fullName: member.fullName,
             email: member.email,
-            telegramUsername: member.telegramUsername,
+            telegramUsername: member.telegramUsername || username,
             telegramChatId: chatId,
-            role: member.role,
-            skills: member.skills,
+            phone: member.phone,
+            skills: member.skills || [],
             bankName: member.bankName,
             bankAccount: member.bankAccount,
-            phone: member.phone
           });
           console.log(`[Postgres API] Đã đồng bộ thành công chat_id ${chatId} cho @${username} (${member.fullName})`);
           member.telegramChatId = chatId;
@@ -287,29 +302,21 @@ export async function handleTelegramMessage(message: any) {
     return;
   }
 
-  // Xu ly reject reason cho admin tu choi task
+  // Xu ly reject reason cho admin tu choi task — SSOT: POST /plane/issues/:id/review
   const fSession = userFormSession[chatId];
   if (fSession?.step === 'await_reject_reason' && text) {
     const { issueId, adminId } = fSession;
     delete userFormSession[chatId];
     try {
-      await apiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${issueId}`, {
-        status: 'working', // chuyen ve In Progress
+      await apiClient.post(`${API_ROUTES.PLANE.ISSUES}/${issueId}/review`, {
+        decision: 'reject',
+        reviewerId: adminId,
         reviewNote: text,
-        reviewedById: adminId,
       });
-      // Notify assignee
-      try {
-        const issuesRes = (await apiClient.get(API_ROUTES.PLANE.ISSUES)) as any;
-        const issue = (issuesRes.data || []).find((i: any) => i.id === issueId);
-        if (issue?.Assignee?.telegramChatId) {
-          await sendMessage(Number(issue.Assignee.telegramChatId),
-            `Task *${issue.shortId || issueId}* (${issue.title}) bi tu choi.\nLy do: ${text}\nVui long lam lai va nop ket qua.`
-          );
-        }
-      } catch (e) {}
-      await sendMessage(chatId, `Da tu choi va thong bao cho nhan su. Task chuyen ve In Progress.`);
+      // Assignee notify via NATS core.team.task.review_rejected (index.ts subscriber)
+      await sendMessage(chatId, `Da tu choi. Task chuyen ve In Progress (nhan su se nhan thong bao).`);
     } catch (e) {
+      console.error('[await_reject_reason] review API error:', e);
       await sendMessage(chatId, `Loi khi tu choi task.`);
     }
     return;
@@ -630,14 +637,27 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
       await sendMessage(chatId, "❌ Tài khoản Telegram của bạn chưa được liên kết với nhân sự nào. Vui lòng liên kết trước.");
       return;
     }
-    await sendMessage(chatId, "🌅 *BÁO CÁO ĐIỂM DANH HÀNG NGÀY*\n\nVui lòng chọn ca điểm danh của bạn dưới đây:", {
-      inline_keyboard: [
-        [
-          { text: "🌅 Vào ca (Check-in)", callback_data: `attendance_direct:present` },
-          { text: "🚪 Tan ca (Check-out)", callback_data: `attendance_direct:checkout` }
-        ]
-      ]
-    });
+    const isFullRemoteMem =
+      String(member?.workArrangement || "").toLowerCase() === "remote" ||
+      String(member?.workArrangement || "").toLowerCase() === "full_remote";
+    const checkinLabel = isFullRemoteMem ? "🏠 Vào ca Remote" : "🌅 Vào ca (Check-in)";
+    const checkinCb = isFullRemoteMem
+      ? "attendance_direct:present:remote"
+      : "attendance_direct:present";
+    await sendMessage(
+      chatId,
+      isFullRemoteMem
+        ? "🏠 *ĐIỂM DANH REMOTE*\n\nBạn là full remote (HR). Check-in sẽ ghi **Remote**."
+        : "🌅 *BÁO CÁO ĐIỂM DANH HÀNG NGÀY*\n\nVui lòng chọn ca điểm danh. _(Đơn remote đã duyệt hôm nay → tự ghi Remote.)_",
+      {
+        inline_keyboard: [
+          [
+            { text: checkinLabel, callback_data: checkinCb },
+            { text: "🚪 Tan ca (Check-out)", callback_data: `attendance_direct:checkout` },
+          ],
+        ],
+      }
+    );
     return;
   }
 
@@ -653,45 +673,46 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
     return;
   }
 
-  if (cleanText === "📝 công việc của tôi" || cleanText === "/cong_viec") {
-    await sendMessage(chatId, "🔍 Đang truy vấn danh sách công việc của bạn...");
+  // Fast path: button /cong_viec + NL "công việc của tôi / trong ngày" — no LLM
+  const isMyWorkQuery =
+    cleanText === "📝 công việc của tôi" ||
+    cleanText === "/cong_viec" ||
+    /^(kiểm tra |xem |cho tôi xem |liệt kê |list )?(các )?(công việc|task|issue)s?( trong ngày| hôm nay| hôm nay của tôi| của tôi| của mình)?[\s!?.]*$/i.test(
+      text.trim()
+    ) ||
+    /công việc (trong ngày|hôm nay|của tôi|của mình)/i.test(text.trim());
+
+  if (isMyWorkQuery) {
+    sendChatAction(chatId, 'typing').catch(() => {});
     try {
-      // Fetch trực tiếp từ API để có đầy đủ subIssues
-      const allMembers = await getCachedMembers();
-      const issuesRes = await apiClient.get(API_ROUTES.PLANE.ISSUES) as any;
-      const rawTasks: any[] = issuesRes?.data || [];
-      
-      // Reconstruct hierarchy from flat Plane issues
+      invalidateIssuesCache();
+      const rawTasks: any[] = await getCachedIssues();
       const parentMap = new Map<string, any>();
       const topLevelIssues: any[] = [];
-      
-      // Store all issues in map
       rawTasks.forEach((t: any) => {
-        t.subIssues = [];
-        parentMap.set(t.id, t);
+        const clone = { ...t, subIssues: [] as any[] };
+        parentMap.set(t.id, clone);
       });
-      
-      // Build hierarchy
-      rawTasks.forEach((t: any) => {
+      parentMap.forEach((t) => {
         if (t.parentId && parentMap.has(t.parentId)) {
           parentMap.get(t.parentId).subIssues.push(t);
-        } else {
+        } else if (!t.parentId) {
           topLevelIssues.push(t);
         }
       });
-      
-      // Lấy issues của member này (Bao gồm parent task member phụ trách, HOẶC parent task có subtask do member phụ trách)
-      const myIssues = topLevelIssues.filter((t: any) => {
-          const isAssigned = t.assigneeId === member.id;
-          const hasAssignedSub = t.subIssues.some((sub: any) => sub.assigneeId === member.id);
-          return isAssigned || hasAssignedSub;
+      parentMap.forEach((t) => {
+        if (t.parentId && !parentMap.has(t.parentId)) topLevelIssues.push(t);
       });
-      
-      const formattedText = formatMyIssuesDM(myIssues, member.fullName);
-      await sendMessage(chatId, formattedText);
+
+      const myIssues = topLevelIssues.filter((t: any) => {
+        const isAssigned = t.assigneeId === member.id;
+        const hasAssignedSub = (t.subIssues || []).some((sub: any) => sub.assigneeId === member.id);
+        return isAssigned || hasAssignedSub;
+      });
+      await sendMessage(chatId, formatMyIssuesDM(myIssues, member.fullName));
     } catch (e: any) {
       console.error("Lỗi fetch task:", e);
-      await sendMessage(chatId, "❌ Gặp lỗi khi truy vấn danh sách công việc.");
+      await sendMessage(chatId, "❌ Gặp lỗi khi truy vấn danh sách công việc. Thử lại hoặc gõ /cong_viec.");
     }
     return;
   }
@@ -718,70 +739,101 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
     return;
   }
 
-  await sendChatAction(chatId, 'typing');
+  // Typing indicator (non-blocking) + keep-alive interval (Telegram expires ~5s)
+  sendChatAction(chatId, 'typing').catch(() => {});
+  const typingTimer = setInterval(() => {
+    sendChatAction(chatId, 'typing').catch(() => {});
+  }, 4000);
 
-  // E. First-Pass LLM Routing: Phân loại Intent cực nhanh (Gemini 1.5 Flash)
-  let userIntent = "TASK"; // Mặc định là TASK nếu có lỗi
-  try {
-    const flashRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{
-          role: "user",
-          parts: [{ text: `Phân loại câu sau thuộc nhóm nào: [TASK, HR, PROJECT_MANAGEMENT, CHAT]. Chỉ in ra 1 từ duy nhất. Câu: "${text}"` }]
-        }],
-        generationConfig: { temperature: 0.1, maxOutputTokens: 10 }
-      })
-    });
-    if (flashRes.ok) {
-      const flashJson = (await flashRes.json()) as any;
-      const rawOutput = flashJson.candidates?.[0]?.content?.parts?.[0]?.text || "TASK";
-      userIntent = rawOutput.trim().toUpperCase().replace(/[^A-Z_]/g, '');
-    }
-  } catch (err) {
-    console.error("Lỗi First-Pass LLM Routing:", err);
-  }
-
-  // Tái kích hoạt "typing" (vì Telegram timeout action sau 5s)
-  await sendChatAction(chatId, 'typing');
-
-  // F. Fetch Tasks & Projects thực tế từ Postgres CHỈ NẾU intent = TASK hoặc PROJECT_MANAGEMENT
-  let mappedTasks: any[] = [];
-  let projects: any[] = [];
-  
-  if (userIntent === "TASK" || userIntent === "PROJECT_MANAGEMENT" || userIntent === "") {
-    // Tasks được gửi rỗng, LLM sẽ tự gọi tool "get_my_issues" nếu cần
+  // E. Fast intent (heuristic) — skip Gemini Flash unless TELEGRAM_USE_FLASH_INTENT=1
+  let userIntent = classifyIntentFast(text);
+  if (USE_FLASH_INTENT && process.env.GEMINI_API_KEY) {
     try {
-      const projData = await prefetchProjectsPromise;
-      if (projData && projData.data) {
-        projects = projData.data.map((p: any) => ({
-          id: p.id,
-          title: p.name,
-          identifier: p.identifier
-        }));
+      const flashRes = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{
+              role: 'user',
+              parts: [{ text: `Classify into exactly one of TASK,HR,PROJECT_MANAGEMENT,CHAT. Output one word only.\nText: ${text}` }],
+            }],
+            generationConfig: { temperature: 0, maxOutputTokens: 8 },
+          }),
+          signal: AbortSignal.timeout(2000),
+        }
+      );
+      if (flashRes.ok) {
+        const flashJson = (await flashRes.json()) as any;
+        const rawOutput = flashJson.candidates?.[0]?.content?.parts?.[0]?.text || userIntent;
+        const parsed = rawOutput.trim().toUpperCase().replace(/[^A-Z_]/g, '');
+        if (['TASK', 'HR', 'PROJECT_MANAGEMENT', 'CHAT'].includes(parsed)) {
+          userIntent = parsed as any;
+        }
       }
-    } catch (err) {
-      console.error("Lỗi parse projects cho AI context:", err);
+    } catch {
+      /* keep heuristic */
     }
   }
 
-  // F. Định tuyến cuộc gọi đến OmniRouter AI
+  // F. Projects only when needed (cached 3m)
+  let projects: any[] = [];
+  if (userIntent === 'TASK' || userIntent === 'PROJECT_MANAGEMENT') {
+    try {
+      const projData = await getCachedProjects();
+      projects = (projData || []).map((p: any) => ({
+        id: p.id,
+        title: p.name,
+        identifier: p.identifier,
+      }));
+    } catch (err) {
+      console.error('Lỗi projects cache:', err);
+    }
+  }
+
+  // F. OmniRouter / FE chat — preferFastLLM skips Letta + heavy HR on server
   try {
     const history = chatHistories[chatId] || [];
+    const slimRoster = buildSlimRoster(allMembers);
+    const t0 = Date.now();
     const res = await fetchAxios(OMNIROUTER_API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      timeout: LLM_TIMEOUT_MS,
       body: JSON.stringify({
         message: text,
-        history: history,
-        currentUser: { ...member, name: member.fullName },
-        tasks: mappedTasks,
-        projects: projects,
-        companyRules: "Danh sách nhân sự công ty thực tế từ Database:\n" + allMembers.map((m:any) => `- ${m.fullName} (Role: ${m.role || 'Nhân viên'}, Telegram: @${m.telegramUsername || 'Chưa có'}, Email: ${m.email})`).join("\n") + "\n\nQUY TẮC: Nếu user không chỉ định rõ Tên Dự án, TUYỆT ĐỐI không tự suy diễn project_id, hãy để project_id rỗng để hệ thống đưa vào dự án Mặc định.",
-        config: { useCloud: true, useFallback: true, useMasking: true, useCompression: true }
-      })
+        history: history.slice(-HISTORY_TURNS),
+        currentUser: {
+          id: member.id,
+          email: member.email,
+          fullName: member.fullName,
+          name: member.fullName,
+          role: member.role,
+          annualLeaveLimit: member.annualLeaveLimit,
+          annualLeaveUsed: member.annualLeaveUsed,
+          remoteLimit: member.remoteLimit,
+          remoteUsed: member.remoteUsed,
+          lettaConversationId: member.lettaConversationId,
+        },
+        tasks: [],
+        projects,
+        companyRules:
+          `Nhân sự active:\n${slimRoster}\n\n` +
+          `QUY TẮC: Không bịa project_id. Không hỏi gặng estimate. Trả JSON action chuẩn.`,
+        config: {
+          source: 'telegram',
+          preferFastLLM: true,
+          skipLetta: true,
+          useCloud: false,
+          useFallback: true,
+          useMasking: false,
+          useCompression: true,
+          intent: userIntent,
+        },
+      }),
     });
+    console.log(`[Telegram LLM] intent=${userIntent} latency=${Date.now() - t0}ms status=${res.status}`);
 
     if (res.ok) {
       const json = (await res.json()) as any;
@@ -789,10 +841,10 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
         const aiResponse = json.data;
         await sendMessage(chatId, aiResponse.reply);
 
-        // Lưu hội thoại vào history
+        // Lưu hội thoại vào history (ngắn — tiết kiệm tokens)
         history.push({ role: "user", parts: [{ text: text }] });
         history.push({ role: "model", parts: [{ text: aiResponse.reply }] });
-        chatHistories[chatId] = history.slice(-15); // Giới hạn 15 tin nhắn gần nhất
+        chatHistories[chatId] = history.slice(-HISTORY_TURNS);
 
         // G. Xử lý Action từ AI: Lưu vào cache và gửi Inline Keyboard xác nhận
         if (aiResponse.action === 'get_attendance_report') {
@@ -802,47 +854,54 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
             month: rp.month,
             year: rp.year
           }, member);
+          if (result?.content?.[0]?.text) await sendMessage(chatId, result.content[0].text);
         } else if (aiResponse.action === 'show_my_issues') {
           try {
-            const allMembers = await getCachedMembers();
-            const issuesRes = await apiClient.get(API_ROUTES.PLANE.ISSUES) as any;
-            const rawTasks: any[] = issuesRes?.data || [];
-            
+            invalidateIssuesCache();
+            const rawTasks: any[] = await getCachedIssues();
             const parentMap = new Map<string, any>();
             const topLevelIssues: any[] = [];
-            
-            rawTasks.forEach((t: any) => {
-              t.subIssues = [];
-              parentMap.set(t.id, t);
+            rawTasks.forEach((t: any) => parentMap.set(t.id, { ...t, subIssues: [] }));
+            parentMap.forEach((t) => {
+              if (t.parentId && parentMap.has(t.parentId)) parentMap.get(t.parentId).subIssues.push(t);
+              else if (!t.parentId) topLevelIssues.push(t);
             });
-            
-            rawTasks.forEach((t: any) => {
-              if (t.parentId && parentMap.has(t.parentId)) {
-                parentMap.get(t.parentId).subIssues.push(t);
-              } else {
-                topLevelIssues.push(t);
-              }
-            });
-            
             const myIssues = topLevelIssues.filter((t: any) => {
                 const isAssigned = t.assigneeId === member.id;
-                const hasAssignedSub = t.subIssues.some((sub: any) => sub.assigneeId === member.id);
+                const hasAssignedSub = (t.subIssues || []).some((sub: any) => sub.assigneeId === member.id);
                 return isAssigned || hasAssignedSub;
             });
-            
-            const formattedText = formatMyIssuesDM(myIssues, member.fullName);
-            await sendMessage(chatId, formattedText);
+            await sendMessage(chatId, formatMyIssuesDM(myIssues, member.fullName));
           } catch (e: any) {
             console.error("Lỗi fetch task AI action:", e);
             await sendMessage(chatId, "❌ Gặp lỗi khi đồng bộ danh sách công việc.");
           }
-        } else if (aiResponse.action === 'get_team_leaves') {
-          const result = await executeMcpTool("get_team_leaves", aiResponse.teamLeavesPayload || {}, member);
+        } else if (aiResponse.action === 'get_team_leaves' || aiResponse.action === 'list_leave_requests') {
+          const result = await executeMcpTool("list_leave_requests", aiResponse.teamLeavesPayload || { status: 'pending' }, member);
           await sendMessage(chatId, result.content[0].text);
         } else if (aiResponse.action === 'create_issue') {
           await sendMessage(chatId, "⏳ Đang tự động tạo Task theo yêu cầu...");
           try {
-            const result = await executeMcpTool("create_issue", aiResponse.taskPayload, member);
+            // Extract URLs from original user message if AI forgot
+            const urlRe = /https?:\/\/[^\s)>\]]+/gi;
+            const urlsFromMsg = (text.match(urlRe) || []) as string[];
+            const tp = { ...(aiResponse.taskPayload || {}) };
+            if (urlsFromMsg.length) {
+              const links = Array.isArray(tp.links) ? tp.links : [];
+              const media = Array.isArray(tp.media_urls) ? tp.media_urls : [];
+              for (const u of urlsFromMsg) {
+                if (/\.(png|jpe?g|gif|webp|mp4|mov|webm)(\?|$)/i.test(u) || /imgur|giphy|cloudinary|cdn/i.test(u)) {
+                  if (!media.includes(u)) media.push(u);
+                } else if (!links.includes(u)) links.push(u);
+              }
+              tp.links = links;
+              tp.media_urls = media;
+            }
+            // If user wrote a long message, keep as description when AI only set title
+            if (!tp.description && text && text.length > 40 && tp.title) {
+              tp.description = text;
+            }
+            const result = await executeMcpTool("create_issue", tp, member);
             await sendMessage(chatId, result.content[0].text);
           } catch (e: any) {
             await sendMessage(chatId, `❌ Lỗi khi tạo Task: ${e.message}`);
@@ -855,7 +914,37 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
           } catch (e: any) {
             await sendMessage(chatId, `❌ Lỗi khi nộp đơn: ${e.message}`);
           }
-        } else if (['create_project', 'update_issue', 'update_issues', 'check_in_out', 'breakdown_issue', 'update_sub_issues', 'request_issue_approval', 'create_meeting', 'update_meeting'].includes(aiResponse.action)) {
+        } else if (
+          aiResponse.action === 'delete_issue' ||
+          aiResponse.action === 'delete_task' ||
+          aiResponse.action === 'archive_issue' ||
+          aiResponse.action === 'archive_task' ||
+          (aiResponse.action === 'update_issue' &&
+            ['delete', 'cancelled', 'archive', 'remove'].includes(
+              String(aiResponse.taskPayload?.status || '').toLowerCase()
+            )) ||
+          (aiResponse.action === 'request_issue_approval' &&
+            ['archive', 'delete', 'remove'].includes(
+              String(aiResponse.approvalPayload?.type || '').toLowerCase()
+            ))
+        ) {
+          // User tự archive/xoá (assignee|admin) — không xin admin
+          const tp = aiResponse.taskPayload || aiResponse.approvalPayload || {};
+          const taskId = tp.task_id || tp.id || tp.issue_id;
+          const wantDelete =
+            aiResponse.action === 'delete_issue' ||
+            aiResponse.action === 'delete_task' ||
+            String(aiResponse.approvalPayload?.type || '').toLowerCase() === 'delete' ||
+            String(tp.status || '').toLowerCase() === 'delete' ||
+            String(tp.status || '').toLowerCase() === 'remove';
+          aiResponse.action = wantDelete ? 'delete_issue' : 'archive_issue';
+          aiResponse.taskPayload = {
+            task_id: taskId,
+            reason: tp.reason || tp.note || (wantDelete ? 'User xoá task qua chat' : 'User archive task qua chat'),
+          };
+        }
+
+        if (['create_project', 'update_issue', 'update_issues', 'check_in_out', 'breakdown_issue', 'update_sub_issues', 'request_issue_approval', 'create_meeting', 'update_meeting', 'delete_issue', 'archive_issue'].includes(aiResponse.action)) {
           const actionId = Math.random().toString(36).substring(2, 10);
           actionCache[actionId] = {
             action: aiResponse.action,
@@ -866,26 +955,28 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
                   : aiResponse.action === 'update_sub_issues'
                     ? aiResponse.updateSubtasksPayload
                     : aiResponse.action === 'request_issue_approval'
-                      ? aiResponse.approvalPayload
+                      ? { ...(aiResponse.approvalPayload || {}) }
                       : aiResponse.action === 'create_project'
                         ? aiResponse.projectPayload
                         : aiResponse.action === 'create_meeting'
                           ? aiResponse.meetingPayload
                           : aiResponse.action === 'update_meeting'
                             ? aiResponse.updateMeetingPayload
-                            : aiResponse.taskPayload,
+                            : aiResponse.action === 'delete_issue' || aiResponse.action === 'archive_issue'
+                              ? (aiResponse.taskPayload || {})
+                              : aiResponse.taskPayload,
             member: member
           };
 
           let confirmMsg = '';
           if (aiResponse.action === 'check_in_out') {
-            const cp = aiResponse.checkInOutPayload;
-            confirmMsg = `💡 *ĐỀ XUẤT ĐIỂM DANH:*\n• Trạng thái: *${cp.status === 'present' ? 'Đi làm' : cp.status === 'late' ? 'Đi muộn' : 'Vắng'}*\n• Ghi chú: *${cp.notes || 'Không có'}*${cp.employee_name ? `\n• Nhân sự: *${cp.employee_name}*` : ''}`;
+            const cp = aiResponse.checkInOutPayload || {};
+            confirmMsg = `💡 *ĐỀ XUẤT ĐIỂM DANH:*\n• Trạng thái: *${cp.status === 'present' ? 'Đi làm' : cp.status === 'late' ? 'Đi muộn' : cp.status === 'checkout' ? 'Tan ca' : 'Vắng'}*\n• Ghi chú: *${cp.notes || 'Không có'}*${cp.employee_name ? `\n• Nhân sự: *${cp.employee_name}*` : ''}`;
           } else if (aiResponse.action === 'breakdown_issue') {
-            const bp = aiResponse.breakdownPayload;
+            const bp = aiResponse.breakdownPayload || {};
             confirmMsg = `💡 *ĐỀ XUẤT PHÂN RÃ CÔNG VIỆC ${bp.task_id}:*\n• Hệ thống AI sẽ tự động sinh danh sách việc con và lưu vào DB.`;
           } else if (aiResponse.action === 'update_sub_issues') {
-            const up = aiResponse.updateSubtasksPayload;
+            const up = aiResponse.updateSubtasksPayload || {};
             const listStr = up.titles ? up.titles.map((t: string) => `  • ${t}`).join('\n') : '';
             const actionTitle = up.overwrite ? 'THAY THẾ TOÀN BỘ' : 'TẠO THÊM';
             const actionDesc = up.overwrite 
@@ -893,28 +984,34 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
               : '👉 Bấm Xác nhận sẽ tạo thêm các việc con này vào danh sách hiện tại.';
             confirmMsg = `💡 *ĐỀ XUẤT ${actionTitle} CÁC CÔNG VIỆC CON CHO ${up.task_id}:*\n${listStr}\n\n${actionDesc}`;
           } else if (aiResponse.action === 'create_meeting') {
-            const mp = aiResponse.meetingPayload;
+            const mp = aiResponse.meetingPayload || {};
             confirmMsg = `💡 *ĐỀ XUẤT ĐẶT LỊCH HỌP:*\n• Tiêu đề: *${mp.title}*\n• Thời gian: *${new Date(mp.startTime).toLocaleString('vi-VN')}* đến *${new Date(mp.endTime).toLocaleString('vi-VN')}*\n• Tham gia: *${mp.attendees?.join(', ') || 'Chỉ mình bạn'}*`;
           } else if (aiResponse.action === 'update_meeting') {
-            const mp = aiResponse.updateMeetingPayload;
+            const mp = aiResponse.updateMeetingPayload || {};
             const isCancel = mp.status === 'cancelled';
             confirmMsg = `💡 *ĐỀ XUẤT ${isCancel ? 'HỦY' : 'CẬP NHẬT'} LỊCH HỌP ${mp.meeting_id}:*\n• Tiêu đề: *${mp.title}*\n• Thời gian: *${new Date(mp.startTime).toLocaleString('vi-VN')}* đến *${new Date(mp.endTime).toLocaleString('vi-VN')}*`;
           } else if (aiResponse.action === 'update_issue') {
-            const tp = aiResponse.taskPayload;
+            const tp = aiResponse.taskPayload || {};
             const statusText = tp.status ? `\n• Trạng thái mới: *${tp.status}*` : '';
             const assigneeText = tp.assignee ? `\n• Người phụ trách: *${tp.assignee}*` : '';
             const deadlineText = tp.deadline ? `\n• Hạn chót mới: *${tp.deadline}*` : '';
             const estimateText = tp.estimate ? `\n• Ước tính mới: *${tp.estimate}h*` : '';
             const priorityText = tp.priority ? `\n• Độ ưu tiên: *${tp.priority}*` : '';
             confirmMsg = `💡 *ĐỀ XUẤT CẬP NHẬT CÔNG VIỆC ${tp.id}:*${statusText}${assigneeText}${deadlineText}${estimateText}${priorityText}`;
+          } else if (aiResponse.action === 'archive_issue') {
+            const tp = aiResponse.taskPayload || {};
+            confirmMsg = `💡 *ĐỀ XUẤT LƯU TRỮ (ARCHIVE) TASK ${tp.task_id || tp.id}:*\n• Lý do: *${tp.reason || 'Ẩn khỏi Kanban'}*\n\n_(Assignee/Admin tự archive — không cần Admin duyệt.)_`;
+          } else if (aiResponse.action === 'delete_issue') {
+            const tp = aiResponse.taskPayload || {};
+            confirmMsg = `💡 *ĐỀ XUẤT XOÁ VĨNH VIỄN TASK ${tp.task_id || tp.id}:*\n• ⚠️ Không hoàn tác (kèm subtask).\n• Lý do: *${tp.reason || '—'}*\n\n_(Assignee/Admin tự xoá. Nên Archive nếu chỉ cần ẩn.)_`;
           } else if (aiResponse.action === 'request_issue_approval') {
-            const ap = aiResponse.approvalPayload;
-            confirmMsg = `💡 *ĐỀ XUẤT XIN DUYỆT CÔNG VIỆC ${ap.task_id}:*\n• Yêu cầu: *${ap.type}*\n• Hạn chót xin dời (nếu có): *${ap.new_deadline || 'Không'}*\n• Ghi chú: *${ap.reason || 'Không'}*`;
+            const ap = aiResponse.approvalPayload || {};
+            confirmMsg = `💡 *ĐỀ XUẤT CẬP NHẬT TASK ${ap.task_id || ap.id}:*\n• Loại: *${ap.type || 'extend'}*\n• Hạn chót: *${ap.new_deadline || 'Không'}*\n• Lý do: *${ap.reason || '—'}*`;
           } else if (aiResponse.action === 'create_project') {
-            const pp = aiResponse.projectPayload;
+            const pp = aiResponse.projectPayload || {};
             confirmMsg = `💡 *ĐỀ XUẤT TẠO DỰ ÁN MỚI:*\n• Tên dự án: *${pp.title}*\n• Mô tả: *${pp.description || 'Không'}*`;
           } else {
-            const tp = aiResponse.taskPayload;
+            const tp = aiResponse.taskPayload || {};
             const assigneeText = tp.assignee ? `\n• Người phụ trách: *${tp.assignee}*` : '';
             const estimateText = tp.estimate ? `\n• Ước tính: *${tp.estimate}h*` : '';
             const priorityText = tp.priority ? `\n• Độ ưu tiên: *${tp.priority}*` : '';
@@ -940,5 +1037,7 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
   } catch (err) {
     console.error("Lỗi kết nối AI:", err);
     await sendMessage(chatId, `🤖 Cổng AI Gateway hiện chưa cấu hình hoặc đang bảo trì. Đã ghi nhận câu lệnh của bạn: *"${text}"*`);
+  } finally {
+    clearInterval(typingTimer);
   }
 }

@@ -13,10 +13,27 @@ import * as dotenv from "dotenv";
 dotenv.config();
 
 const TELEGRAM_API = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}`;
-const CORE_API_URL = process.env.CORE_API_URL || "http://localhost:5100";
-const WEB_PORTAL_URL = process.env.WEB_PORTAL_URL || "https://dev-hub.storymee.com";
-const OMNIROUTER_API_URL = process.env.OMNIROUTER_API_URL || "https://dev-hub.storymee.com/api/ai/chat";
+const CORE_API_URL = process.env.CORE_API_URL || "https://dev-hub.storymee.com";
+const WEB_PORTAL_URL = process.env.WEB_PORTAL_URL || "https://storymee-team.vercel.app";
+// Telegram callbacks must hit public hub AI (same as messageHandler) — never Vercel FE or localhost.
+const OMNIROUTER_API_URL =
+  process.env.OMNIROUTER_API_URL ||
+  `${CORE_API_URL.replace(/\/+$/, "")}/internal/v1/ai/team/chat`;
 const apiClient = new CoreApiClient({ baseURL: CORE_API_URL + '/internal/v1/team', enforceApiPrefix: false });
+
+/** Aligned with core-team-api teamAuth.service (email allowlist + role keywords). */
+const DEFAULT_ADMIN_EMAILS = (process.env.TEAM_ADMIN_EMAILS ||
+  'kimngan151091@gmail.com,lehuyducanh.vn@gmail.com,zuzzivn@gmail.com')
+  .split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
+const ADMIN_ROLE_KEYWORDS = ['founder', 'it admin', 'admin', 'director', 'boss', 'manager', 'hr'];
+
+function isMemberTeamAdmin(m: { email?: string | null; role?: string | null } | null | undefined): boolean {
+  if (!m) return false;
+  const email = (m.email || '').toLowerCase().trim();
+  if (email && DEFAULT_ADMIN_EMAILS.includes(email)) return true;
+  const role = (m.role || '').toLowerCase();
+  return ADMIN_ROLE_KEYWORDS.some((k) => role.includes(k));
+}
 
 async function handleCallbackQuery(callbackQuery: any) {
   const queryId = callbackQuery.id;
@@ -36,7 +53,7 @@ async function handleCallbackQuery(callbackQuery: any) {
     });
   } catch (err) {}
 
-  // 2. Xác định nhân sự click nút qua Postgres API
+  // 2. Xác định nhân sự click nút (ưu tiên chatId, fallback username)
   let member: any = null;
   let allMembers: any[] = [];
   try {
@@ -44,6 +61,8 @@ async function handleCallbackQuery(callbackQuery: any) {
     if (allMembers && allMembers.length > 0) {
       const cleanUsername = (username || "").replace(/^@/, "").toLowerCase().trim();
       member = allMembers.find((m: any) => {
+        if (m.telegramChatId && Number(m.telegramChatId) === Number(chatId)) return true;
+        if (!cleanUsername) return false;
         const cleanDB = (m.telegramUsername || "").replace(/^@/, "").toLowerCase().trim();
         return cleanDB === cleanUsername;
       });
@@ -107,51 +126,69 @@ async function handleCallbackQuery(callbackQuery: any) {
     return;
   }
 
-  // Xử lý điểm danh nhanh qua nút bấm
+  // Xử lý điểm danh nhanh qua nút bấm — KHÔNG edit đè báo cáo ngày (cron 8:20/18:05)
+  // Formats: attendance_direct:present | attendance_direct:checkout | attendance_direct:present:remote
   if (data.startsWith("attendance_direct:")) {
-    const status = data.split(":")[1] || "present";
-    
+    const parts = data.split(":");
+    const status = parts[1] || "present";
+    const workTypeHint = parts[2] === "remote" || parts[2] === "office" ? parts[2] : undefined;
+    const isFullRemote =
+      String(member?.workArrangement || "").toLowerCase() === "remote" ||
+      String(member?.workArrangement || "").toLowerCase() === "full_remote";
+
+    // Answer callback so Telegram stops loading spinner
     try {
-      await fetchAxios(`${TELEGRAM_API}/editMessageText`, {
+      await fetchAxios(`${TELEGRAM_API}/answerCallbackQuery`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          chat_id: chatId,
-          message_id: messageId,
-          text: `⏳ *Hệ thống:* Đang gửi thông tin điểm danh đến API Server...`
-        })
+          callback_query_id: queryId,
+          text: status === "checkout" ? "Đang check-out…" : "Đang check-in…",
+        }),
       });
     } catch (e) {}
 
     try {
-      const result = await executeMcpTool("check_in_out", {
-        status,
-        notes: "Điểm danh nhanh qua nút bấm Telegram"
-      }, member);
+      const result = await executeMcpTool(
+        "check_in_out",
+        {
+          status,
+          workType: workTypeHint || (isFullRemote && status !== "checkout" ? "remote" : undefined),
+          notes:
+            status === "checkout"
+              ? "Điểm danh nhanh qua nút bấm Telegram"
+              : isFullRemote || workTypeHint === "remote"
+                ? "Check-in Remote qua nút bấm Telegram"
+                : "Điểm danh nhanh qua nút bấm Telegram",
+        },
+        member
+      );
 
-      await fetchAxios(`${TELEGRAM_API}/editMessageText`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chat_id: chatId,
-          message_id: messageId,
-          text: `✅ *Hệ thống:* ${result.content[0].text}`,
-          parse_mode: "Markdown"
-        })
-      });
-    } catch (err: any) {
-      console.error("Lỗi điểm danh qua callback:", err);
+      // Gửi tin NHỚI — giữ nguyên tin báo cáo ngày (message_id) + ẩn nút trên tin gốc
       try {
-        await fetchAxios(`${TELEGRAM_API}/editMessageText`, {
+        await fetchAxios(`${TELEGRAM_API}/editMessageReplyMarkup`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             chat_id: chatId,
             message_id: messageId,
-            text: `❌ *Hệ thống:* Lỗi điểm danh: ${err.message || String(err)}`
-          })
+            reply_markup: { inline_keyboard: [] },
+          }),
         });
       } catch (e) {}
+
+      await sendMessage(
+        chatId,
+        `✅ *Điểm danh xong*\n${result.content[0].text}\n\n_(Báo cáo ngày phía trên vẫn giữ nguyên.)_`,
+        KEYBOARD_MAIN
+      );
+    } catch (err: any) {
+      console.error("Lỗi điểm danh qua callback:", err);
+      await sendMessage(
+        chatId,
+        `❌ Lỗi điểm danh: ${err.message || String(err)}`,
+        KEYBOARD_MAIN
+      );
     }
     return;
   }
@@ -185,13 +222,13 @@ async function handleCallbackQuery(callbackQuery: any) {
       }
       
       const keyboard = projects.map((p: any) => [{ text: `📁 ${p.name}`, callback_data: `select_project:${p.id}` }]);
-      keyboard.push([{ text: `➡️ Bỏ qua (Dự án mặc định)`, callback_data: `select_project:default` }]);
+      keyboard.push([{ text: `➡️ Bỏ qua (Không thuộc dự án nào)`, callback_data: `select_project:default` }]);
       await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           chat_id: chatId,
-          text: `📋 *TẠO TASK MỚI*\n\nVui lòng chọn Dự án cho Task (hoặc Bỏ qua để dùng dự án mặc định):`,
+          text: `📋 *TẠO TASK MỚI*\n\nVui lòng chọn Dự án cho Task.\n_Bỏ qua_ → gán bucket *Không thuộc dự án nào* (DFLT), không mặc định StorymeeTeam.`,
           reply_markup: { inline_keyboard: keyboard }
         })
       });
@@ -480,11 +517,15 @@ async function handleCallbackQuery(callbackQuery: any) {
 
         const result = await executeMcpTool("create_issue", {
           title: payload.title || "Nhiệm vụ mới từ Telegram",
+          description: payload.description,
+          links: payload.links || payload.link_urls,
+          media_urls: payload.media_urls || payload.mediaUrls,
+          tags: payload.tags,
           project_id: payload.project_id || payload.projectId || payload.project,
           assignee: payload.assignee || actionMember.fullName,
           estimate: estimateVal || undefined,
           priority: payload.priority || "Medium",
-          target_date: payload.deadline || undefined
+          target_date: payload.deadline || payload.target_date || undefined
         }, actionMember);
 
         try {
@@ -519,9 +560,11 @@ async function handleCallbackQuery(callbackQuery: any) {
         } catch (e) {}
       } else if (action === 'check_in_out') {
         const result = await executeMcpTool("check_in_out", {
-          status: payload.status,
+          status: payload.status || payload.action,
+          action: payload.action,
           notes: payload.notes,
-          employee_name: payload.employee_name
+          employee_name: payload.employee_name,
+          workType: payload.workType || payload.work_type,
         }, actionMember);
 
         try {
@@ -584,90 +627,77 @@ async function handleCallbackQuery(callbackQuery: any) {
           });
           return;
         }
+      } else if (action === 'archive_issue' || action === 'delete_issue') {
+        try {
+          const tool = action === 'delete_issue' ? 'delete_issue' : 'archive_issue';
+          const result = await executeMcpTool(tool, {
+            task_id: payload.task_id || payload.id || payload.issue_id,
+            reason: payload.reason,
+          }, actionMember, username);
+          await fetchAxios(`${TELEGRAM_API}/editMessageText`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              chat_id: chatId,
+              message_id: messageId,
+              text: `✅ *Hệ thống:* ${result.content[0].text}`,
+              parse_mode: "Markdown"
+            })
+          });
+        } catch (err: any) {
+          const errorMsg = err.message || "Lỗi không xác định";
+          await fetchAxios(`${TELEGRAM_API}/editMessageText`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              chat_id: chatId,
+              message_id: messageId,
+              text: `❌ *Lỗi ${action === 'delete_issue' ? 'xoá' : 'archive'}:* ${errorMsg}`,
+              parse_mode: "Markdown"
+            })
+          });
+        }
       } else if (action === 'request_issue_approval') {
-        if (payload.type === 'extend' || payload.type === 'extend_deadline') {
-          try {
+        // Legacy: archive/delete → self-service tools; extend → update deadline
+        const typ = String(payload.type || '').toLowerCase();
+        try {
+          let resultText = '';
+          if (typ === 'archive' || typ === 'delete' || typ === 'remove') {
+            const tool = typ === 'delete' || typ === 'remove' ? 'delete_issue' : 'archive_issue';
+            const result = await executeMcpTool(tool, {
+              task_id: payload.task_id,
+              reason: payload.reason || 'Qua chat',
+            }, actionMember, username);
+            resultText = result.content[0].text;
+          } else {
             await executeMcpTool("update_issue", {
               task_id: payload.task_id,
               deadline: payload.new_deadline
             }, actionMember, username);
-            
-            await fetchAxios(`${TELEGRAM_API}/editMessageText`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                chat_id: chatId,
-                message_id: messageId,
-                text: `✅ *Hệ thống:* Đã cập nhật hạn chót mới cho công việc *${payload.task_id}* thành *${payload.new_deadline}* thành công!`,
-                parse_mode: "Markdown"
-              })
-            });
-          } catch (err: any) {
-            const errorMsg = err.message || "Lỗi không xác định";
-            await fetchAxios(`${TELEGRAM_API}/editMessageText`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                chat_id: chatId,
-                message_id: messageId,
-                text: `❌ *Lỗi khi dời hạn:* ${errorMsg}`,
-                parse_mode: "Markdown"
-              })
-            });
+            resultText = `Đã cập nhật hạn chót *${payload.task_id}* → *${payload.new_deadline || '?'}*`;
           }
-        } else {
-          const result = await executeMcpTool("request_issue_approval", {
-            task_id: payload.task_id,
-            type: payload.type,
-            reason: payload.reason || "Không có lý do",
-            new_deadline: payload.new_deadline
-          }, actionMember);
-
-          try {
-            await fetchAxios(`${TELEGRAM_API}/editMessageText`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                chat_id: chatId,
-                message_id: messageId,
-                text: `✅ *Hệ thống:* ${result.content[0].text}`,
-                parse_mode: "Markdown"
-              })
-            });
-          } catch (e) {}
-
-          // Gửi thông báo cho Admin
-          try {
-            const allMems = await getCachedMembers();
-            if (allMems && allMems.length > 0) {
-              const adminEmails = ['kimngan151091@gmail.com', 'lehuyducanh.vn@gmail.com', 'zuzzivn@gmail.com'];
-              for (const targetMem of allMems) {
-                if ((adminEmails.includes((targetMem.email || "").toLowerCase()) || targetMem.telegramUsername?.toLowerCase() === 'mlq007') && targetMem.telegramChatId) {
-                  const adminChatId = Number(targetMem.telegramChatId);
-                  const reqTypeStr = payload.type === 'extend' || payload.type === 'extend_deadline' ? 'Xin dời deadline' : (payload.type === 'archive' || payload.type === 'delete') ? 'Xin lưu trữ' : 'Yêu cầu không hợp lệ';
-                  if (payload.type === 'delete') payload.type = 'archive';
-                  
-                  await fetchAxios(`${TELEGRAM_API}/sendMessage`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      chat_id: adminChatId,
-                      text: `🔔 *YÊU CẦU PHÊ DUYỆT MỚI*\n\n• Nhân sự: **${actionMember.fullName}**\n• Task ID: **${payload.task_id}**\n• Yêu cầu: **${reqTypeStr}**\n• Lý do: _${payload.reason || 'Không có'}_` + (payload.new_deadline ? `\n• Hạn mới đề xuất: *${payload.new_deadline}*` : ``),
-                      parse_mode: "Markdown",
-                      reply_markup: {
-                        inline_keyboard: [
-                          [{ text: "✅ Phê duyệt", callback_data: `approve_issue:${payload.task_id}:${payload.type}` }],
-                          [{ text: "❌ Từ chối", callback_data: `reject_issue:${payload.task_id}:${payload.type}` }]
-                        ]
-                      }
-                    })
-                  });
-                }
-              }
-            }
-          } catch (err) {
-            console.error("Lỗi gửi tin nhắn duyệt task cho admin:", err);
-          }
+          await fetchAxios(`${TELEGRAM_API}/editMessageText`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              chat_id: chatId,
+              message_id: messageId,
+              text: `✅ *Hệ thống:* ${resultText}`,
+              parse_mode: "Markdown"
+            })
+          });
+        } catch (err: any) {
+          const errorMsg = err.message || "Lỗi không xác định";
+          await fetchAxios(`${TELEGRAM_API}/editMessageText`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              chat_id: chatId,
+              message_id: messageId,
+              text: `❌ *Lỗi:* ${errorMsg}`,
+              parse_mode: "Markdown"
+            })
+          });
         }
 
       } else if (action === 'create_meeting' || action === 'update_meeting') {
@@ -857,95 +887,68 @@ async function handleCallbackQuery(callbackQuery: any) {
 
 
   } else if (data.startsWith('submit_output_done:') || data.startsWith('submit_no_output:')) {
-    // Nhan su bam nut hoan tat hoac khong co output
+    // SSOT: PATCH status=in_review + output → NATS notifies admins (không dual-notify)
     const parts = data.split(':');
     const issueId = parts[1];
     const issueShortId = parts[2] || issueId;
     const { outputSessions } = await import('../../sessionStore');
-    const { finalizeOutputSession }: any = await import('./messageHandler').catch(() => null) || {};
     const session = outputSessions.get(chatId);
     if (data.startsWith('submit_no_output:') || !session) {
-      // Tao session rong neu khong co
-      const noOutputSession = session || {
-        issueId, issueShortId, issueTitle: issueShortId,
-        memberId: member.id, texts: ['(Nhan su xac nhan khong co output)'], urls: [], startedAt: new Date()
-      };
-      if (!session) outputSessions.set(chatId, noOutputSession as any);
-      const activeSession = outputSessions.get(chatId)!;
-      // PATCH DB
+      const texts = session?.texts?.length
+        ? session.texts
+        : ['(Nhan su xac nhan khong co output)'];
+      const urls = session?.urls || [];
+      outputSessions.delete(chatId);
       try {
         await apiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${issueId}`, {
-          outputContent: activeSession.texts.join('\n') || '(khong co output)',
-          outputUrls: activeSession.urls,
+          status: 'in_review',
+          outputContent: texts.join('\n') || '(khong co output)',
+          outputUrls: urls,
           submittedById: member.id,
         });
-      } catch (e) { console.error('[submit_no_output] PATCH error:', e); }
-      outputSessions.delete(chatId);
-      // Notify admin
-      const ADMIN_EMAILS = ['kimngan151091@gmail.com', 'lehuyducanh.vn@gmail.com', 'zuzzivn@gmail.com'];
-      const admins = allMembers.filter((m: any) => ADMIN_EMAILS.includes((m.email || '').toLowerCase()) && m.telegramChatId);
-      for (const admin of admins) {
-        await sendMessage(Number(admin.telegramChatId),
-          `KET QUA CAN DUYET:\n- Task: *${issueShortId}*\n- Nguoi nop: *${member.fullName}*\n- Output: (Khong co output cu the)`,
-          { inline_keyboard: [[
-            { text: 'Duyet (Done)', callback_data: `review_approve:${issueId}` },
-            { text: 'Tu choi', callback_data: `review_reject:${issueId}` }
-          ]]}
-        );
+      } catch (e) {
+        console.error('[submit_no_output] PATCH error:', e);
+        await sendMessage(chatId, 'Loi khi nop ket qua. Vui long thu lai.');
+        return;
       }
       await sendMessage(chatId, `Da gui cho Admin duyet. Ban se nhan thong bao khi co ket qua.`, KEYBOARD_MAIN);
     } else {
-      // submit_output_done voi session co san
-      // Inline finalize
       outputSessions.delete(chatId);
       const outputContent = session.texts.join('\n') || '(khong co text)';
       const outputUrls = session.urls;
       try {
         await apiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${session.issueId}`, {
-          outputContent, outputUrls, submittedById: member.id,
+          status: 'in_review',
+          outputContent,
+          outputUrls,
+          submittedById: member.id,
         });
-      } catch (e) { console.error('[submit_output_done] PATCH error:', e); }
-      const ADMIN_EMAILS = ['kimngan151091@gmail.com', 'lehuyducanh.vn@gmail.com', 'zuzzivn@gmail.com'];
-      const admins = allMembers.filter((m: any) => ADMIN_EMAILS.includes((m.email || '').toLowerCase()) && m.telegramChatId);
-      const urlsText = outputUrls.length > 0 ? `\nFiles/Links:\n${outputUrls.join('\n')}` : '';
-      for (const admin of admins) {
-        await sendMessage(Number(admin.telegramChatId),
-          `KET QUA CAN DUYET:\n- Task: *${session.issueShortId}*\n- Nguoi nop: *${member.fullName}*\n\nNoi dung:\n${outputContent}${urlsText}`,
-          { inline_keyboard: [[
-            { text: 'Duyet (Done)', callback_data: `review_approve:${session.issueId}` },
-            { text: 'Tu choi', callback_data: `review_reject:${session.issueId}` }
-          ]]}
-        );
+      } catch (e) {
+        console.error('[submit_output_done] PATCH error:', e);
+        await sendMessage(chatId, 'Loi khi nop ket qua. Vui long thu lai.');
+        return;
       }
       await sendMessage(chatId, `Da gui ket qua cho Admin duyet. Ban se nhan thong bao khi co ket qua.`, KEYBOARD_MAIN);
     }
 
   } else if (data.startsWith('review_approve:') || data.startsWith('review_reject:')) {
-    const ADMIN_EMAILS = ['kimngan151091@gmail.com', 'lehuyducanh.vn@gmail.com', 'zuzzivn@gmail.com'];
-    const isAdmin = ADMIN_EMAILS.includes((member.email || '').toLowerCase());
-    if (!isAdmin) { await sendMessage(chatId, 'Ban khong co quyen duyet task.'); return; }
+    // SSOT: POST /plane/issues/:id/review — không PATCH status=done
+    if (!isMemberTeamAdmin(member)) {
+      await sendMessage(chatId, 'Ban khong co quyen duyet task.');
+      return;
+    }
     const issueId = data.split(':')[1];
     const isApprove = data.startsWith('review_approve:');
 
     if (isApprove) {
       try {
-        await apiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${issueId}`, {
-          status: 'done',
-          reviewNote: 'Da duoc Admin duyet',
-          reviewedById: member.id,
+        await apiClient.post(`${API_ROUTES.PLANE.ISSUES}/${issueId}/review`, {
+          decision: 'approve',
+          reviewerId: member.id,
+          reviewNote: 'Da duoc Admin duyet qua Telegram',
         });
-        // Notify assignee
-        try {
-          const issues = (await apiClient.get(API_ROUTES.PLANE.ISSUES)) as any;
-          const issue = (issues.data || []).find((i: any) => i.id === issueId);
-          if (issue?.Assignee?.telegramChatId) {
-            await sendMessage(Number(issue.Assignee.telegramChatId),
-              `Task *${issue.shortId || issueId}* (${issue.title}) da duoc Admin *${member.fullName}* DUYET XONG. Task chuyen sang Done!`
-            );
-          }
-        } catch (e) {}
+        // Assignee notify via NATS core.team.task.review_approved
         await sendMessage(chatId, `Da duyet task thanh Done.`);
-        // Update message text
         try {
           await fetchAxios(`${TELEGRAM_API}/editMessageText`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -956,18 +959,54 @@ async function handleCallbackQuery(callbackQuery: any) {
             })
           });
         } catch (e) {}
-      } catch (e) { await sendMessage(chatId, 'Loi duyet task.'); }
+      } catch (e) {
+        console.error('[review_approve] error:', e);
+        await sendMessage(chatId, 'Loi duyet task.');
+      }
     } else {
-      // Tu choi: hoi ly do
+      // Tu choi: hoi ly do → messageHandler await_reject_reason → POST /review reject
       const { userFormSession } = await import('../../telegram_agent');
       userFormSession[chatId] = { step: 'await_reject_reason', issueId, adminId: member.id };
       await sendMessage(chatId, `Nhap ly do tu choi (se gui cho nhan su):`);
     }
 
+  } else if (data.startsWith('account_approve:') || data.startsWith('account_reject:')) {
+    if (!isMemberTeamAdmin(member)) {
+      await sendMessage(chatId, 'Chỉ Admin mới được duyệt tài khoản nội bộ.');
+      return;
+    }
+    const memberId = data.split(':')[1];
+    const isApprove = data.startsWith('account_approve:');
+    try {
+      const path = isApprove
+        ? `${API_ROUTES.HR.TEAM_MEMBERS}/${memberId}/approve`
+        : `${API_ROUTES.HR.TEAM_MEMBERS}/${memberId}/reject`;
+      await apiClient.post(path, {
+        reviewerId: member.id,
+        note: isApprove ? 'Duyệt qua Telegram' : 'Từ chối qua Telegram',
+      });
+      await sendMessage(chatId, isApprove ? '✅ Đã duyệt tài khoản.' : '❌ Đã từ chối đăng ký.');
+      try {
+        await fetchAxios(`${TELEGRAM_API}/editMessageText`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: chatId,
+            message_id: messageId,
+            text: `${callbackQuery.message?.text || ''}\n\n→ ${isApprove ? 'DUYỆT' : 'TỪ CHỐI'} bởi ${member.fullName}`,
+            parse_mode: 'Markdown',
+          }),
+        });
+      } catch (e) {}
+    } catch (e: any) {
+      console.error('[account_approve/reject]', e);
+      await sendMessage(chatId, `Lỗi: ${e?.message || e}`);
+    }
+    return;
+
   } else if (data.startsWith('approve_leave:') || data.startsWith('reject_leave:')) {
     // 4. Xử lý Admin phê duyệt hoặc từ chối đơn
-    const isAdmin = ['kimngan151091@gmail.com', 'lehuyducanh.vn@gmail.com', 'zuzzivn@gmail.com'].includes(member.email.toLowerCase());
-    if (!isAdmin) {
+    if (!isMemberTeamAdmin(member)) {
       await sendMessage(chatId, "Chi Admin moi co quyen phe duyet don xin nghi phep.");
       return;
     }

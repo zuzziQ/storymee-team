@@ -9,6 +9,7 @@ import {
 import { coreApiClient } from '../../../../lib/apiClient';
 import { API_ROUTES } from '@/lib/apiClient';
 import TaskReviewPanel from './TaskReviewPanel';
+import { isTeamAdmin } from '@/lib/teamAuth';
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL === '/api' || process.env.NEXT_PUBLIC_API_URL === '/' || (process.env.NEXT_PUBLIC_API_URL || '').includes('//hub.storymee.com') || !process.env.NEXT_PUBLIC_API_URL ? 'https://dev-hub.storymee.com' : process.env.NEXT_PUBLIC_API_URL) || 'http://localhost:4500';
 
@@ -28,6 +29,7 @@ export default function TaskDetailModal({
   task,
   onClose,
   onDeleteTask,
+  onArchiveTask,
   onUpdate,
   tasks,
   teamMembers,
@@ -41,7 +43,10 @@ export default function TaskDetailModal({
 }: {
   task: Task;
   onClose: () => void;
+  /** Admin hard-delete only */
   onDeleteTask?: (task: Task) => void;
+  /** Admin archive (soft) */
+  onArchiveTask?: (task: Task) => void;
   onUpdate: (t: Task) => void;
   tasks: Task[];
   teamMembers: TeamMember[];
@@ -70,11 +75,7 @@ export default function TaskDetailModal({
   const [editingSubtaskId, setEditingSubtaskId] = useState<string | null>(null);
   const [editedSubtaskTitle, setEditedSubtaskTitle] = useState('');
 
-  // Admin check: role chứa Founder hoặc IT Admin
-  const isAdmin = !!(activeUser?.role && (
-    activeUser.role.includes('Founder') ||
-    activeUser.role.includes('IT Admin')
-  ));
+  const isAdmin = isTeamAdmin(activeUser);
   const isInReview = task.status === 'In Review';
   
   const [notes, setNotes] = useState<Note[]>([
@@ -544,6 +545,27 @@ export default function TaskDetailModal({
               )}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+              {onArchiveTask && (
+                <button
+                  onClick={() => {
+                    onArchiveTask(task);
+                    onClose();
+                  }}
+                  style={{
+                    background: 'rgba(245,158,11,0.12)',
+                    border: '1px solid rgba(245,158,11,0.3)',
+                    color: '#f59e0b',
+                    cursor: 'pointer',
+                    padding: '6px 8px',
+                    borderRadius: 6,
+                    fontSize: 10,
+                    fontWeight: 600,
+                  }}
+                  title="Lưu trữ (Archive) — ẩn khỏi Kanban"
+                >
+                  Archive
+                </button>
+              )}
               {onDeleteTask && (
                 <button 
                   onClick={() => {
@@ -551,7 +573,7 @@ export default function TaskDetailModal({
                     onClose();
                   }} 
                   style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#ef4444', cursor: 'pointer', padding: 6, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }} 
-                  title="Xoá Task"
+                  title="Xoá vĩnh viễn"
                 >
                   <Trash2 size={16} />
                 </button>
@@ -568,19 +590,18 @@ export default function TaskDetailModal({
               {(['Backlog', 'Todo', 'In Progress', 'In Review', 'Done'] as TaskStatus[]).map((status, index, arr) => {
                 const isActive = task.status === status;
                 const isPassed = arr.indexOf(task.status) >= index;
-                const isBlocked = task.status === 'In Review' && status === 'Done' && !isAdmin;
                 return (
                   <React.Fragment key={status}>
                     <button
                       onClick={() => {
-                        if (isBlocked) { alert('⚠️ Chỉ Admin mới có thể duyệt task sang Done.'); return; }
+                        // In Progress → In Review vẫn gợi ý nộp output; Done tự do (không cần admin)
                         if (status === 'In Review' && task.status === 'In Progress') { setShowSubmitPanel(true); return; }
                         handleTaskUpdate({ status });
                       }}
-                      style={{ padding: '5px 10px', fontSize: '11px', fontWeight: 600, borderRadius: '6px', border: 'none', background: isActive ? 'linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)' : 'transparent', color: isActive ? '#ffffff' : isPassed ? '#22c55e' : isBlocked ? '#52525b' : '#71717a', cursor: isBlocked ? 'not-allowed' : 'pointer', transition: 'all 0.15s', display: 'flex', alignItems: 'center', gap: 4 }}
+                      style={{ padding: '5px 10px', fontSize: '11px', fontWeight: 600, borderRadius: '6px', border: 'none', background: isActive ? 'linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)' : 'transparent', color: isActive ? '#ffffff' : isPassed ? '#22c55e' : '#71717a', cursor: 'pointer', transition: 'all 0.15s', display: 'flex', alignItems: 'center', gap: 4 }}
                     >
                       {isPassed && !isActive && <Check size={11} color="#22c55e" />}
-                      {isBlocked && '🔒'} {status}
+                      {status}
                     </button>
                     {index < arr.length - 1 && (<span style={{ color: '#3f3f46', fontSize: '11px', userSelect: 'none' }}>➔</span>)}
                   </React.Fragment>
@@ -1117,12 +1138,6 @@ export default function TaskDetailModal({
                 value={task.status}
                 onChange={e => {
                   const val = e.target.value as any;
-                  if (val === 'Done' && !isAdmin) {
-                    // Tự động chuyển sang In Review thay vì block
-                    handleTaskUpdate({ status: 'In Review' });
-                    setTimeout(() => alert('ℹ️ Đã chuyển sang "In Review".\nVui lòng nộp kết quả trong tab bên trái để Admin duyệt.'), 100);
-                    return;
-                  }
                   handleTaskUpdate({ status: val });
                 }}
                 style={{

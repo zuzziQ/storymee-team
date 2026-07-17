@@ -11,6 +11,7 @@ import adminRoutes from './modules/tasks/index';
 import hrRoutes from './modules/hr/index';
 import omnitaskRoutes from './modules/omnitask/index';
 import planeRoutes from './modules/plane/index';
+import { TeamAccountService } from './services/teamAccount.service';
 
 (BigInt.prototype as any).toJSON = function () {
   return this.toString();
@@ -36,6 +37,14 @@ async function startServer() {
   }
   
   await fastify.register(setupCors as any);
+
+  // Internal account schema (account_status on omni_team_members)
+  try {
+    await TeamAccountService.ensureSchema();
+    console.log('[Core Team API] Team account schema ready (account_status)');
+  } catch (e: any) {
+    console.warn('[Core Team API] Team account schema ensure failed:', e?.message || e);
+  }
 
   fastify.get('/internal/v1/team/health', async (request, reply) => {
       return { status: 'ok', service: 'core-team-api' };

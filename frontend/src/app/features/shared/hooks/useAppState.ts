@@ -81,9 +81,37 @@ export function useAppState() {
     }
   };
 
-  const handleCreateTask = (title: string, assignee: string, estimate: number, priority: any, status?: string) =>
-    taskState.handleCreateTask(title, assignee, estimate, priority,
-      projectState.activeProjectId, hr.teamMembers, projectState.projects, fetchDbData, status);
+  const handleCreateTask = (title: string, assignee: string, estimate: number, priority: any, status?: string) => {
+    // Priority for project:
+    // 1) Header filter when a real project is selected
+    // 2) Projects-tab active project (quick-add under that project)
+    // 3) Inbox DFLT — never silent StorymeeTeam / first project
+    const sel = projectState.selectedProjectId;
+    const active = projectState.activeProjectId;
+    const projects = projectState.projects || [];
+    const isRealProject = (id?: string) =>
+      !!id &&
+      id !== 'all' &&
+      id !== 'default_no_project' &&
+      id !== 'p4' &&
+      projects.some((p: any) => p.id === id);
+
+    let projectForCreate = 'default_no_project';
+    if (isRealProject(sel)) projectForCreate = sel;
+    else if (isRealProject(active)) projectForCreate = active;
+
+    return taskState.handleCreateTask(
+      title,
+      assignee,
+      estimate,
+      priority,
+      projectForCreate,
+      hr.teamMembers,
+      projects,
+      fetchDbData,
+      status
+    );
+  };
 
   const handleCreateSubtask = (title: string, parentTaskId: string, projectId: string) =>
     taskState.handleCreateSubtask(title, parentTaskId, projectId, fetchDbData);
@@ -93,6 +121,13 @@ export function useAppState() {
 
   const handleArchiveTaskDirect = (task: { id: string; dbId?: string; title?: string }) =>
     taskState.handleArchiveTaskDirect(task, fetchDbData);
+
+  const handleDeleteTaskHard = (task: { id: string; dbId?: string; title?: string }) =>
+    taskState.handleDeleteTaskHard(
+      task,
+      { id: auth.activeUser?.id, email: auth.activeUser?.email },
+      fetchDbData
+    );
 
   const handleRequestArchive = (task: { id: string; dbId?: string }, reason: string) =>
     taskState.handleRequestArchive(task, reason, fetchDbData);
@@ -186,6 +221,7 @@ export function useAppState() {
     handleCreateSubtask,
     handleUpdateSubtaskState,
     handleArchiveTaskDirect,
+    handleDeleteTaskHard,
     handleRequestArchive,
     handleSubmitForReview,
     handleReviewDecision,
@@ -245,8 +281,10 @@ export function useAppState() {
     setShowNotifications: socket.setShowNotifications,
     announcements: socket.announcements,
     setAnnouncements: socket.setAnnouncements,
+    fetchServerAnnouncements: socket.fetchServerAnnouncements,
     meetings: socket.meetings,
     setMeetings: socket.setMeetings,
+    fetchServerMeetings: socket.fetchServerMeetings,
 
     // Meta
     dbError: hr.dbError || taskState.dbTaskError,

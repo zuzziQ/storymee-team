@@ -29,23 +29,34 @@ export default function LoginPage() {
 
       setStatusText('Đang xác thực Token từ Telegram...');
       try {
-        const json = await coreApiClient.get('/hr/team-members');
+        // Resolve member by token among all statuses, then require active via lookup
+        const json = await coreApiClient.get('/hr/team-members?status=all');
         if ((json.status === 'success' || json.success === true) && Array.isArray(json.data)) {
           const matchedUser = json.data.find(
             (u: any) => u.lettaConversationId === token || `conv-${u.id}` === token
           );
 
           if (matchedUser) {
-            setStatusText(`Xác thực thành công. Đang chuyển hướng cho ${matchedUser.fullName}...`);
-            localStorage.setItem('st_user', JSON.stringify({
-              email: matchedUser.email,
-              name: matchedUser.fullName,
-              role: matchedUser.role || 'Nhân sự mới',
-              color: matchedUser.color || '#6366f1'
-            }));
-            setTimeout(() => {
-              router.push('/');
-            }, 1000);
+            try {
+              const auth: any = await coreApiClient.get(
+                `/hr/auth/lookup?q=${encodeURIComponent(matchedUser.email)}`
+              );
+              const u = auth.data || matchedUser;
+              setStatusText(`Xác thực thành công. Đang chuyển hướng cho ${u.fullName}...`);
+              localStorage.setItem('st_user', JSON.stringify({
+                id: u.id,
+                email: u.email,
+                name: u.fullName,
+                role: u.role || 'Nhân sự mới',
+                accountStatus: u.accountStatus || 'active',
+                color: u.color || '#6366f1'
+              }));
+              setTimeout(() => router.push('/'), 800);
+            } catch (gate: any) {
+              setError(gate?.data?.message || 'Tài khoản chưa được Admin duyệt hoặc đã bị khoá.');
+              setIsCheckingToken(false);
+              setStatusText('');
+            }
           } else {
             setError('⚠️ Token đăng nhập từ Telegram không hợp lệ hoặc đã hết hạn.');
             setIsCheckingToken(false);
@@ -78,41 +89,40 @@ export default function LoginPage() {
 
     setError('');
     setIsSubmitting(true);
-    setStatusText('Đang kiểm tra tài khoản nội bộ...');
+    setStatusText('Đang kiểm tra tài khoản nội bộ (chỉ account đã duyệt)...');
 
     try {
-      const json = await coreApiClient.get('/hr/team-members');
-      if ((json.status === 'success' || json.success === true) && Array.isArray(json.data)) {
-        // Tìm kiếm linh hoạt: Khớp Email hoặc Telegram Username
-        const matchedUser = json.data.find((u: any) => 
-          (u.email && u.email.toLowerCase() === searchVal) || 
-          (u.telegramUsername && u.telegramUsername.toLowerCase() === searchVal)
-        );
-
-        if (matchedUser) {
-          setStatusText(`Đăng nhập thành công! Xin chào ${matchedUser.fullName}`);
-          localStorage.setItem('st_user', JSON.stringify({
-            email: matchedUser.email,
-            name: matchedUser.fullName,
-            role: matchedUser.role || 'Nhân sự mới',
-            color: matchedUser.color || '#6366f1'
-          }));
-          setTimeout(() => {
-            router.push('/');
-          }, 1000);
-        } else {
-          setError('Tài khoản không tồn tại. Vui lòng kiểm tra lại Email/Nick Telegram.');
-          setIsSubmitting(false);
-          setStatusText('');
-        }
+      // SSOT login gate: only account_status=active
+      const auth: any = await coreApiClient.get(
+        `/hr/auth/lookup?q=${encodeURIComponent(searchVal)}`
+      );
+      if ((auth.status === 'success' || auth.success) && auth.data) {
+        const matchedUser = auth.data;
+        setStatusText(`Đăng nhập thành công! Xin chào ${matchedUser.fullName}`);
+        localStorage.setItem('st_user', JSON.stringify({
+          id: matchedUser.id,
+          email: matchedUser.email,
+          name: matchedUser.fullName,
+          role: matchedUser.role || 'Nhân sự mới',
+          accountStatus: matchedUser.accountStatus || 'active',
+          color: matchedUser.color || '#6366f1'
+        }));
+        setTimeout(() => router.push('/'), 800);
       } else {
-        setError('Hệ thống đang bảo trì, vui lòng thử lại sau.');
+        setError('Tài khoản không tồn tại hoặc chưa được kích hoạt.');
         setIsSubmitting(false);
         setStatusText('');
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error("Lỗi đăng nhập thủ công:", e);
-      setError('⚠️ Không thể kết nối tới hệ thống xác thực.');
+      const msg =
+        e?.data?.message ||
+        (e?.status === 404
+          ? 'Tài khoản không tồn tại. Đăng ký qua Telegram bot rồi chờ Admin duyệt.'
+          : e?.status === 403
+            ? e?.data?.message || 'Tài khoản chờ duyệt / bị khoá.'
+            : '⚠️ Không thể kết nối tới hệ thống xác thực.');
+      setError(msg);
       setIsSubmitting(false);
       setStatusText('');
     }
@@ -198,9 +208,11 @@ export default function LoginPage() {
               </form>
               
               <div style={{ marginTop: 24, paddingTop: 24, borderTop: '1px solid var(--border)' }}>
-                <p style={{ fontSize: 13, color: '#a1a1aa', margin: '0 0 12px 0' }}>Hoặc truy cập bằng Token bảo mật</p>
+                <p style={{ fontSize: 12, color: '#71717a', margin: '0 0 12px 0', lineHeight: 1.5 }}>
+                  Tài khoản mới: đăng ký trên Telegram bot → <strong style={{ color: '#a1a1aa' }}>Admin duyệt</strong> → mới đăng nhập được.
+                </p>
                 <a href="https://t.me/StoryMeeBot" target="_blank" rel="noreferrer" className="btn" style={{ display: 'inline-block', width: '100%', padding: '10px', fontSize: 13, borderRadius: 8, textDecoration: 'none', background: 'rgba(255,255,255,0.05)', color: '#fafafa', border: '1px solid var(--border)' }}>
-                  Mở Telegram Bot
+                  Mở Telegram Bot (đăng ký / token)
                 </a>
               </div>
             </>

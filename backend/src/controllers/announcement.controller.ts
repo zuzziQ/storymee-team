@@ -22,11 +22,13 @@ export class AnnouncementController {
         title, content, senderId, targetUserId
       });
 
-      // Publish event via NATS
+      // Publish event via NATS (StringCodec — khớp core.team.> → Socket bridge)
       try {
         const nats = (req.server as any).nats;
         if (nats) {
-          nats.publish('core.team.announcement.created', JSON.stringify({ announcement }));
+          const { StringCodec } = require('nats');
+          const sc = StringCodec();
+          nats.publish('core.team.announcement.created', sc.encode(JSON.stringify({ announcement })));
         }
       } catch (e) {
         req.log.error('Failed to publish announcement NATS event:', e);

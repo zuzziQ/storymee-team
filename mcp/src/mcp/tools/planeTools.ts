@@ -29,18 +29,39 @@ export const PLANE_TOOLS_SCHEMA = [
   },
   {
     name: "create_issue",
-    description: "Tạo một issue mới. Yêu cầu tiêu đề và người gán. Plane structure hỗ trợ project_id, state, priority.",
+    description:
+      "Tạo issue mới. Hỗ trợ mô tả dài, link tài liệu, URL ảnh/video (gắn vào description + outputUrls tham chiếu). project_id tuỳ chọn → DFLT nếu trống. tags ghi vào description dạng #tag. Không có ACL phức tạp ngoài assignee.",
     inputSchema: {
       type: "object",
       properties: {
         title: { type: "string", description: "Tiêu đề công việc" },
-        project_id: { type: "string", description: "ID của dự án (Plane Project ID)" },
+        description: { type: "string", description: "Mô tả chi tiết markdown / text dài" },
+        links: {
+          type: "array",
+          items: { type: "string" },
+          description: "Danh sách URL tài liệu (Drive, Notion, Figma…)",
+        },
+        media_urls: {
+          type: "array",
+          items: { type: "string" },
+          description: "URL ảnh/video đính kèm tham chiếu",
+        },
+        tags: {
+          type: "array",
+          items: { type: "string" },
+          description: "Nhãn/tag (lưu trong description dạng #tag)",
+        },
+        project_id: {
+          type: "string",
+          description:
+            "ID/identifier dự án. Bỏ trống | default | none = Không thuộc dự án nào (DFLT).",
+        },
         assignee: { type: "string", description: "Tên nhân sự thực hiện (ví dụ: Trung Dũng)" },
         priority: { type: "string", enum: ["none", "low", "medium", "high", "urgent"], description: "Độ ưu tiên (mặc định medium)" },
         target_date: { type: "string", description: "Hạn chót hoàn thành định dạng YYYY-MM-DD" },
         parent_id: { type: "string", description: "ID của task cha (nếu đây là subtask). Truyền ID dạng UUID hoặc Short ID đều được (mcp sẽ tự map)" }
       },
-      required: ["title", "project_id"]
+      required: ["title"]
     }
   },
   {
@@ -121,21 +142,22 @@ export const PLANE_TOOLS_SCHEMA = [
   },
   {
     name: "request_issue_approval",
-    description: "Gửi yêu cầu xin duyệt liên quan đến task (ví dụ: xin dời deadline, xin xoá/lưu trữ task).",
+    description:
+      "DEPRECATED cho archive/xoá. User tự archive/delete. Chỉ dùng hiếm khi xin dời deadline (type=extend). Xin nghỉ/remote dùng submit_leave_request.",
     inputSchema: {
       type: "object",
       properties: {
         task_id: { type: "string", description: "Mã ID công việc (ví dụ: T-103)" },
-        type: { type: "string", enum: ["archive", "extend"], description: "Loại yêu cầu: archive (xoá/lưu trữ) hoặc extend (dời deadline)" },
+        type: { type: "string", enum: ["extend"], description: "Chỉ còn type extend (dời deadline) nếu cần xin admin" },
         reason: { type: "string", description: "Lý do xin duyệt" },
-        new_deadline: { type: "string", description: "Hạn chót mới (chỉ dùng cho type extend), định dạng YYYY-MM-DD" }
+        new_deadline: { type: "string", description: "Hạn chót mới (type extend), YYYY-MM-DD" }
       },
       required: ["task_id", "type", "reason"]
     }
   },
   {
     name: "approve_issue_request",
-    description: "Duyệt hoặc từ chối yêu cầu của nhân viên (ví dụ: đồng ý dời deadline, đồng ý lưu trữ task). CHỈ DÀNH CHO ADMIN/BOSS.",
+    description: "Admin duyệt yêu cầu extend deadline (legacy). Archive/delete user tự làm. CHỈ ADMIN.",
     inputSchema: {
       type: "object",
       properties: {
@@ -146,7 +168,45 @@ export const PLANE_TOOLS_SCHEMA = [
       },
       required: ["task_id", "type", "decision"]
     }
-  }
+  },
+  {
+    name: "review_issue",
+    description: "Admin duyệt output task (In Review → Done) hoặc từ chối (→ In Progress). Tuỳ chọn — user đã có thể tự Done. CHỈ ADMIN.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        task_id: { type: "string", description: "UUID hoặc shortId PROJ-n" },
+        decision: { type: "string", enum: ["approve", "reject"], description: "approve=Done, reject=In Progress" },
+        review_note: { type: "string", description: "Ghi chú / lý do từ chối" }
+      },
+      required: ["task_id", "decision"]
+    }
+  },
+  {
+    name: "archive_issue",
+    description:
+      "Lưu trữ (archive) task — set status cancelled, ẩn khỏi Kanban. Assignee hoặc Admin. Ưu tiên hơn hard-delete khi chỉ cần ẩn.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        task_id: { type: "string", description: "UUID hoặc shortId PROJ-n" },
+        reason: { type: "string", description: "Ghi chú lý do (tuỳ chọn)" },
+      },
+      required: ["task_id"],
+    },
+  },
+  {
+    name: "delete_issue",
+    description:
+      "XOÁ VĨNH VIỄN task (hard delete + cascade subtasks). Assignee của task hoặc Admin. Ưu tiên archive_issue nếu chỉ cần ẩn.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        task_id: { type: "string", description: "UUID hoặc shortId PROJ-n" },
+      },
+      required: ["task_id"],
+    },
+  },
 ];
 
 function findIssueHelper(dbTasks: any[], taskIdStr: string): any {
@@ -328,7 +388,18 @@ case "create_project": {
       }
     }
 case "create_issue": {
-      const { title, project_id, assignee, priority, target_date, parent_id } = args as any;
+      const {
+        title,
+        project_id,
+        assignee,
+        priority,
+        target_date,
+        parent_id,
+        description: rawDesc,
+        links,
+        media_urls,
+        tags,
+      } = args as any;
       
       if (!isBoss && assignee && assignee.toLowerCase() !== user.fullName.toLowerCase()) {
         throw new McpError(
@@ -378,17 +449,53 @@ case "create_issue": {
           }
       }
 
-      let finalProjectId = project_id;
+      const noProjectSentinel = (v: any) => {
+        if (v == null || v === '') return true;
+        const s = String(v).trim().toLowerCase();
+        return [
+          'default', 'default_no_project', 'none', 'null', 'undefined',
+          'no_project', 'no-project', 'inbox', 'dflt', 'all',
+          'không thuộc dự án', 'khong thuoc du an',
+        ].some((k) => s === k || s.includes(k));
+      };
+
+      const pickInboxProject = (allProjects: any[]) => {
+        const byIdent = allProjects.find((p: any) =>
+          ['DFLT', 'INBOX', 'NONE', 'NOPROJ'].includes(String(p.identifier || '').toUpperCase())
+        );
+        if (byIdent) return byIdent.id;
+        const byName = allProjects.find((p: any) => {
+          const n = String(p.name || '').toLowerCase();
+          return (
+            n.includes('không thuộc dự án') ||
+            n.includes('khong thuoc du an') ||
+            n.includes('no project') ||
+            n.includes('mặc định') ||
+            n.includes('mac dinh')
+          );
+        });
+        return byName?.id || null;
+      };
+
+      let finalProjectId: string | undefined = project_id;
+      // Explicit no-project / skip
+      if (noProjectSentinel(finalProjectId)) {
+        finalProjectId = undefined;
+      }
+
       if (finalProjectId && finalProjectId.length !== 36) {
           try {
               const projRes = (await apiClient.get(API_ROUTES.PLANE.PROJECTS)) as any;
               const allProjects = projRes.data || [];
-              const foundProj = allProjects.find((p: any) => p.name.toLowerCase() === finalProjectId.toLowerCase() || p.identifier.toLowerCase() === finalProjectId.toLowerCase());
+              const foundProj = allProjects.find((p: any) =>
+                (p.name || '').toLowerCase() === finalProjectId!.toLowerCase() ||
+                (p.identifier || '').toLowerCase() === finalProjectId!.toLowerCase()
+              );
               
               if (foundProj) {
                   finalProjectId = foundProj.id;
-              } else {
-                  // Tạo mới project nếu không tồn tại
+              } else if (!noProjectSentinel(finalProjectId)) {
+                  // Chỉ auto-create project khi user chỉ định tên dự án thật (không phải sentinel)
                   let ident = finalProjectId.replace(/[^A-Za-z0-9]/g, '').substring(0, 3).toUpperCase();
                   if (ident.length < 3) ident = "PRJ";
                   const newProj = (await apiClient.post(API_ROUTES.PLANE.PROJECTS, {
@@ -398,36 +505,59 @@ case "create_issue": {
                   })) as any;
                   if (newProj.success !== false && newProj.data) {
                       finalProjectId = newProj.data.id;
+                  } else {
+                      finalProjectId = undefined;
                   }
+              } else {
+                  finalProjectId = undefined;
               }
           } catch (e) {
-              console.error("Lỗi tự động tạo project:", e);
+              console.error("Lỗi resolve project:", e);
+              finalProjectId = undefined;
           }
       }
       
-      // Fallback nếu vẫn không có dự án
+      // No project → inbox DFLT only (API also auto-resolves if projectId omitted)
       if (!finalProjectId) {
           try {
               const projRes = (await apiClient.get(API_ROUTES.PLANE.PROJECTS)) as any;
               const allProjects = projRes.data || [];
-              if (allProjects.length > 0) {
-                  const defaultProj = allProjects.find((p: any) => p.name && p.name.toLowerCase().includes("mặc định"));
-                  finalProjectId = defaultProj ? defaultProj.id : allProjects[0].id;
-              }
+              finalProjectId = pickInboxProject(allProjects) || undefined;
           } catch (e) {}
       }
 
+      // Build rich description: user text + tags + links + media
+      const descParts: string[] = [];
+      if (rawDesc && String(rawDesc).trim()) descParts.push(String(rawDesc).trim());
+      const tagList = Array.isArray(tags) ? tags.map((t: string) => String(t).replace(/^#/, '').trim()).filter(Boolean) : [];
+      if (tagList.length) descParts.push('Tags: ' + tagList.map((t: string) => `#${t}`).join(' '));
+      const linkList = Array.isArray(links) ? links.map((u: string) => String(u).trim()).filter(Boolean) : [];
+      const mediaList = Array.isArray(media_urls) ? media_urls.map((u: string) => String(u).trim()).filter(Boolean) : [];
+      if (linkList.length) {
+        descParts.push('Tài liệu:\n' + linkList.map((u: string) => `- ${u}`).join('\n'));
+      }
+      if (mediaList.length) {
+        descParts.push('Media:\n' + mediaList.map((u: string) => `- ${u}`).join('\n'));
+      }
+      if (!descParts.length) descParts.push('Tạo tự động qua Model Context Protocol (MCP)');
+      const finalDescription = descParts.join('\n\n');
+      const refUrls = [...linkList, ...mediaList];
+
       let resJson;
           try {
-            resJson = (await apiClient.post(API_ROUTES.PLANE.ISSUES, {
+            // Omit projectId if still empty — core-team-api ensureInboxProject handles it
+            const body: any = {
                     title,
-                    projectId: finalProjectId,
-                    description: "Tạo tự động qua Model Context Protocol (MCP)",
+                    description: finalDescription,
                     assigneeId: targetUser ? targetUser.id : undefined,
                     priority: priority ? priority.toLowerCase() : "medium",
                     targetDate: target_date || undefined,
-                    parentId: actualParentId || undefined
-                  })) as any;
+                    parentId: actualParentId || undefined,
+                  };
+            // Reference docs/media at create time (same field as submission outputs)
+            if (refUrls.length) body.outputUrls = refUrls;
+            if (finalProjectId) body.projectId = finalProjectId;
+            resJson = (await apiClient.post(API_ROUTES.PLANE.ISSUES, body)) as any;
             
             if (resJson.success === false) {
               throw new Error(resJson.message || "Lỗi tạo issue tại Core API Service.");
@@ -505,33 +635,13 @@ case "update_issue_state": {
         throw new McpError(ErrorCode.InvalidParams, `Trạng thái ${state} không tồn tại trong dự án này. Các trạng thái hợp lệ: ${parentProject.states.map((s:any) => s.name).join(", ")}`);
       }
 
-      if (targetState.group === 'completed' && !isBoss) {
-        // Tìm state 'In Review' trong project
-        const inReviewState = parentProject.states.find((s: any) =>
-          s.name.toLowerCase() === 'in review' || s.name.toLowerCase() === 'inreview'
-        );
-        if (inReviewState) {
-          await apiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${foundIssue.id}`, { stateId: inReviewState.id });
-          // Đánh dấu cần thu thập output
-          if (username) {
-            pendingOutputByUsername.set(username.toLowerCase().replace(/^@/, ''), {
-              issueId: foundIssue.id,
-              issueShortId: foundIssue.shortId || issue_id,
-              issueTitle: foundIssue.title,
-              memberId: user.id,
-            });
-          }
-          return {
-            content: [{
-              type: "text",
-              text: `IN_REVIEW_REDIRECT:${foundIssue.id}:${foundIssue.shortId || issue_id}:${foundIssue.title}`
-            }]
-          };
-        }
-      }
-
+      // User (assignee) được Done trực tiếp — không còn ép In Review / admin request
       try {
-            await apiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${foundIssue.id}`, { stateId: targetState.id });
+            // Prefer status name so backend mapping + NATS stay consistent (not stateId-only)
+            await apiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${foundIssue.id}`, {
+              status: targetState.name,
+              stateId: targetState.id,
+            });
           } catch (err: any) {
             throw new McpError(ErrorCode.InternalError, "Lỗi cập nhật trạng thái issue tại Core API.");
           }
@@ -888,6 +998,19 @@ case "update_sub_issues": {
 case "request_issue_approval": {
       const { task_id, type, reason, new_deadline } = args as any;
 
+      // archive/delete: self-service — không còn chờ admin
+      if (type === 'archive' || type === 'delete' || type === 'remove') {
+        return executePlaneTool(
+          type === 'delete' || type === 'remove' ? 'delete_issue' : 'archive_issue',
+          { task_id, reason },
+          user,
+          isBoss,
+          apiClient,
+          members,
+          username
+        );
+      }
+
       let tasksData;
           try {
             tasksData = (await apiClient.get(API_ROUTES.PLANE.ISSUES)) as any;
@@ -898,16 +1021,32 @@ case "request_issue_approval": {
       
       let foundSubtask: any = findIssueHelper(dbTasks, task_id);
 
-
       if (!foundSubtask) {
         throw new McpError(ErrorCode.InvalidParams, `Không tìm thấy công việc mã ID ${task_id}.`);
       }
 
-      // Telegram Bot will handle sending notification to Admin. We just need to return success.
+      try {
+        if (type === 'extend') {
+          // Dời deadline: user tự update (không chờ admin)
+          await apiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${foundSubtask.id}`, {
+            targetDate: new_deadline || undefined,
+            description: `${foundSubtask.description || ''}\n\n[GIA HẠN]: Tới ${new_deadline || '?'}. Lý do: ${reason || 'N/A'}`.trim(),
+          });
+        } else {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            `Loại yêu cầu không hỗ trợ: ${type}. Dùng archive_issue / delete_issue / update_issue. Xin nghỉ dùng submit_leave_request.`
+          );
+        }
+      } catch (err: any) {
+        if (err instanceof McpError) throw err;
+        throw new McpError(ErrorCode.InternalError, `Lỗi gửi yêu cầu: ${err.message || err}`);
+      }
+
       return {
         content: [{
           type: "text",
-          text: `Đã gửi yêu cầu ${type === 'extend' ? 'dời deadline' : 'xoá/lưu trữ'} cho task ${task_id} thành công! Hãy đợi Admin duyệt nhé.`
+          text: `Đã cập nhật deadline task ${task_id}${new_deadline ? ` → ${new_deadline}` : ''}.`
         }]
       };
     }
@@ -940,6 +1079,7 @@ case "approve_issue_request": {
              await apiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${foundSubtask.id}`, { targetDate: new_deadline || undefined });
           }
         }
+        // reject: no-op on state (request is only a note); optional description stamp could be added later
       } catch (err: any) {
         throw new McpError(ErrorCode.InternalError, "Lỗi khi gọi API duyệt yêu cầu.");
       }
@@ -948,6 +1088,135 @@ case "approve_issue_request": {
         content: [{
           type: "text",
           text: `Đã ${decision === 'approve' ? 'DUYỆT' : 'TỪ CHỐI'} yêu cầu ${type} cho task ${task_id} thành công!`
+        }]
+      };
+    }
+
+    case "archive_issue": {
+      const { task_id, reason } = args as any;
+      if (!task_id) throw new McpError(ErrorCode.InvalidParams, "Cần task_id");
+      let tasksData: any;
+      try {
+        tasksData = await apiClient.get(API_ROUTES.PLANE.ISSUES);
+      } catch {
+        throw new McpError(ErrorCode.InternalError, "Lỗi fetch issues");
+      }
+      const found = findIssueHelper(tasksData.data || [], task_id);
+      if (!found) {
+        throw new McpError(ErrorCode.InvalidParams, `Không tìm thấy task ${task_id}`);
+      }
+      const assigneeName = found.Assignee?.fullName || "";
+      const isAssignee =
+        (assigneeName && user.fullName && assigneeName.toLowerCase() === user.fullName.toLowerCase()) ||
+        (found.assigneeId && user.id && found.assigneeId === user.id);
+      if (!isBoss && !isAssignee) {
+        throw new McpError(
+          ErrorCode.InvalidRequest,
+          "Chỉ assignee hoặc Admin được lưu trữ task này."
+        );
+      }
+      try {
+        const desc = reason
+          ? `${found.description || ''}\n\n[ARCHIVE]: ${reason}`.trim()
+          : found.description;
+        await apiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${found.id}`, {
+          status: 'cancelled',
+          ...(desc !== found.description ? { description: desc } : {}),
+        });
+      } catch (err: any) {
+        throw new McpError(
+          ErrorCode.InternalError,
+          `Lỗi archive: ${err?.data?.message || err?.message || err}`
+        );
+      }
+      return {
+        content: [{
+          type: "text",
+          text: `Đã LƯU TRỮ (archive) task ${task_id} (${found.title || ''}). Task ẩn khỏi Kanban.`,
+        }],
+      };
+    }
+
+    case "delete_issue": {
+      const { task_id } = args as any;
+      if (!task_id) throw new McpError(ErrorCode.InvalidParams, "Cần task_id");
+      let tasksData: any;
+      try {
+        tasksData = await apiClient.get(API_ROUTES.PLANE.ISSUES);
+      } catch {
+        throw new McpError(ErrorCode.InternalError, "Lỗi fetch issues");
+      }
+      const found = findIssueHelper(tasksData.data || [], task_id);
+      if (!found) {
+        throw new McpError(ErrorCode.InvalidParams, `Không tìm thấy task ${task_id}`);
+      }
+      const assigneeName = found.Assignee?.fullName || "";
+      const isAssignee =
+        (assigneeName && user.fullName && assigneeName.toLowerCase() === user.fullName.toLowerCase()) ||
+        (found.assigneeId && user.id && found.assigneeId === user.id);
+      if (!isBoss && !isAssignee) {
+        throw new McpError(
+          ErrorCode.InvalidRequest,
+          "Chỉ assignee của task hoặc Admin được xoá vĩnh viễn. Dùng archive_issue nếu chỉ cần ẩn."
+        );
+      }
+      try {
+        await (apiClient as any).delete(`${API_ROUTES.PLANE.ISSUES}/${found.id}`, {
+          data: { actorId: user.id, actorEmail: user.email },
+        });
+      } catch (err: any) {
+        throw new McpError(
+          ErrorCode.InternalError,
+          `Lỗi xoá: ${err?.data?.message || err?.message || err}`
+        );
+      }
+      return {
+        content: [{
+          type: "text",
+          text: `Đã XOÁ VĨNH VIỄN task ${task_id} (${found.title || ''}).`,
+        }],
+      };
+    }
+
+    case "review_issue": {
+      if (!isBoss) {
+        throw new McpError(ErrorCode.InvalidRequest, "Chỉ Admin mới duyệt output task (review_issue).");
+      }
+      const { task_id, decision, review_note } = args as any;
+      if (!task_id || !decision) {
+        throw new McpError(ErrorCode.InvalidParams, "Cần task_id và decision (approve|reject).");
+      }
+      let tasksData: any;
+      try {
+        tasksData = await apiClient.get(API_ROUTES.PLANE.ISSUES);
+      } catch {
+        throw new McpError(ErrorCode.InternalError, "Lỗi fetch issues");
+      }
+      const found = findIssueHelper(tasksData.data || [], task_id);
+      if (!found) {
+        throw new McpError(ErrorCode.InvalidParams, `Không tìm thấy task ${task_id}`);
+      }
+      const dec = String(decision).toLowerCase() === 'approve' || String(decision).toLowerCase() === 'approved'
+        ? 'approve'
+        : 'reject';
+      try {
+        await apiClient.post(`${API_ROUTES.PLANE.ISSUES}/${found.id}/review`, {
+          decision: dec,
+          reviewerId: user.id,
+          reviewNote: review_note || (dec === 'approve' ? 'Duyệt qua MCP' : 'Từ chối qua MCP'),
+        });
+      } catch (err: any) {
+        throw new McpError(
+          ErrorCode.InternalError,
+          `Lỗi review: ${err?.data?.message || err?.message || err}`
+        );
+      }
+      return {
+        content: [{
+          type: "text",
+          text: dec === 'approve'
+            ? `✅ Đã duyệt task ${task_id} → Done`
+            : `❌ Đã từ chối task ${task_id} → In Progress`
         }]
       };
     }

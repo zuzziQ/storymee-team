@@ -127,6 +127,40 @@ export const HR_TOOLS_SCHEMA = [
       },
       required: ["meeting_id"]
     }
+  },
+  {
+    name: "approve_leave_request",
+    description: "Admin duyệt hoặc từ chối đơn nghỉ phép/remote. CHỈ ADMIN.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        leave_id: { type: "string", description: "UUID đơn nghỉ (leave request id)" },
+        decision: { type: "string", enum: ["approve", "reject", "approved", "rejected"], description: "Duyệt hoặc từ chối" }
+      },
+      required: ["leave_id", "decision"]
+    }
+  },
+  {
+    name: "list_leave_requests",
+    description: "Liệt kê đơn nghỉ. Nhân viên: của mình. Admin: tất cả hoặc filter status.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        status: { type: "string", enum: ["pending", "approved", "rejected", "all"], description: "Lọc trạng thái (mặc định all)" }
+      }
+    }
+  },
+  {
+    name: "broadcast_announcement",
+    description: "Gửi thông báo toàn team (notify all). CHỈ ADMIN.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        content: { type: "string" }
+      },
+      required: ["title", "content"]
+    }
   }
 ];
 
@@ -154,18 +188,25 @@ case "submit_leave_request": {
         throw new McpError(ErrorCode.InvalidParams, "Thiếu thông tin ngày xin nghỉ.");
       }
 
+      // SSOT body — identical to StorymeeTeam LeaveRequestForm
+      // POST /hr/leave-requests { memberId, leaveType, startDate, endDate, reason }
       let resJson;
           try {
             resJson = (await apiClient.post(API_ROUTES.HR.LEAVE_REQUESTS, {
                     memberId: user.id,
-                    telegramUsername: user.telegramUsername || user.fullName,
-                    leaveType: finalLeaveType,
+                    leaveType: finalLeaveType, // annual | remote | sick | personal
                     startDate: finalStartDate,
                     endDate: finalEndDate,
                     reason: reason || "Xin nghỉ phép qua Bot Telegram"
                   })) as any;
+            if (resJson?.status === 'error' || resJson?.success === false) {
+              throw new Error(resJson.message || 'API từ chối đơn nghỉ');
+            }
           } catch (err: any) {
-            throw new McpError(ErrorCode.InternalError, "Lỗi tạo đơn xin nghỉ phép tại Core API.");
+            throw new McpError(
+              ErrorCode.InternalError,
+              `Lỗi tạo đơn xin nghỉ phép: ${err?.data?.message || err?.message || err}`
+            );
           }
       const statusStr = resJson.data?.status === 'approved' ? 'Approved' : 'Pending';
       const requestId = resJson.data?.id;
@@ -195,20 +236,23 @@ case "get_leave_allowance": {
         throw new McpError(ErrorCode.InvalidParams, `Không tìm thấy nhân sự ${targetName}.`);
       }
 
-      const leavesRes = await apiClient.get("/internal/v1/team/hr/leave-requests");
-      let annualUsed = 0;
-      let remoteUsed = 0;
+      // apiClient base already includes /internal/v1/team
+      const leavesRes = (await apiClient.get(API_ROUTES.HR.LEAVE_REQUESTS)) as any;
+      let annualUsed = Number(targetUser.annualLeaveUsed) || 0;
+      let remoteUsed = Number(targetUser.remoteUsed) || 0;
 
-      if (leavesRes.ok) {
-        const leavesData = await leavesRes.json() as any;
-        const leaves = leavesData.data || [];
-        
+      // Prefer counters on TeamMember; optionally recompute from approved leaves if counters missing
+      if (!targetUser.annualLeaveUsed && !targetUser.remoteUsed) {
+        annualUsed = 0;
+        remoteUsed = 0;
+        const leaves = leavesRes?.data || [];
         leaves.forEach((l: any) => {
           if (l.memberId === targetUser.id && l.status === 'approved') {
             const start = new Date(l.startDate);
             const end = new Date(l.endDate);
-            const diffTime = Math.abs(end.getTime() - start.getTime());
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
+            start.setHours(0, 0, 0, 0);
+            end.setHours(0, 0, 0, 0);
+            const diffDays = Math.max(1, Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
             
             if (l.leaveType === 'remote') {
               remoteUsed += diffDays;
@@ -219,12 +263,21 @@ case "get_leave_allowance": {
         });
       }
 
+      const annualLimit = Number(targetUser.annualLeaveLimit) || 12;
+      const remoteLimit = Number(targetUser.remoteLimit) || 4;
+      const work = targetUser.workArrangement || 'office';
+      const remoteLine =
+        work === 'remote'
+          ? `• Làm việc từ xa: **Full remote** (không áp hạn mức remote tháng).`
+          : `• Làm việc từ xa (Remote): Đã dùng **${remoteUsed}** / **${remoteLimit}** ngày (hạn mức cấu hình HR).`;
+
       return {
         content: [{
           type: "text",
-          text: `Hạn ngạch phép năm & làm remote của **${targetUser.fullName}**:\n` +
-            `• Nghỉ phép năm: Đã dùng **${annualUsed}** / **12** ngày.\n` +
-            `• Làm việc từ xa (Remote): Đã dùng **${remoteUsed}** / **4** ngày trong tháng.`
+          text: `Hạn ngạch phép & remote của **${targetUser.fullName}**:\n` +
+            `• Hình thức làm việc: **${work}**\n` +
+            `• Nghỉ phép năm: Đã dùng **${annualUsed}** / **${annualLimit}** ngày (còn ${Math.max(0, annualLimit - annualUsed)}).\n` +
+            remoteLine
         }]
       };
     }
@@ -302,19 +355,20 @@ case "update_personal_info": {
       const { bank_account, bank_name } = args as any;
 
       try {
+            // mode:self — không được nâng accountStatus/role (parity FE handleSaveMyProfile)
             await apiClient.post(API_ROUTES.HR.TEAM_MEMBERS, {
+                    mode: 'self',
+                    actorEmail: user.email,
                     fullName: user.fullName,
                     email: user.email,
                     bankName: bank_name,
                     bankAccount: bank_account,
                     telegramUsername: user.telegramUsername,
-                    telegramChatId: user.telegramChatId ? Number(user.telegramChatId) : null,
-                    role: user.role,
-                    skills: user.skills,
-                    phone: user.phone
+                    phone: user.phone,
+                    skills: user.skills || [],
                   });
           } catch (err: any) {
-            throw new McpError(ErrorCode.InternalError, "Lỗi cập nhật thông tin tại Core API.");
+            throw new McpError(ErrorCode.InternalError, `Lỗi cập nhật thông tin: ${err?.data?.message || err?.message || err}`);
           }
       return {
         content: [{
@@ -386,9 +440,8 @@ case "upsert_team_member": {
         resolvedAttendees = await resolveAttendees(attendees);
       }
 
-      let resJson;
       try {
-        resJson = await apiClient.patch(`hr/meetings/${meeting_id}`, {
+        await apiClient.patch(`hr/meetings/${meeting_id}`, {
           title,
           description,
           startTime,
@@ -398,14 +451,100 @@ case "upsert_team_member": {
           meetLink
         });
       } catch (err: any) {
-        throw new McpError(ErrorCode.InternalError, "Lỗi cập nhật lịch họp.");
+        throw new McpError(ErrorCode.InternalError, `Lỗi cập nhật lịch họp: ${err?.data?.message || err?.message || err}`);
       }
       return {
         content: [{ type: "text", text: `Đã cập nhật lịch họp thành công: ${meeting_id}` }]
       };
     }
 
+    case "approve_leave_request": {
+      if (!isBoss) {
+        throw new McpError(ErrorCode.InvalidRequest, "Chỉ Admin mới được duyệt đơn nghỉ.");
+      }
+      const { leave_id, decision } = args as any;
+      if (!leave_id || !decision) {
+        throw new McpError(ErrorCode.InvalidParams, "Cần leave_id và decision (approve|reject).");
+      }
+      const d = String(decision).toLowerCase();
+      const status =
+        d === 'approve' || d === 'approved' || d === 'duyet' || d === 'duyệt'
+          ? 'approved'
+          : 'rejected';
+      try {
+        await apiClient.post(`${API_ROUTES.HR.LEAVE_REQUESTS}/${leave_id}/approve`, { status });
+      } catch (err: any) {
+        throw new McpError(
+          ErrorCode.InternalError,
+          `Lỗi duyệt đơn: ${err?.data?.message || err?.message || err}`
+        );
+      }
+      return {
+        content: [{
+          type: "text",
+          text: `Đã ${status === 'approved' ? 'DUYỆT' : 'TỪ CHỐI'} đơn nghỉ \`${leave_id}\`.`
+        }]
+      };
+    }
+
+    case "list_leave_requests": {
+      const statusFilter = (args?.status || 'all').toLowerCase();
+      let res: any;
+      try {
+        res = await apiClient.get(API_ROUTES.HR.LEAVE_REQUESTS);
+      } catch (err: any) {
+        throw new McpError(ErrorCode.InternalError, "Lỗi lấy danh sách đơn nghỉ.");
+      }
+      let leaves = res?.data || [];
+      if (!isBoss) {
+        leaves = leaves.filter((l: any) => l.memberId === user.id);
+      }
+      if (statusFilter !== 'all') {
+        leaves = leaves.filter((l: any) => (l.status || '').toLowerCase() === statusFilter);
+      }
+      if (leaves.length === 0) {
+        return { content: [{ type: "text", text: "Không có đơn nghỉ nào (theo bộ lọc)." }] };
+      }
+      const lines = leaves.slice(0, 20).map((l: any) => {
+        const name = l.member?.fullName || l.memberId;
+        const s = (l.startDate || '').toString().split('T')[0];
+        const e = (l.endDate || '').toString().split('T')[0];
+        return `• \`${l.id}\` ${name} | ${l.leaveType} | ${s}→${e} | *${l.status}* | ${l.reason || ''}`;
+      });
+      return {
+        content: [{
+          type: "text",
+          text: `📋 *ĐƠN NGHỈ* (${leaves.length}):\n` + lines.join('\n')
+        }]
+      };
+    }
+
+    case "broadcast_announcement": {
+      if (!isBoss) {
+        throw new McpError(ErrorCode.InvalidRequest, "Chỉ Admin mới gửi thông báo toàn team.");
+      }
+      const { title, content } = args as any;
+      if (!title || !content) {
+        throw new McpError(ErrorCode.InvalidParams, "Cần title và content.");
+      }
+      try {
+        await apiClient.post('hr/announcements', {
+          title,
+          content,
+          senderId: user.id,
+        });
+      } catch (err: any) {
+        throw new McpError(
+          ErrorCode.InternalError,
+          `Lỗi gửi announcement: ${err?.data?.message || err?.message || err}`
+        );
+      }
+      return {
+        content: [{ type: "text", text: `Đã gửi thông báo toàn team: *${title}*` }]
+      };
+    }
+
     default:
-      throw new McpError(ErrorCode.MethodNotFound, `Công cụ task ${name} chưa được hỗ trợ`);
+      throw new McpError(ErrorCode.MethodNotFound, `Công cụ HR ${name} chưa được hỗ trợ`);
   }
 }

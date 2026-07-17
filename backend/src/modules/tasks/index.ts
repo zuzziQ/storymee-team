@@ -52,82 +52,22 @@ const plugin: FastifyPluginAsync = async (fastify) => {
         }
     });
 
-    fastify.post('/tasks', async (req: any, reply) => {
-        try {
-            const { title, description, projectId, subtasks } = req.body;
-            if (!title) return reply.code(400).send({ status: 'error', message: 'Title is required' });
-
-            const parentTask = await prisma.task.create({
-                data: {
-                    title,
-                    description: description || null,
-                    projectId: projectId || null,
-                    source: 'telegram',
-                }
-            });
-
-            const subtaskDefs = Array.isArray(subtasks) && subtasks.length > 0
-                ? subtasks
-                : [{ title, description: description || null }];
-
-            const currentCount = await prisma.subTask.count();
-            const createdSubtasks = [];
-
-            for (let i = 0; i < subtaskDefs.length; i++) {
-                const sub = subtaskDefs[i];
-                let assigneeId: string | null = null;
-                
-                if (sub.suggestedAssigneeName) {
-                    const found = await prisma.teamMember.findFirst({
-                        where: {
-                            fullName: {
-                                contains: sub.suggestedAssigneeName.trim(),
-                                mode: 'insensitive'
-                            }
-                        }
-                    });
-                    if (found) assigneeId = found.id;
-                }
-
-                let deadlineDate: Date | null = null;
-                if (sub.deadlineDays && sub.deadlineDays > 0) {
-                    deadlineDate = new Date();
-                    deadlineDate.setDate(deadlineDate.getDate() + Math.round(sub.deadlineDays));
-                } else if (sub.deadline) {
-                    deadlineDate = new Date(sub.deadline);
-                }
-
-                const idx = currentCount + i + 101;
-                const planeTaskId = 'T-' + String(idx).padStart(3, '0');
-
-                const created = await prisma.subTask.create({
-                    data: {
-                        taskId: parentTask.id,
-                        title: sub.title || title,
-                        description: sub.description || description || 'Tạo tự động qua Model Context Protocol (MCP)',
-                        assigneeId,
-                        estimatedHours: sub.estimatedHours || 4,
-                        priority: (sub.priority || 'medium').toLowerCase(),
-                        status: 'pending',
-                        deadline: deadlineDate,
-                        planeTaskId
-                    },
-                    include: { Assignee: true }
-                });
-
-                createdSubtasks.push(created);
-            }
-
-            return reply.code(201).send({
-                status: 'success',
-                data: {
-                    ...parentTask,
-                    subTasks: createdSubtasks
-                }
-            });
-        } catch (error: any) {
-            return reply.code(500).send({ status: 'error', message: error.message });
-        }
+    /**
+     * FROZEN — legacy omni_tasks write path.
+     * SSOT: POST /internal/v1/team/plane/issues
+     */
+    fastify.post('/tasks', async (_req: any, reply) => {
+        return reply.code(410).send({
+            status: 'error',
+            success: false,
+            code: 'LEGACY_TASK_CREATE_FROZEN',
+            message:
+                'Legacy POST /projects/tasks đã bị đóng băng. Dùng POST /internal/v1/team/plane/issues.',
+            migrateTo: {
+                method: 'POST',
+                path: '/internal/v1/team/plane/issues',
+            },
+        });
     });
 };
 

@@ -89,7 +89,7 @@ export class CoreApiClient {
         }
     }
 
-    public async delete<T = any>(url: string): Promise<T> {
+    public async delete<T = any>(url: string, body?: any): Promise<T> {
         try {
             const baseUrl = await this.resolveBaseUrl();
             const cleanUrl = url.startsWith('/') ? url.substring(1) : url;
@@ -98,6 +98,7 @@ export class CoreApiClient {
             const res = await fetch(fullUrl, {
                 method: 'DELETE',
                 headers: { 'Content-Type': 'application/json' },
+                body: body !== undefined ? JSON.stringify(body) : undefined,
                 signal: AbortSignal.timeout(60000),
                 cache: 'no-store'
             });
@@ -118,6 +119,17 @@ export const coreApiClient = new CoreApiClient({
 export const API_ROUTES = {
     HR: {
         TEAM_MEMBERS: '/hr/team-members',
+        /** Self-register → pending (admin must approve) */
+        TEAM_MEMBERS_REGISTER: '/hr/team-members/register',
+        /** Login gate: only active accounts */
+        AUTH_LOOKUP: '/hr/auth/lookup',
+        memberApprove: (id: string) => `/hr/team-members/${id}/approve`,
+        memberReject: (id: string) => `/hr/team-members/${id}/reject`,
+        memberSuspend: (id: string) => `/hr/team-members/${id}/suspend`,
+        memberDelete: (id: string, hard = false) =>
+            `/hr/team-members/${id}${hard ? '?hard=true' : ''}`,
+        memberSetAdmin: (id: string) => `/hr/team-members/${id}/set-admin`,
+        SETTINGS_PRIVACY: '/hr/settings/privacy',
         ATTENDANCE: '/hr/attendance',
         ATTENDANCE_CHECKIN: '/hr/attendance/checkin',
         ATTENDANCE_CHECKOUT: '/hr/attendance/checkout',
@@ -125,10 +137,18 @@ export const API_ROUTES = {
         SUBTASKS: '/hr/subtasks',
         TASKS: '/hr/tasks',
         PROJECTS: '/hr/projects',
-        MEETINGS: '/hr/meetings'
+        MEETINGS: '/hr/meetings',
+        ANNOUNCEMENTS: '/hr/announcements',
+        announcementRead: (id: string) => `/hr/announcements/${id}/read`,
     },
     PLANE: {
         ISSUES: '/plane/issues',
-        PROJECTS: '/plane/projects'
+        PROJECTS: '/plane/projects',
+        /** POST /plane/issues/:id/review — admin approve|reject (SSOT) */
+        issueReview: (id: string) => `/plane/issues/${id}/review`,
+        /** POST /plane/issues/:id/request-archive — employee xin lưu trữ */
+        issueRequestArchive: (id: string) => `/plane/issues/${id}/request-archive`,
+        /** DELETE /plane/issues/:id — hard-delete (assignee|admin) */
+        issueDelete: (id: string) => `/plane/issues/${id}`,
     }
 };

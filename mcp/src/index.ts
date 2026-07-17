@@ -46,6 +46,19 @@ export async function getTeamMembersCache(): Promise<any[]> {
   }
 }
 
+const DEFAULT_ADMIN_EMAILS = (process.env.TEAM_ADMIN_EMAILS ||
+  'kimngan151091@gmail.com,lehuyducanh.vn@gmail.com,zuzzivn@gmail.com')
+  .split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
+const ADMIN_ROLE_KEYWORDS = ['founder', 'it admin', 'admin', 'director', 'boss', 'manager', 'hr'];
+
+function isTeamAdminMember(m: { email?: string | null; role?: string | null } | null | undefined): boolean {
+  if (!m) return false;
+  const email = (m.email || '').toLowerCase().trim();
+  if (email && DEFAULT_ADMIN_EMAILS.includes(email)) return true;
+  const role = (m.role || '').toLowerCase();
+  return ADMIN_ROLE_KEYWORDS.some((k) => role.includes(k));
+}
+
 // Trợ giúp phân quyền & xác thực
 async function authorizeClient() {
   const email = process.env.STORYMEE_USER_EMAIL;
@@ -66,7 +79,7 @@ async function authorizeClient() {
     );
   }
 
-  const isBoss = ["kimngan151091@gmail.com", "lehuyducanh.vn@gmail.com", "zuzzivn@gmail.com"].includes(email.toLowerCase());
+  const isBoss = isTeamAdminMember(user);
   return { user, isBoss, members };
 }
 
@@ -103,31 +116,129 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   return executeMcpTool(name, args, user);
 });
 
+/**
+ * Alias LLM hay gọi sai tên → canonical tool.
+ * Tránh "Unknown tool" / thiếu tool call.
+ */
+const TOOL_ALIASES: Record<string, string> = {
+  // tasks
+  get_my_tasks: 'get_my_issues',
+  list_tasks: 'get_my_issues',
+  list_issues: 'get_my_issues',
+  my_tasks: 'get_my_issues',
+  create_task: 'create_issue',
+  add_task: 'create_issue',
+  update_task: 'update_issue',
+  update_task_status: 'update_issue_state',
+  set_task_status: 'update_issue_state',
+  change_status: 'update_issue_state',
+  assign_task: 'assign_issue',
+  reassign_task: 'assign_issue',
+  task_details: 'get_issue_details',
+  get_task: 'get_issue_details',
+  breakdown_task: 'breakdown_issue',
+  approve_task: 'review_issue',
+  review_task: 'review_issue',
+  reject_task: 'review_issue',
+  // Archive / xoá: user self-service (assignee hoặc admin) — không còn xin admin
+  archive_task: 'archive_issue',
+  archive_issue: 'archive_issue',
+  luu_tru: 'archive_issue',
+  delete_task: 'delete_issue',
+  remove_task: 'delete_issue',
+  remove_issue: 'delete_issue',
+  xoa_task: 'delete_issue',
+  // leave
+  submit_leave: 'submit_leave_request',
+  request_leave: 'submit_leave_request',
+  leave_request: 'submit_leave_request',
+  xin_nghi: 'submit_leave_request',
+  approve_leave: 'approve_leave_request',
+  reject_leave: 'approve_leave_request',
+  list_leaves: 'list_leave_requests',
+  get_leaves: 'list_leave_requests',
+  leave_balance: 'get_leave_allowance',
+  // attendance
+  checkin: 'check_in_out',
+  checkout: 'check_in_out',
+  check_in: 'check_in_out',
+  check_out: 'check_in_out',
+  diem_danh: 'check_in_out',
+  // meetings
+  create_meeting: 'schedule_meeting',
+  book_meeting: 'schedule_meeting',
+  // announce
+  notify_all: 'broadcast_announcement',
+  send_announcement: 'broadcast_announcement',
+  announcement: 'broadcast_announcement',
+};
+
+function normalizeToolArgs(name: string, args: any): any {
+  const a = { ...(args || {}) };
+  // checkout aliases → status
+  if (name === 'check_in_out' || name === 'checkout' || name === 'check_out') {
+    if (!a.status && !a.action) {
+      if (name === 'checkout' || name === 'check_out') a.action = 'checkout';
+    }
+  }
+  // reject_task without decision
+  if ((name === 'reject_task' || name === 'reject_leave') && !a.decision) {
+    a.decision = 'reject';
+  }
+  if ((name === 'approve_task' || name === 'approve_leave') && !a.decision) {
+    a.decision = 'approve';
+  }
+  // archive / delete aliases → normalize task_id
+  const taskIdAliases = [
+    'archive_task', 'archive_issue', 'delete_task', 'delete_issue',
+    'remove_task', 'remove_issue', 'xoa_task', 'luu_tru',
+  ];
+  if (taskIdAliases.includes(name) || taskIdAliases.includes(name.toLowerCase())) {
+    if (a.id && !a.task_id) a.task_id = a.id;
+    if (a.issue_id && !a.task_id) a.task_id = a.issue_id;
+    a.reason = a.reason || a.note;
+  }
+  return a;
+}
+
 export async function executeMcpTool(
   name: string,
   args: any,
   user: any,
   username?: string
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
-  const isBoss = ["kimngan151091@gmail.com", "lehuyducanh.vn@gmail.com", "zuzzivn@gmail.com"].includes(user.email.toLowerCase());
+  const isBoss = isTeamAdminMember(user);
   const members = await getTeamMembersCache();
 
-  let toolName = name;
-      const planeNames = PLANE_TOOLS_SCHEMA.map(t => t.name);
-      const hrNames = HR_TOOLS_SCHEMA.map(t => t.name);
-      const attendanceNames = ATTENDANCE_TOOLS_SCHEMA.map(t => t.name);
+  const rawName = (name || '').trim();
+  let toolName = TOOL_ALIASES[rawName] || TOOL_ALIASES[rawName.toLowerCase()] || rawName;
+  let normalizedArgs = normalizeToolArgs(rawName, args);
 
-      if (planeNames.includes(name)) {
-        return executePlaneTool(toolName, args, user, isBoss, apiClient, members, username);
-      }
-      if (hrNames.includes(name)) {
-        return executeHrTool(toolName, args, user, isBoss, apiClient, members);
-      }
-      if (attendanceNames.includes(name)) {
-        return executeAttendanceTool(toolName, args, user, isBoss, apiClient, members);
-      }
-      throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${toolName} (original: ${name})`);
+  // User (assignee) được delete/archive trực tiếp — planeTools enforce assignee|admin
+  if (toolName === 'delete_issue' || toolName === 'archive_issue') {
+    normalizedArgs = {
+      ...normalizedArgs,
+      task_id: normalizedArgs.task_id || normalizedArgs.id || normalizedArgs.issue_id,
+    };
+  }
 
+  const planeNames = PLANE_TOOLS_SCHEMA.map(t => t.name);
+  const hrNames = HR_TOOLS_SCHEMA.map(t => t.name);
+  const attendanceNames = ATTENDANCE_TOOLS_SCHEMA.map(t => t.name);
+
+  if (planeNames.includes(toolName)) {
+    return executePlaneTool(toolName, normalizedArgs, user, isBoss, apiClient, members, username);
+  }
+  if (hrNames.includes(toolName)) {
+    return executeHrTool(toolName, normalizedArgs, user, isBoss, apiClient, members);
+  }
+  if (attendanceNames.includes(toolName)) {
+    return executeAttendanceTool(toolName, normalizedArgs, user, isBoss, apiClient, members);
+  }
+  throw new McpError(
+    ErrorCode.MethodNotFound,
+    `Unknown tool: ${rawName} (resolved: ${toolName}). Xem docs/MCP_TOOL_CALLING.md`
+  );
 }
 
 // Chạy server StdIO
@@ -182,7 +293,7 @@ async function main() {
             const data = JSON.parse(msg.data.toString());
             const leave = data.leaveRequest;
             const members = await getCachedMembers();
-            const admins = members.filter((m: any) => m.role === 'admin' || m.role === 'hr' || m.role === 'manager' || m.role === 'director' || m.role === 'boss');
+            const admins = members.filter((m: any) => isTeamAdminMember(m) && m.telegramChatId);
             const startD = leave.startDate.split('T')[0];
             const endD = leave.endDate.split('T')[0];
             const typeStr = leave.leaveType === 'sick' ? 'Nghỉ ốm' : leave.leaveType === 'annual' ? 'Nghỉ phép năm' : leave.leaveType === 'remote' ? 'Làm Remote' : 'Việc riêng';
@@ -196,14 +307,12 @@ async function main() {
                         `Vui lòng duyệt qua Dashboard.`;
             
             for (const admin of admins) {
-              if (admin.telegramChatId) {
-                await sendMessage(Number(admin.telegramChatId), txt, {
-                  inline_keyboard: [[
-                    { text: "✅ Duyệt nghỉ", callback_data: `approve_leave:${leave.id}` },
-                    { text: "❌ Từ chối", callback_data: `reject_leave:${leave.id}` }
-                  ]]
-                });
-              }
+              await sendMessage(Number(admin.telegramChatId), txt, {
+                inline_keyboard: [[
+                  { text: "✅ Duyệt nghỉ", callback_data: `approve_leave:${leave.id}` },
+                  { text: "❌ Từ chối", callback_data: `reject_leave:${leave.id}` }
+                ]]
+              });
             }
           } catch (e) {
             console.error('[NATS] Error processing leave request', e);
@@ -246,7 +355,7 @@ async function main() {
             const data = JSON.parse(msg.data.toString());
             const task = data.task;
             const members = await getCachedMembers();
-            const admins = members.filter((m: any) => m.role === 'admin' || m.role === 'hr' || m.role === 'manager' || m.role === 'director' || m.role === 'boss');
+            const admins = members.filter((m: any) => isTeamAdminMember(m) && m.telegramChatId);
             
             let txt = `🔔 *YÊU CẦU PHÊ DUYỆT TASK* 🔔\n\n` +
                       `📌 Task: *${task.title}* (${task.planeTaskId || task.id})\n` +
@@ -256,14 +365,12 @@ async function main() {
             txt += `\nVui lòng duyệt qua Dashboard.`;
             
             for (const admin of admins) {
-              if (admin.telegramChatId) {
-                await sendMessage(Number(admin.telegramChatId), txt, {
-                  inline_keyboard: [[
-                    { text: "✅ Duyệt", callback_data: `approve_issue_request:${task.id}:${data.type}:${data.newDeadline || ''}` },
-                    { text: "❌ Từ chối", callback_data: `reject_issue_request:${task.id}:${data.type}` }
-                  ]]
-                });
-              }
+              await sendMessage(Number(admin.telegramChatId), txt, {
+                inline_keyboard: [[
+                  { text: "✅ Duyệt", callback_data: `approve_issue_request:${task.id}:${data.type}:${data.newDeadline || ''}` },
+                  { text: "❌ Từ chối", callback_data: `reject_issue_request:${task.id}:${data.type}` }
+                ]]
+              });
             }
           } catch (e) {
             console.error('[NATS] Error processing task approval', e);
@@ -404,6 +511,71 @@ async function main() {
           }
         }
       }
+    });
+    // ─── ACCOUNT LIFECYCLE: đăng ký pending → notify admins ─────────────────
+    nc.subscribe('core.team.account.registered', {
+      callback: async (err, msg) => {
+        if (err) return;
+        try {
+          const data = JSON.parse(msg.data.toString());
+          const member = data.member;
+          if (!member || member.accountStatus !== 'pending') return;
+          const members = await getCachedMembers();
+          const admins = members.filter((m: any) => isTeamAdminMember(m) && m.telegramChatId);
+          const txt =
+            `🆕 *ĐĂNG KÝ TÀI KHOẢN NỘI BỘ*\n\n` +
+            `👤 *${member.fullName}*\n` +
+            `📧 ${member.email}\n` +
+            `📱 Telegram: @${member.telegramUsername || '—'}\n\n` +
+            `Trạng thái: *pending* — duyệt trên StorymeeTeam → HR → Hồ sơ.`;
+          for (const admin of admins) {
+            await sendMessage(Number(admin.telegramChatId), txt, {
+              inline_keyboard: [[
+                { text: '✅ Duyệt account', callback_data: `account_approve:${member.id}` },
+                { text: '❌ Từ chối', callback_data: `account_reject:${member.id}` },
+              ]],
+            });
+          }
+        } catch (e) {
+          console.error('[NATS] account.registered error', e);
+        }
+      },
+    });
+
+    nc.subscribe('core.team.account.approved', {
+      callback: async (err, msg) => {
+        if (err) return;
+        try {
+          const data = JSON.parse(msg.data.toString());
+          const member = data.member;
+          if (member?.telegramChatId) {
+            await sendMessage(
+              Number(member.telegramChatId),
+              `✅ *TÀI KHOẢN ĐÃ ĐƯỢC DUYỆT*\n\nXin chào *${member.fullName}*!\nBạn có thể đăng nhập StorymeeTeam và dùng đầy đủ bot.`
+            );
+          }
+        } catch (e) {
+          console.error('[NATS] account.approved error', e);
+        }
+      },
+    });
+
+    nc.subscribe('core.team.account.rejected', {
+      callback: async (err, msg) => {
+        if (err) return;
+        try {
+          const data = JSON.parse(msg.data.toString());
+          const member = data.member;
+          if (member?.telegramChatId) {
+            await sendMessage(
+              Number(member.telegramChatId),
+              `❌ *ĐĂNG KÝ BỊ TỪ CHỐI*\n\nTài khoản *${member.fullName}* không được duyệt.\n${member.accountNote ? `Lý do: ${member.accountNote}` : 'Liên hệ Admin nếu cần hỗ trợ.'}`
+            );
+          }
+        } catch (e) {
+          console.error('[NATS] account.rejected error', e);
+        }
+      },
     });
   } catch (err: any) {
     console.error("[NATS] Failed to initialize NATS subscribers:", err.message);

@@ -10,6 +10,11 @@ related_files: [file:////Users/imam/storymee/2-MCP-Core/storymeeteam-mcp/README.
 
 Máy chủ Model Context Protocol (MCP) chuyên trách cung cấp công cụ tự động hóa công việc, Kanban, nghỉ phép, tra cứu bảng lương và cập nhật thông tin cá nhân cho nhân sự Storymee.
 
+## Agent docs (bắt buộc)
+
+- **[docs/MCP_TOOL_CALLING.md](./docs/MCP_TOOL_CALLING.md)** — tool catalog, auth, leave/task contracts, anti-patterns  
+- FE pair: `1-Harness-Apps/StorymeeTeam/docs/SYSTEM_GUIDE.md`
+
 ---
 
 ## 🛡️ 1. Nguyên Tắc Phân Quyền & Bảo Mật (Access Control List)

@@ -7,6 +7,11 @@ import {
 } from '../../../constants';
 import { coreApiClient } from '../../../../lib/apiClient';
 import { API_ROUTES } from '@/lib/apiClient';
+import {
+  FE_CONFIRMABLE_ACTIONS,
+  normalizeLlmAction,
+  pickLlmPayload,
+} from '@/lib/llmActions';
 
 const API_BASE = '';
 
@@ -50,6 +55,8 @@ export function ChatWidgetContent({
   tasks = [],
   onUpdate,
   onCreateTask,
+  onArchiveTask,
+  onDeleteTask,
   onClose,
   chatLayout,
   setChatLayout,
@@ -61,6 +68,8 @@ export function ChatWidgetContent({
   tasks?: Task[];
   onUpdate?: (t: Task) => void;
   onCreateTask?: (title: string, assignee: string, estimate: number, priority: Priority) => void;
+  onArchiveTask?: (task: Task | { id: string; dbId?: string; title?: string }) => void | Promise<void>;
+  onDeleteTask?: (task: Task | { id: string; dbId?: string; title?: string }) => void | Promise<void>;
   onClose: () => void;
   chatLayout: 'popup' | 'sidebar';
   setChatLayout: (l: 'popup' | 'sidebar') => void;
@@ -125,22 +134,45 @@ export function ChatWidgetContent({
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [msgs]);
 
+  function findTaskByPayload(payload: any): Task | undefined {
+    const key = String(payload?.id || payload?.task_id || payload?.issue_id || '').toLowerCase();
+    if (!key) return undefined;
+    return tasks.find(
+      (t) =>
+        t.id.toLowerCase() === key ||
+        (t.dbId && String(t.dbId).toLowerCase() === key) ||
+        t.id.toLowerCase().startsWith(key) ||
+        String(t.dbId || '').toLowerCase().startsWith(key)
+    );
+  }
+
   async function handleConfirmAction() {
     if (!pendingAction) return;
-    const { action, payload } = pendingAction;
+    const action = normalizeLlmAction(pendingAction.action);
+    const payload = pendingAction.payload || {};
     setLoading(true);
     try {
-      if (action === 'update_task' && onUpdate) {
-        const targetTask = tasks.find(t => t.id === payload.id);
+      if (action === 'update_issue' && onUpdate) {
+        const targetTask = findTaskByPayload(payload);
         if (targetTask) {
-          await onUpdate({ ...targetTask, ...payload });
+          const next: any = { ...targetTask };
+          if (payload.status) next.status = payload.status;
+          if (payload.assignee) next.assignee = payload.assignee;
+          if (payload.priority) next.priority = payload.priority;
+          if (payload.deadline || payload.target_date) {
+            next.deadline = payload.deadline || payload.target_date;
+          }
+          if (payload.title) next.title = payload.title;
+          await onUpdate(next);
           setMsgs(prev => [...prev, {
             id: Date.now().toString(),
             sender: 'ai',
-            text: `✅ **Đã xác nhận cập nhật thành công công việc ${payload.id}!**`
+            text: `✅ **Đã cập nhật task ${payload.id || payload.task_id || targetTask.id}**${payload.status ? ` → *${payload.status}*` : ''}!`
           }]);
+        } else {
+          throw new Error(`Không tìm thấy task ${payload.id || payload.task_id}`);
         }
-      } else if (action === 'create_task' && onCreateTask) {
+      } else if (action === 'create_issue' && onCreateTask) {
         await onCreateTask(
           payload.title || 'Task mới từ AI',
           payload.assignee || currentUser.name,
@@ -150,7 +182,46 @@ export function ChatWidgetContent({
         setMsgs(prev => [...prev, {
           id: Date.now().toString(),
           sender: 'ai',
-          text: `✅ **Đã xác nhận tạo công việc mới "${payload.title}" thành công!**`
+          text: `✅ **Đã tạo task "${payload.title}" thành công!**`
+        }]);
+      } else if (action === 'archive_issue') {
+        const targetTask = findTaskByPayload(payload);
+        const ref = targetTask || {
+          id: payload.id || payload.task_id,
+          dbId: payload.dbId || payload.task_id || payload.id,
+          title: payload.title,
+        };
+        if (onArchiveTask) {
+          await onArchiveTask(ref as any);
+        } else {
+          const dbId = (targetTask as any)?.dbId || ref.dbId || ref.id;
+          await coreApiClient.patch(`${API_ROUTES.PLANE.ISSUES}/${dbId}`, { status: 'cancelled' });
+        }
+        setMsgs(prev => [...prev, {
+          id: Date.now().toString(),
+          sender: 'ai',
+          text: `✅ **Đã lưu trữ (archive) task ${ref.id}.**`,
+        }]);
+      } else if (action === 'delete_issue') {
+        const targetTask = findTaskByPayload(payload);
+        const ref = targetTask || {
+          id: payload.id || payload.task_id,
+          dbId: payload.dbId || payload.task_id || payload.id,
+          title: payload.title,
+        };
+        if (onDeleteTask) {
+          await onDeleteTask(ref as any);
+        } else {
+          const dbId = (targetTask as any)?.dbId || ref.dbId || ref.id;
+          await coreApiClient.delete(API_ROUTES.PLANE.issueDelete(String(dbId)), {
+            actorId: currentUser.id,
+            actorEmail: currentUser.email,
+          } as any);
+        }
+        setMsgs(prev => [...prev, {
+          id: Date.now().toString(),
+          sender: 'ai',
+          text: `✅ **Đã xoá vĩnh viễn task ${ref.id}.**`,
         }]);
       } else if (action === 'leave_request') {
         try {
@@ -177,9 +248,13 @@ export function ChatWidgetContent({
         }
       }
       setPendingAction(null);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setMsgs(prev => [...prev, { id: Date.now().toString(), sender: 'ai', text: `❌ Gặp lỗi khi thực hiện hành động.` }]);
+      setMsgs(prev => [...prev, {
+        id: Date.now().toString(),
+        sender: 'ai',
+        text: `❌ Gặp lỗi khi thực hiện: ${err?.message || err}`,
+      }]);
     }
     setLoading(false);
   }
@@ -228,10 +303,11 @@ export function ChatWidgetContent({
             onAddRoutingLog(json.log, sent);
           }
 
-          if (['update_task', 'create_task', 'leave_request'].includes(json.data.action)) {
+          const normalized = normalizeLlmAction(json.data.action);
+          if (FE_CONFIRMABLE_ACTIONS.has(normalized)) {
             setPendingAction({
-              action: json.data.action,
-              payload: json.data.action === 'leave_request' ? json.data.leavePayload : json.data.taskPayload,
+              action: normalized,
+              payload: pickLlmPayload(normalized, json.data),
               replyId: replyId
             });
           }
@@ -441,23 +517,38 @@ export function ChatWidgetContent({
                     <span>💡</span> YÊU CẦU XÁC NHẬN HÀNH ĐỘNG
                   </div>
                   <div style={{ fontSize: 11, color: '#e4e4e7', lineHeight: 1.4 }}>
-                    {pendingAction.action === 'leave_request' ? (
+                    {normalizeLlmAction(pendingAction.action) === 'leave_request' ? (
                       <>
-                        Bạn muốn đăng ký nghỉ phép:
+                        Bạn muốn đăng ký nghỉ phép (chờ admin duyệt):
                         <ul style={{ margin: '4px 0', paddingLeft: 16, color: '#a1a1aa' }}>
-                          <li>Loại phép: <strong>{pendingAction.payload.leaveType === 'sick' ? 'Nghỉ ốm' : pendingAction.payload.leaveType === 'annual' ? 'Nghỉ phép năm' : 'Nghỉ việc riêng'}</strong></li>
+                          <li>Loại phép: <strong>{pendingAction.payload.leaveType === 'sick' ? 'Nghỉ ốm' : pendingAction.payload.leaveType === 'remote' ? 'Remote' : pendingAction.payload.leaveType === 'annual' ? 'Nghỉ phép năm' : 'Nghỉ việc riêng'}</strong></li>
                           <li>Thời gian: <strong>{pendingAction.payload.startDate}</strong> đến <strong>{pendingAction.payload.endDate}</strong></li>
                           <li>Lý do: <em>{pendingAction.payload.reason || 'Nghỉ phép qua AI'}</em></li>
                         </ul>
                       </>
-                    ) : pendingAction.action === 'update_task' ? (
+                    ) : normalizeLlmAction(pendingAction.action) === 'update_issue' ? (
                       <>
-                        Bạn muốn cập nhật task <strong>{pendingAction.payload.id}</strong>:
+                        Bạn muốn cập nhật task <strong>{pendingAction.payload.id || pendingAction.payload.task_id}</strong>:
                         <ul style={{ margin: '4px 0', paddingLeft: 16, color: '#a1a1aa' }}>
                           {pendingAction.payload.status && <li>Trạng thái: <strong>{pendingAction.payload.status}</strong></li>}
                           {pendingAction.payload.assignee && <li>Phụ trách: <strong>{pendingAction.payload.assignee}</strong></li>}
-                          {pendingAction.payload.deadline && <li>Hạn chót: <strong>{pendingAction.payload.deadline}</strong></li>}
+                          {(pendingAction.payload.deadline || pendingAction.payload.target_date) && (
+                            <li>Hạn chót: <strong>{pendingAction.payload.deadline || pendingAction.payload.target_date}</strong></li>
+                          )}
                         </ul>
+                      </>
+                    ) : normalizeLlmAction(pendingAction.action) === 'archive_issue' ? (
+                      <>
+                        Lưu trữ (archive) task <strong>{pendingAction.payload.task_id || pendingAction.payload.id}</strong>
+                        {pendingAction.payload.reason ? (
+                          <div style={{ marginTop: 4, color: '#a1a1aa' }}>Lý do: <em>{pendingAction.payload.reason}</em></div>
+                        ) : null}
+                        <div style={{ marginTop: 4, fontSize: 10, color: '#71717a' }}>Self-service — không cần admin.</div>
+                      </>
+                    ) : normalizeLlmAction(pendingAction.action) === 'delete_issue' ? (
+                      <>
+                        ⚠️ Xoá vĩnh viễn task <strong>{pendingAction.payload.task_id || pendingAction.payload.id}</strong>
+                        <div style={{ marginTop: 4, fontSize: 10, color: '#f87171' }}>Không hoàn tác. Nên Archive nếu chỉ cần ẩn.</div>
                       </>
                     ) : (
                       <>

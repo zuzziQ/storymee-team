@@ -16,6 +16,7 @@ import SidebarNav from './features/shared/components/SidebarNav';
 import HeaderBar from './features/shared/components/HeaderBar';
 import AddProjectModal from './features/shared/components/AddProjectModal';
 import { TEAM, getInitials } from './constants';
+import { isTeamAdmin } from '@/lib/teamAuth';
 
 const TABS = [
   { id: 'overview', label: 'Tổng quan' },
@@ -77,6 +78,7 @@ export default function StorymeeTeamPage() {
     setLeavesPending,
     announcements,
     setAnnouncements,
+    fetchServerAnnouncements,
     selectedMemberId,
     setSelectedMemberId,
     showNotifications,
@@ -110,6 +112,7 @@ export default function StorymeeTeamPage() {
     handleAddProject,
     handleAnalyzeProject,
     handleArchiveTaskDirect,
+    handleDeleteTaskHard,
     handleRequestArchive,
     handleSubmitForReview,
     handleReviewDecision,
@@ -122,8 +125,7 @@ export default function StorymeeTeamPage() {
     setMeetings,
   } = useAppState();
 
-  const ADMIN_EMAILS = ['kimngan151091@gmail.com', 'lehuyducanh.vn@gmail.com', 'zuzzivn@gmail.com'];
-  const isAdmin = ADMIN_EMAILS.includes(activeUser?.email?.toLowerCase() || '');
+  const isAdmin = isTeamAdmin(activeUser);
 
   if (!authReady) {
     return (
@@ -177,6 +179,7 @@ export default function StorymeeTeamPage() {
           handleCheckinOffice={handleCheckinOffice}
           handleCheckoutOffice={handleCheckoutOffice}
           attendanceList={attendanceList}
+          onAnnouncementsRefresh={fetchServerAnnouncements}
         />
 
         {/* ===== DATABASE CONNECTION ERROR BANNER ===== */}
@@ -229,8 +232,22 @@ export default function StorymeeTeamPage() {
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <button
-                onClick={() => {
-                  setAnnouncements(prev => prev.map(a => a.id === ann.id ? { ...a, readBy: [...a.readBy, activeUser.id] } : a));
+                onClick={async () => {
+                  try {
+                    const { coreApiClient } = await import('@/lib/apiClient');
+                    await coreApiClient.post(`/hr/announcements/${ann.id}/read`, {
+                      userId: activeUser.id,
+                    });
+                  } catch (e) {
+                    console.warn('mark announcement read failed', e);
+                  }
+                  setAnnouncements(prev =>
+                    prev.map(a =>
+                      a.id === ann.id
+                        ? { ...a, readBy: [...(a.readBy || []), activeUser.id] }
+                        : a
+                    )
+                  );
                 }}
                 className="btn-primary"
                 style={{
@@ -284,6 +301,7 @@ export default function StorymeeTeamPage() {
               activeUserEmail={activeUser?.email || ''}
               onArchiveTaskDirect={handleArchiveTaskDirect}
               onRequestArchive={(task) => handleRequestArchive(task, '')}
+              onDeleteTaskHard={handleDeleteTaskHard}
               handleCreateTask={handleCreateTask}
             />
           )}
@@ -357,6 +375,7 @@ export default function StorymeeTeamPage() {
               selectedMemberId={selectedMemberId}
               setSelectedMemberId={setSelectedMemberId}
               handleSaveMyProfile={handleSaveMyProfile}
+              onRefreshHr={fetchDbData}
             />
           )}
 
@@ -372,7 +391,12 @@ export default function StorymeeTeamPage() {
 
           {/* ===== LỊCH HỌP ===== */}
           {tab === 'meetings' && (
-            <MeetingsTab meetings={meetings} setMeetings={setMeetings} teamMembers={teamMembers} />
+            <MeetingsTab
+              meetings={meetings}
+              setMeetings={setMeetings}
+              teamMembers={teamMembers}
+              activeUser={activeUser}
+            />
           )}
 
           {/* ===== WORKLOAD ===== */}
@@ -416,6 +440,8 @@ export default function StorymeeTeamPage() {
             tasks={tasks}
             onUpdate={handleUpdateTask}
             onCreateTask={handleCreateTask}
+            onArchiveTask={handleArchiveTaskDirect}
+            onDeleteTask={handleDeleteTaskHard}
             onClose={() => setChatOpen(false)}
             chatLayout={chatLayout}
             setChatLayout={setChatLayout}
@@ -439,6 +465,8 @@ export default function StorymeeTeamPage() {
         tasks={tasks}
         onUpdate={handleUpdateTask}
         onCreateTask={handleCreateTask}
+        onArchiveTask={handleArchiveTaskDirect}
+        onDeleteTask={handleDeleteTaskHard}
         chatOpen={chatOpen}
         setChatOpen={setChatOpen}
         chatLayout={chatLayout}
@@ -459,7 +487,8 @@ export default function StorymeeTeamPage() {
         <TaskDetailModal
           task={selectedTask}
           onClose={() => setSelectedTask(null)}
-          onDeleteTask={handleArchiveTaskDirect}
+          onDeleteTask={handleDeleteTaskHard}
+          onArchiveTask={handleArchiveTaskDirect}
           onUpdate={(t) => {
             setSelectedTask(t);
             handleUpdateTask(t);
