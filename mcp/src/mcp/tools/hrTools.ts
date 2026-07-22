@@ -96,18 +96,18 @@ export const HR_TOOLS_SCHEMA = [
   },
   {
     name: "schedule_meeting",
-    description: "Tạo lịch họp mới.",
+    description: "Tạo lịch họp mới. QUAN TRỌNG: startTime và endTime PHẢI là chuỗi ISO 8601 đầy đủ (ví dụ: '2026-07-23T09:00:00+07:00'). Nếu user không nói endTime, hãy tự động tính endTime = startTime + 1 giờ. Luôn dùng múi giờ +07:00 (Việt Nam).",
     inputSchema: {
       type: "object",
       properties: {
-        title: { type: "string" },
-        description: { type: "string" },
-        startTime: { type: "string" },
-        endTime: { type: "string" },
-        attendees: { type: "array", items: { type: "string" } },
-        meetLink: { type: "string", description: "Link Google Meet (nếu có)" }
+        title: { type: "string", description: "Tiêu đề cuộc họp" },
+        description: { type: "string", description: "Mô tả nội dung họp" },
+        startTime: { type: "string", description: "Giờ bắt đầu, ISO 8601, ví dụ: 2026-07-23T09:00:00+07:00" },
+        endTime: { type: "string", description: "Giờ kết thúc, ISO 8601. Nếu không rõ, mặc định = startTime + 1 giờ" },
+        attendees: { type: "array", items: { type: "string" }, description: "Danh sách người tham dự (tên, email hoặc @telegram)" },
+        meetLink: { type: "string", description: "Link Google Meet hoặc Zoom (nếu có)" }
       },
-      required: ["title", "startTime", "endTime"]
+      required: ["title", "startTime"]
     }
   },
   {
@@ -411,8 +411,36 @@ case "upsert_team_member": {
     }
     
     case "schedule_meeting": {
-      const { title, description, startTime, endTime, attendees, meetLink } = args as any;
-      const resolvedAttendees = await resolveAttendees(attendees || []);
+      // Normalize: LLM đôi khi gửi start_time/end_time thay vì startTime/endTime
+      const rawArgs = args as any;
+      const title = rawArgs.title;
+      const description = rawArgs.description;
+      const meetLink = rawArgs.meetLink || rawArgs.meet_link;
+      const rawAttendees = rawArgs.attendees || rawArgs.participants || [];
+
+      // Normalize startTime
+      let startTime: string = rawArgs.startTime || rawArgs.start_time || '';
+      if (!startTime) {
+        throw new McpError(ErrorCode.InternalError, 'Thiếu thông tin giờ bắt đầu (startTime). Vui lòng thử lại và cung cấp giờ bắt đầu.');
+      }
+      // Ensure timezone offset for VN if missing
+      if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(startTime)) {
+        startTime = startTime + '+07:00';
+      }
+
+      // Normalize endTime — default to startTime + 1h if missing
+      let endTime: string = rawArgs.endTime || rawArgs.end_time || '';
+      if (!endTime) {
+        const startMs = new Date(startTime).getTime();
+        if (!isNaN(startMs)) {
+          endTime = new Date(startMs + 60 * 60 * 1000).toISOString();
+        }
+      }
+      if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(endTime)) {
+        endTime = endTime + '+07:00';
+      }
+
+      const resolvedAttendees = await resolveAttendees(rawAttendees);
       let resJson;
       try {
         if (!user?.id) {
@@ -428,15 +456,20 @@ case "upsert_team_member": {
           meetLink
         });
       } catch (err: any) {
-        // Log full error for debugging
         const errMsg = err?.data?.message || err?.message || JSON.stringify(err);
-        console.error('[schedule_meeting] API error:', errMsg, '| user.id:', user?.id, '| args:', JSON.stringify(args));
+        console.error('[schedule_meeting] API error:', errMsg, '| user.id:', user?.id, '| startTime:', startTime, '| endTime:', endTime, '| args:', JSON.stringify(rawArgs));
         if (err instanceof McpError) throw err;
         throw new McpError(ErrorCode.InternalError, `Lỗi tạo lịch họp: ${errMsg}`);
       }
       const meeting = resJson?.data || resJson;
+      // Format time for display in VN timezone
+      const fmtTime = (iso: string) => {
+        try {
+          return new Date(iso).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' });
+        } catch { return iso; }
+      };
       return {
-        content: [{ type: "text", text: `Đã đặt lịch họp thành công! ✓\n• Tiêu đề: ${title}\n• Bắt đầu: ${startTime}\n• Kết thúc: ${endTime}` }]
+        content: [{ type: "text", text: `Đã đặt lịch họp thành công! ✓\n• Tiêu đề: ${title}\n• Bắt đầu: ${fmtTime(startTime)}\n• Kết thúc: ${fmtTime(endTime)}\n• Người tham dự: ${resolvedAttendees.length} người` }]
       };
     }
     
