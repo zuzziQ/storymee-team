@@ -15,14 +15,22 @@ export class CoreApiClient {
 
     constructor(config: { baseURL: string }) {
         let url = config.baseURL;
-        if (!url.endsWith('/internal/v1/team') && !url.endsWith('/internal/v1/team/')) {
-            url = url.replace(/\/+$/, '') + '/internal/v1/team';
+        if (!url.endsWith('/api/v1/team') && !url.endsWith('/api/v1/team/')) {
+            url = url.replace(/\/+$/, '') + '/api/v1/team';
         }
         this.baseURL = url;
     }
 
     private async resolveBaseUrl() {
         return this.baseURL;
+    }
+
+    private headers(): Record<string, string> {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('st_team_token') : null;
+        return {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        };
     }
 
     public async get<T = any>(url: string): Promise<T> {
@@ -33,7 +41,7 @@ export class CoreApiClient {
             console.log('[CoreApiClient] GET Fetching:', fullUrl);
             const res = await fetch(fullUrl, {
                 method: 'GET',
-                headers: { 'Content-Type': 'application/json' },
+                headers: this.headers(),
                 signal: AbortSignal.timeout(60000),
                 cache: 'no-store'
             });
@@ -54,7 +62,7 @@ export class CoreApiClient {
             console.log('[CoreApiClient] POST Fetching:', fullUrl);
             const res = await fetch(fullUrl, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: this.headers(),
                 body: JSON.stringify(body),
                 signal: AbortSignal.timeout(60000),
                 cache: 'no-store'
@@ -75,7 +83,7 @@ export class CoreApiClient {
             console.log('[CoreApiClient] PATCH Fetching:', fullUrl);
             const res = await fetch(fullUrl, {
                 method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
+                headers: this.headers(),
                 body: JSON.stringify(body),
                 signal: AbortSignal.timeout(60000),
                 cache: 'no-store'
@@ -97,7 +105,7 @@ export class CoreApiClient {
             console.log('[CoreApiClient] DELETE Fetching:', fullUrl);
             const res = await fetch(fullUrl, {
                 method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' },
+                headers: this.headers(),
                 body: body !== undefined ? JSON.stringify(body) : undefined,
                 signal: AbortSignal.timeout(60000),
                 cache: 'no-store'
@@ -117,6 +125,10 @@ export const coreApiClient = new CoreApiClient({
 });
 
 export const API_ROUTES = {
+    AUTH: {
+        EXCHANGE: '/auth/one-time/exchange',
+        ME: '/auth/me',
+    },
     HR: {
         TEAM_MEMBERS: '/hr/team-members',
         /** Self-register → pending (admin must approve) */

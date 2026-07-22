@@ -18,8 +18,10 @@
     "@storymee/api-client": "file:../../0-Shared-Libs/api-client",
     "@storymee/fastify-common": "file:../../0-Shared-Libs/fastify-common",
     "@storymee/prisma-client": "file:../../0-Shared-Libs/prisma-client",
+    "@types/jsonwebtoken": "^9.0.10",
     "dotenv": "^17.4.2",
     "fastify": "^5.10.0",
+    "jsonwebtoken": "^9.0.3",
     "nats": "^2.29.3",
     "socket.io": "^4.8.3"
   },

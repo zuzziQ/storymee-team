@@ -19,7 +19,7 @@ export default function LoginPage() {
   useEffect(() => {
     async function checkToken() {
       if (typeof window === 'undefined') return;
-      const params = new URLSearchParams(window.location.search);
+      const params = new URLSearchParams(window.location.hash.replace(/^#/, ''));
       const token = params.get('token');
       
       if (!token) {
@@ -28,21 +28,13 @@ export default function LoginPage() {
       }
 
       setStatusText('Đang xác thực Token từ Telegram...');
+      window.history.replaceState(null, '', window.location.pathname);
       try {
-        // Resolve member by token among all statuses, then require active via lookup
-        const json = await coreApiClient.get('/hr/team-members?status=all');
-        if ((json.status === 'success' || json.success === true) && Array.isArray(json.data)) {
-          const matchedUser = json.data.find(
-            (u: any) => u.lettaConversationId === token || `conv-${u.id}` === token
-          );
-
-          if (matchedUser) {
-            try {
-              const auth: any = await coreApiClient.get(
-                `/hr/auth/lookup?q=${encodeURIComponent(matchedUser.email)}`
-              );
-              const u = auth.data || matchedUser;
+        const auth: any = await coreApiClient.post('/auth/one-time/exchange', { token });
+        if ((auth.status === 'success' || auth.success === true) && auth.data?.accessToken && auth.data?.member) {
+              const u = auth.data.member;
               setStatusText(`Xác thực thành công. Đang chuyển hướng cho ${u.fullName}...`);
+              localStorage.setItem('st_team_token', auth.data.accessToken);
               localStorage.setItem('st_user', JSON.stringify({
                 id: u.id,
                 email: u.email,
@@ -52,22 +44,12 @@ export default function LoginPage() {
                 color: u.color || '#6366f1'
               }));
               setTimeout(() => router.push('/'), 800);
-            } catch (gate: any) {
-              setError(gate?.data?.message || 'Tài khoản chưa được Admin duyệt hoặc đã bị khoá.');
-              setIsCheckingToken(false);
-              setStatusText('');
-            }
-          } else {
-            setError('⚠️ Token đăng nhập từ Telegram không hợp lệ hoặc đã hết hạn.');
-            setIsCheckingToken(false);
-            setStatusText('');
-          }
         } else {
-           setIsCheckingToken(false);
+          throw new Error('Invalid exchange response');
         }
-      } catch (e) {
-        console.error("Lỗi fetch members từ DB:", e);
-        setError('⚠️ Không thể kết nối tới hệ thống xác thực.');
+      } catch (e: any) {
+        console.error('One-time login exchange failed:', e);
+        setError(e?.data?.message || '⚠️ Liên kết đăng nhập không hợp lệ, đã dùng hoặc đã hết hạn.');
         setIsCheckingToken(false);
       }
     }
@@ -77,55 +59,8 @@ export default function LoginPage() {
   // 2. Logic xử lý Đăng Nhập Thủ Công (Form Submit)
   const handleDirectLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const val = inputValue.trim().toLowerCase();
-    
-    if (!val) {
-      setError('Vui lòng nhập Email hoặc Telegram Username.');
-      return;
-    }
-    
-    // Loại bỏ ký tự @ nếu người dùng gõ @username
-    const searchVal = val.startsWith('@') ? val.substring(1) : val;
-
-    setError('');
-    setIsSubmitting(true);
-    setStatusText('Đang kiểm tra tài khoản nội bộ (chỉ account đã duyệt)...');
-
-    try {
-      // SSOT login gate: only account_status=active
-      const auth: any = await coreApiClient.get(
-        `/hr/auth/lookup?q=${encodeURIComponent(searchVal)}`
-      );
-      if ((auth.status === 'success' || auth.success) && auth.data) {
-        const matchedUser = auth.data;
-        setStatusText(`Đăng nhập thành công! Xin chào ${matchedUser.fullName}`);
-        localStorage.setItem('st_user', JSON.stringify({
-          id: matchedUser.id,
-          email: matchedUser.email,
-          name: matchedUser.fullName,
-          role: matchedUser.role || 'Nhân sự mới',
-          accountStatus: matchedUser.accountStatus || 'active',
-          color: matchedUser.color || '#6366f1'
-        }));
-        setTimeout(() => router.push('/'), 800);
-      } else {
-        setError('Tài khoản không tồn tại hoặc chưa được kích hoạt.');
-        setIsSubmitting(false);
-        setStatusText('');
-      }
-    } catch (e: any) {
-      console.error("Lỗi đăng nhập thủ công:", e);
-      const msg =
-        e?.data?.message ||
-        (e?.status === 404
-          ? 'Tài khoản không tồn tại. Đăng ký qua Telegram bot rồi chờ Admin duyệt.'
-          : e?.status === 403
-            ? e?.data?.message || 'Tài khoản chờ duyệt / bị khoá.'
-            : '⚠️ Không thể kết nối tới hệ thống xác thực.');
-      setError(msg);
-      setIsSubmitting(false);
-      setStatusText('');
-    }
+    setError('Đăng nhập trực tiếp đã tắt. Hãy mở Telegram bot và gửi /portal để nhận liên kết dùng một lần.');
+    setIsSubmitting(false);
   };
 
   return (

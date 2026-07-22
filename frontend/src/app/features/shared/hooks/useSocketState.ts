@@ -144,7 +144,8 @@ export function useSocketState(
 
     const base = resolveSocketBase();
     const socket = io(base, {
-      path: '/internal/v1/team/socket.io',
+      path: '/api/v1/team/socket.io',
+      auth: { token: localStorage.getItem('st_team_token') || '' },
       transports: ['websocket', 'polling'],
       withCredentials: false,
     });

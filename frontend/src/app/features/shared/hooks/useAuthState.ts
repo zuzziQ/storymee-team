@@ -57,7 +57,8 @@ export function useAuthState() {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const stored = localStorage.getItem('st_user');
-    if (!stored) {
+    const token = localStorage.getItem('st_team_token');
+    if (!stored || !token) {
       router.push('/login');
       return;
     }
@@ -71,9 +72,7 @@ export function useAuthState() {
 
     (async () => {
       try {
-        const res: any = await coreApiClient.get(
-          `${API_ROUTES.HR.AUTH_LOOKUP}?q=${encodeURIComponent(email)}`
-        );
+        const res: any = await coreApiClient.get(API_ROUTES.AUTH.ME);
         if ((res.status === 'success' || res.success) && res.data) {
           const m = mapMember(res.data);
           setActiveUser(m);
@@ -99,8 +98,11 @@ export function useAuthState() {
           router.push('/login');
           return;
         }
-        // Network fallback: allow session if stored, mark ready
-        console.warn('[useAuthState] lookup failed, using stored session', err);
+        console.warn('[useAuthState] session verification failed', err);
+        localStorage.removeItem('st_team_token');
+        localStorage.removeItem('st_user');
+        router.push('/login');
+        return;
       }
       setAuthReady(true);
     })();
@@ -109,6 +111,7 @@ export function useAuthState() {
   const handleLogout = () => {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('st_user');
+      localStorage.removeItem('st_team_token');
       router.push('/login');
     }
   };

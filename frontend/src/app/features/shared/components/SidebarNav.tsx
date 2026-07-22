@@ -6,8 +6,8 @@ import { isTeamAdmin } from '@/lib/teamAuth';
 interface SidebarNavProps {
   tab: string;
   setTab: (tab: string) => void;
-  hrSubTab: 'profile' | 'attendance' | 'leaves' | 'payroll' | 'importer' | 'accounts';
-  setHrSubTab: (subTab: 'profile' | 'attendance' | 'leaves' | 'payroll' | 'importer' | 'accounts') => void;
+  hrSubTab: 'profile' | 'attendance' | 'leaves' | 'payroll' | 'importer' | 'accounts' | 'settings';
+  setHrSubTab: (subTab: 'profile' | 'attendance' | 'leaves' | 'payroll' | 'importer' | 'accounts' | 'settings') => void;
   activeUser: TeamMember;
 }
 

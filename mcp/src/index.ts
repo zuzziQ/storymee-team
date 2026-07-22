@@ -11,6 +11,7 @@ import { sendMessage, getCachedMembers } from "./telegram_agent";
 import * as dotenv from "dotenv";
 import { CoreApiClient, API_ROUTES } from "@storymee/api-client";
 import { connect } from "nats";
+import { createTeamServiceClient } from './serviceRoutes';
 
 import { PLANE_TOOLS_SCHEMA, executePlaneTool } from './mcp/tools/planeTools';
 import { HR_TOOLS_SCHEMA, executeHrTool } from './mcp/tools/hrTools';
@@ -22,11 +23,7 @@ dotenv.config();
 import { startTelegramPolling } from './telegram_agent';
 import { startCronJobs } from './cronJobs';
 
-const CORE_API_URL = process.env.CORE_API_URL || "http://localhost:5100";
-let apiClient = new CoreApiClient({ 
-    baseURL: CORE_API_URL + '/internal/v1/team', 
-    enforceApiPrefix: false
-});
+let apiClient = createTeamServiceClient();
 
 let cachedMembers: any[] | null = null;
 let lastCacheTime = 0;

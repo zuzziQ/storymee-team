@@ -9,6 +9,7 @@ import {
 import { handleTelegramMessage } from "../../telegram_agent";
 import { executeMcpTool } from '../../index';
 import * as dotenv from "dotenv";
+import { createTeamServiceClient, TEAM_AI_SERVICE_URL } from '../../serviceRoutes';
 
 dotenv.config();
 
@@ -18,8 +19,8 @@ const WEB_PORTAL_URL = process.env.WEB_PORTAL_URL || "https://storymee-team.verc
 // Telegram callbacks must hit public hub AI (same as messageHandler) — never Vercel FE or localhost.
 const OMNIROUTER_API_URL =
   process.env.OMNIROUTER_API_URL ||
-  `${CORE_API_URL.replace(/\/+$/, "")}/internal/v1/ai/team/chat`;
-const apiClient = new CoreApiClient({ baseURL: CORE_API_URL + '/internal/v1/team', enforceApiPrefix: false });
+  TEAM_AI_SERVICE_URL;
+const apiClient = createTeamServiceClient();
 
 /** Aligned with core-team-api teamAuth.service (email allowlist + role keywords). */
 const DEFAULT_ADMIN_EMAILS = (process.env.TEAM_ADMIN_EMAILS ||
@@ -1044,4 +1045,3 @@ async function handleCallbackQuery(callbackQuery: any) {
   }
 }
 export { handleCallbackQuery };
-

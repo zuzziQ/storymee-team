@@ -6,6 +6,7 @@ import * as path from "path";
 import cron from "node-cron";
 import { executeMcpTool } from "./index";
 import { CoreApiClient, API_ROUTES } from "@storymee/api-client";
+import { createTeamServiceClient, TEAM_AI_SERVICE_URL } from './serviceRoutes';
 
 dotenv.config();
 
@@ -69,8 +70,8 @@ const CORE_API_URL = process.env.CORE_API_URL || "http://localhost:5100";
 // Team chat on core-ai-api (not FE)
 const OMNIROUTER_API_URL =
   process.env.OMNIROUTER_API_URL ||
-  `${CORE_API_URL.replace(/\/+$/, '')}/internal/v1/ai/team/chat`;
-let apiClient = new CoreApiClient({ baseURL: CORE_API_URL + '/internal/v1/team', enforceApiPrefix: false });
+  TEAM_AI_SERVICE_URL;
+let apiClient = createTeamServiceClient();
 
 // --- CACHE HỆ THỐNG (sau apiClient) ---
 const CACHE_TTL = 5 * 60 * 1000;

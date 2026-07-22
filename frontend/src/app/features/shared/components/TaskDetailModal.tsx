@@ -17,7 +17,8 @@ const API_BASE = (process.env.NEXT_PUBLIC_API_URL === '/api' || process.env.NEXT
 let socket: ReturnType<typeof io> | null = null;
 if (typeof window !== 'undefined') {
   socket = io(API_BASE, {
-    path: '/internal/v1/team/socket.io',
+    path: '/api/v1/team/socket.io',
+    auth: { token: localStorage.getItem('st_team_token') || '' },
     autoConnect: false
   });
 }

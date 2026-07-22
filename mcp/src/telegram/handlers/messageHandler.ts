@@ -12,22 +12,21 @@ import { formatMyIssuesDM, isDoneGroup, parseIssue } from '../formatters/issueFo
 import { outputSessions, pendingOutputByUsername } from '../../sessionStore';
 import { classifyIntentFast, buildSlimRoster } from '../fastIntent';
 import * as dotenv from "dotenv";
+import { createTeamServiceClient, serviceAuthHeaders, TEAM_AI_SERVICE_URL } from '../../serviceRoutes';
 
 dotenv.config();
 
 const TELEGRAM_API = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}`;
 const CORE_API_URL = process.env.CORE_API_URL || "http://localhost:5100";
 const WEB_PORTAL_URL = process.env.WEB_PORTAL_URL || "https://dev-hub.storymee.com";
-// Backend Ubuntu: core-ai-api via hub (no FE required)
-// e.g. http://127.0.0.1:5100/internal/v1/ai/team/chat  or  https://dev-hub.storymee.com/internal/v1/ai/team/chat
 const OMNIROUTER_API_URL =
   process.env.OMNIROUTER_API_URL ||
-  `${(process.env.CORE_API_URL || 'http://127.0.0.1:5100').replace(/\/+$/, '')}/internal/v1/ai/team/chat`;
+  TEAM_AI_SERVICE_URL;
 /** Skip Gemini Flash first-pass (default true — heuristic is enough) */
 const USE_FLASH_INTENT = process.env.TELEGRAM_USE_FLASH_INTENT === '1';
 const LLM_TIMEOUT_MS = Number(process.env.TELEGRAM_LLM_TIMEOUT_MS || 35000);
 const HISTORY_TURNS = Number(process.env.TELEGRAM_HISTORY_TURNS || 6);
-const apiClient = new CoreApiClient({ baseURL: CORE_API_URL + '/internal/v1/team', enforceApiPrefix: false });
+const apiClient = createTeamServiceClient();
 
 async function getTelegramFileUrl(fileId: string): Promise<string | null> {
   try {
@@ -601,8 +600,13 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
       return;
     }
     
-    const token = member.lettaConversationId || `conv-${member.id}`;
-    const portalUrl = `${WEB_PORTAL_URL}/login?token=${token}`;
+    try {
+      const issued: any = await apiClient.post('/auth/one-time/issue', {
+        teamMemberId: member.id,
+        source: 'telegram',
+      });
+      const portalUrl = issued.data?.loginUrl || issued.loginUrl;
+      if (!portalUrl) throw new Error('Backend did not return loginUrl');
     
     await sendMessage(chatId, "🌐 Bấm nút dưới đây để mở giao diện Web Portal:", {
       inline_keyboard: [
@@ -611,6 +615,10 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
         ]
       ]
     });
+    } catch (error: any) {
+      console.error('[portal] issue one-time login failed:', error?.message || error);
+      await sendMessage(chatId, '❌ Không thể tạo liên kết đăng nhập lúc này. Vui lòng thử lại sau.');
+    }
     return;
   }
 
@@ -799,7 +807,7 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
     const t0 = Date.now();
     const res = await fetchAxios(OMNIROUTER_API_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: serviceAuthHeaders({ 'Content-Type': 'application/json' }),
       timeout: LLM_TIMEOUT_MS,
       body: JSON.stringify({
         message: text,

@@ -11,7 +11,11 @@ import adminRoutes from './modules/tasks/index';
 import hrRoutes from './modules/hr/index';
 import omnitaskRoutes from './modules/omnitask/index';
 import planeRoutes from './modules/plane/index';
+import authRoutes from './modules/auth/index';
 import { TeamAccountService } from './services/teamAccount.service';
+import { requireTeamSession } from './middlewares/teamSessionAuth';
+import { TeamSessionService } from './services/teamSession.service';
+import { prisma } from './config/prisma';
 
 (BigInt.prototype as any).toJSON = function () {
   return this.toString();
@@ -37,6 +41,7 @@ async function startServer() {
   }
   
   await fastify.register(setupCors as any);
+  fastify.addHook('preHandler', requireTeamSession);
 
   // Internal account schema (account_status on omni_team_members)
   try {
@@ -49,6 +54,8 @@ async function startServer() {
   fastify.get('/internal/v1/team/health', async (request, reply) => {
       return { status: 'ok', service: 'core-team-api' };
   });
+
+  await fastify.register(authRoutes, { prefix: '/internal/v1/team/auth' });
 
   await fastify.register(adminRoutes, { prefix: '/internal/v1/team/projects' });
   await fastify.register(hrRoutes, { prefix: '/internal/v1/team/hr' });
@@ -63,6 +70,21 @@ async function startServer() {
     path: '/internal/v1/team/socket.io'
   });
   fastify.decorate('io', io);
+
+  io.use(async (socket, next) => {
+    try {
+      const authToken = String(socket.handshake.auth?.token || '');
+      const header = String(socket.handshake.headers.authorization || '');
+      const token = authToken || (header.startsWith('Bearer ') ? header.slice(7).trim() : '');
+      const claims = TeamSessionService.verifySession(token);
+      const member = await prisma.teamMember.findUnique({ where: { id: claims.sub } });
+      if (!member || !member.isActive || member.accountStatus !== 'active') throw new Error('inactive');
+      socket.data.teamMemberId = member.id;
+      next();
+    } catch {
+      next(new Error('TEAM_SESSION_REQUIRED'));
+    }
+  });
 
   io.on('connection', (socket) => {
     console.log(`[Core Team API] Socket connected: ${socket.id}`);
