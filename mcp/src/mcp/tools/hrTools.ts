@@ -412,10 +412,13 @@ case "upsert_team_member": {
     
     case "schedule_meeting": {
       const { title, description, startTime, endTime, attendees, meetLink } = args as any;
-      const resolvedAttendees = await resolveAttendees(attendees);
+      const resolvedAttendees = await resolveAttendees(attendees || []);
       let resJson;
       try {
-        resJson = await apiClient.post('hr/meetings', {
+        if (!user?.id) {
+          throw new McpError(ErrorCode.InternalError, 'Không xác định được người tổ chức (hostId). Vui lòng thử lại.');
+        }
+        resJson = await apiClient.post(API_ROUTES.HR.MEETINGS, {
           title,
           description,
           startTime,
@@ -425,10 +428,15 @@ case "upsert_team_member": {
           meetLink
         });
       } catch (err: any) {
-        throw new McpError(ErrorCode.InternalError, "Lỗi tạo lịch họp.");
+        // Log full error for debugging
+        const errMsg = err?.data?.message || err?.message || JSON.stringify(err);
+        console.error('[schedule_meeting] API error:', errMsg, '| user.id:', user?.id, '| args:', JSON.stringify(args));
+        if (err instanceof McpError) throw err;
+        throw new McpError(ErrorCode.InternalError, `Lỗi tạo lịch họp: ${errMsg}`);
       }
+      const meeting = resJson?.data || resJson;
       return {
-        content: [{ type: "text", text: `Đã đặt lịch họp thành công: ${title}` }]
+        content: [{ type: "text", text: `Đã đặt lịch họp thành công! ✓\n• Tiêu đề: ${title}\n• Bắt đầu: ${startTime}\n• Kết thúc: ${endTime}` }]
       };
     }
     
