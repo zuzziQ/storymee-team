@@ -983,6 +983,7 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
           };
 
           let confirmMsg = '';
+          const fmtVN = (iso: string) => { try { return new Date(iso).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }); } catch { return iso; } };
           if (aiResponse.action === 'check_in_out') {
             const cp = aiResponse.checkInOutPayload || {};
             confirmMsg = `💡 *ĐỀ XUẤT ĐIỂM DANH:*\n• Trạng thái: *${cp.status === 'present' ? 'Đi làm' : cp.status === 'late' ? 'Đi muộn' : cp.status === 'checkout' ? 'Tan ca' : 'Vắng'}*\n• Ghi chú: *${cp.notes || 'Không có'}*${cp.employee_name ? `\n• Nhân sự: *${cp.employee_name}*` : ''}`;
@@ -999,11 +1000,11 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
             confirmMsg = `💡 *ĐỀ XUẤT ${actionTitle} CÁC CÔNG VIỆC CON CHO ${up.task_id}:*\n${listStr}\n\n${actionDesc}`;
           } else if (aiResponse.action === 'create_meeting') {
             const mp = aiResponse.meetingPayload || {};
-            confirmMsg = `💡 *ĐỀ XUẤT ĐẶT LỊCH HỌP:*\n• Tiêu đề: *${mp.title}*\n• Thời gian: *${new Date(mp.startTime).toLocaleString('vi-VN')}* đến *${new Date(mp.endTime).toLocaleString('vi-VN')}*\n• Tham gia: *${mp.attendees?.join(', ') || 'Chỉ mình bạn'}*`;
+            confirmMsg = `💡 *ĐỀ XUẤT ĐẶT LỊCH HỌP:*\n• Tiêu đề: *${mp.title}*\n• Thời gian: *${fmtVN(mp.startTime)}* đến *${fmtVN(mp.endTime)}*\n• Tham gia: *${mp.attendees?.join(', ') || 'Chỉ mình bạn'}*`;
           } else if (aiResponse.action === 'update_meeting') {
             const mp = aiResponse.updateMeetingPayload || {};
             const isCancel = mp.status === 'cancelled';
-            confirmMsg = `💡 *ĐỀ XUẤT ${isCancel ? 'HỦY' : 'CẬP NHẬT'} LỊCH HỌP ${mp.meeting_id}:*\n• Tiêu đề: *${mp.title}*\n• Thời gian: *${new Date(mp.startTime).toLocaleString('vi-VN')}* đến *${new Date(mp.endTime).toLocaleString('vi-VN')}*`;
+            confirmMsg = `💡 *ĐỀ XUẤT ${isCancel ? 'HỦY' : 'CẬP NHẬT'} LỊCH HỌP ${mp.meeting_id}:*\n• Tiêu đề: *${mp.title}*\n• Thời gian: *${fmtVN(mp.startTime)}* đến *${fmtVN(mp.endTime)}*`;
           } else if (aiResponse.action === 'update_issue') {
             const tp = aiResponse.taskPayload || {};
             const statusText = tp.status ? `\n• Trạng thái mới: *${tp.status}*` : '';
