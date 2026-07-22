@@ -776,7 +776,7 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
         const flashJson = (await flashRes.json()) as any;
         const rawOutput = flashJson.candidates?.[0]?.content?.parts?.[0]?.text || userIntent;
         const parsed = rawOutput.trim().toUpperCase().replace(/[^A-Z_]/g, '');
-        if (['TASK', 'HR', 'PROJECT_MANAGEMENT', 'CHAT'].includes(parsed)) {
+        if (['TASK', 'HR', 'PROJECT_MANAGEMENT', 'MEETING', 'CHAT'].includes(parsed)) {
           userIntent = parsed as any;
         }
       }
@@ -799,6 +799,9 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
       console.error('Lỗi projects cache:', err);
     }
   }
+
+  // MEETING intent: load danh sách thành viên để LLM có context tính năng tạo lịch họp
+  const slimRosterForMeeting = userIntent === 'MEETING' ? buildSlimRoster(allMembers) : '';
 
   // F. OmniRouter / FE chat — preferFastLLM skips Letta + heavy HR on server
   try {
@@ -828,7 +831,10 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
         projects,
         companyRules:
           `Nhân sự active:\n${slimRoster}\n\n` +
-          `QUY TẮC: Không bịa project_id. Không hỏi gặng estimate. Trả JSON action chuẩn.`,
+          `QUY TẮC: Không bịa project_id. Không hỏi gặng estimate. Trả JSON action chuẩn.\n\n` +
+          (userIntent === 'MEETING'
+            ? `MEETING MODE: Người dùng muốn ĐẶT LỊCH HỌP. Bắt buộc trả về action="create_meeting" với meetingPayload gồm: title (string), startTime (ISO 8601 kèm +07:00), endTime (ISO 8601, mặc định startTime+1h), attendees (array tên/email). Ngày "mai" = ${new Date(Date.now() + 86400000).toISOString().slice(0, 10)}. KHÔNG trả lời "không có chức năng" — LUÔN tạo lịch.\nDanh sách nhân sự để resolve attendees:\n${slimRosterForMeeting}`
+            : ''),
         config: {
           source: 'telegram',
           preferFastLLM: true,

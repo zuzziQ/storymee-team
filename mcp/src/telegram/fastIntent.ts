@@ -1,8 +1,11 @@
 /**
  * Heuristic intent router — replaces Gemini Flash first-pass (saves 300–1500ms).
- * Returns: TASK | HR | PROJECT_MANAGEMENT | CHAT
+ * Returns: TASK | HR | PROJECT_MANAGEMENT | MEETING | CHAT
  */
-export type UserIntent = 'TASK' | 'HR' | 'PROJECT_MANAGEMENT' | 'CHAT';
+export type UserIntent = 'TASK' | 'HR' | 'PROJECT_MANAGEMENT' | 'MEETING' | 'CHAT';
+
+const MEETING_RE =
+  /\b(lịch họp|lich hop|cuộc họp|cuoc hop|setup lịch|setup lich|đặt lịch|dat lich|họp|meeting|review website|review design|họp team|hop team|schedule meeting|tạo lịch|tao lich|lịch review|lich review|cancel lịch|hủy lịch|huy lich)\b/i;
 
 const HR_RE =
   /\b(nghỉ|nghi|phép|phep|remote|check[\s-]?in|check[\s-]?out|điểm danh|diem danh|chấm công|cham cong|lương|luong|payroll|bảng công|bang cong|xin nghỉ|xin nghi|làm remote|lam remote)\b/i;
@@ -19,6 +22,8 @@ const CHAT_RE =
 export function classifyIntentFast(text: string): UserIntent {
   const t = (text || '').trim();
   if (!t) return 'CHAT';
+  // MEETING phải check TRƯỚC HR/TASK để tránh bị nuốt bởi keyword chung
+  if (MEETING_RE.test(t)) return 'MEETING';
   if (HR_RE.test(t)) return 'HR';
   if (PROJECT_RE.test(t)) return 'PROJECT_MANAGEMENT';
   if (TASK_RE.test(t)) return 'TASK';
