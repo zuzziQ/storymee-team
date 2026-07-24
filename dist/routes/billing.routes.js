@@ -1,0 +1,14 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const billing_controller_1 = require("../controllers/billing.controller");
+const router = (0, express_1.Router)();
+router.get('/keys', billing_controller_1.BillingController.getApiKeys);
+router.post('/keys', billing_controller_1.BillingController.createApiKey);
+router.patch('/keys/:id/toggle', billing_controller_1.BillingController.toggleApiKey);
+router.patch('/keys/:id/topup', billing_controller_1.BillingController.topUpApiKey);
+router.patch('/keys/:id/slots', billing_controller_1.BillingController.updateMaxSlots);
+router.delete('/keys/:id', billing_controller_1.BillingController.deleteApiKey);
+router.post('/sync', billing_controller_1.BillingController.syncKeys);
+router.post('/migrate-supabase-keys', billing_controller_1.BillingController.migrateSupabaseKeys);
+exports.default = router;

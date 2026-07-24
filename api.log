@@ -1,0 +1,6 @@
+
+> core-team-api@1.0.0 dev
+> ts-node src/index.ts
+
+◇ injected env (4) from .env // tip: ⌘ suppress logs { quiet: true }
+[Core Team API] Server is listening on port 4503
