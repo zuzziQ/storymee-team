@@ -18,7 +18,7 @@ jobs:
     uses: storymeedev/infrastructure/.github/workflows/reusable-node-service.yml@master
     with:
       node_version: "22"
-      run_tests: false
+      run_tests: true
       dockerfile: Dockerfile
       image_name: core-team-api
       publish_image: ${{ github.event_name == 'push' }}
