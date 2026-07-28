@@ -1,3 +1,3 @@
-import { PrismaClient } from '@storymee/prisma-client';
+import { PrismaClient } from '@storymeedev/prisma-client';
 
 export const prisma = new PrismaClient();
