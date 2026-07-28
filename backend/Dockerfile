@@ -13,7 +13,11 @@ RUN cd 0-Shared-Libs/fastify-common && npm install && npm run build
 # Copy and build target service
 COPY 2-MCP-Core/core-team-api ./2-MCP-Core/core-team-api
 WORKDIR /app/2-MCP-Core/core-team-api
+ARG NPM_TOKEN
+RUN echo "@storymeedev:registry=https://npm.pkg.github.com" > ~/.npmrc && \
+    echo "//npm.pkg.github.com/:_authToken=\${NPM_TOKEN}" >> ~/.npmrc
 RUN npm install
+RUN rm -f ~/.npmrc
 RUN npm run build
 
 # Stage 2: Production
