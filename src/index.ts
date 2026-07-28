@@ -3,7 +3,7 @@ import path from 'path';
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 import Fastify from 'fastify';
-import { setupCors, globalErrorHandler } from '@storymee/fastify-common';
+import { setupCors, globalErrorHandler } from '@storymeedev/fastify-common';
 import { Server } from 'socket.io';
 import { connect, NatsConnection } from 'nats';
 

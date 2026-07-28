@@ -15,9 +15,9 @@
   "type": "commonjs",
   "dependencies": {
     "@fastify/cors": "^11.2.0",
-    "@storymeedev/api-client": "*",
-    "@storymeedev/fastify-common": "*",
-    "@storymeedev/prisma-client": "*",
+    "@storymeedev/api-client": "1.0.0",
+    "@storymeedev/fastify-common": "1.0.0",
+    "@storymeedev/prisma-client": "1.0.1",
     "@types/jsonwebtoken": "^9.0.10",
     "dotenv": "^17.4.2",
     "fastify": "^5.10.0",
