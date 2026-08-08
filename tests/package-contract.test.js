@@ -8,7 +8,7 @@ test('StoryMee packages stay pinned to published versions', () => {
   const expected = {
     '@storymeedev/api-client': '1.0.0',
     '@storymeedev/fastify-common': '1.0.1',
-    '@storymeedev/prisma-client': '1.0.1',
+    '@storymeedev/prisma-client': '1.2.0',
   };
 
   for (const [name, version] of Object.entries(expected)) {
