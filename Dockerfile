@@ -1,9 +1,20 @@
-FROM node:20-alpine
+FROM node:20-alpine AS builder
 WORKDIR /app
-COPY 0-Shared-Libs ./0-Shared-Libs
-RUN cd 0-Shared-Libs/api-client && npm install && npm run build
-COPY 2-MCP-Core/storymeeteam-mcp ./2-MCP-Core/storymeeteam-mcp
-WORKDIR /app/2-MCP-Core/storymeeteam-mcp
-RUN npm install
+COPY package*.json ./
+RUN --mount=type=secret,id=npm_token \
+    echo "@storymeedev:registry=https://npm.pkg.github.com" > ~/.npmrc && \
+    echo "//npm.pkg.github.com/:_authToken=$(cat /run/secrets/npm_token)" >> ~/.npmrc && \
+    npm install && rm -f ~/.npmrc
+COPY tsconfig.json ./
+COPY src ./src
 RUN npm run build
+
+FROM node:20-alpine AS runner
+WORKDIR /app
+COPY package*.json ./
+RUN --mount=type=secret,id=npm_token \
+    echo "@storymeedev:registry=https://npm.pkg.github.com" > ~/.npmrc && \
+    echo "//npm.pkg.github.com/:_authToken=$(cat /run/secrets/npm_token)" >> ~/.npmrc && \
+    npm install --omit=dev && rm -f ~/.npmrc
+COPY --from=builder /app/build ./build
 CMD ["node", "build/index.js"]
