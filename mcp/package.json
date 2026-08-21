@@ -10,11 +10,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.1",
-<<<<<<< HEAD
-    "@storymee/api-client": "npm:@storymeedev/api-client@1.0.0",
-=======
     "@storymeedev/api-client": "*",
->>>>>>> 3e2206f (Update from AI Agent)
     "axios": "^1.18.1",
     "dotenv": "^16.4.5",
     "fastify": "^5.10.0",

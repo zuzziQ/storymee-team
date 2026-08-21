@@ -283,27 +283,6 @@ async function main() {
   // Subscribe to Notifications
   try {
     const nc = await connect({ servers: process.env.NATS_URL || "nats://localhost:4222" });
-
-    nc.subscribe('core.team.auth.login_requested', {
-      callback: async (err, msg) => {
-        if (!err) {
-          try {
-            const data = JSON.parse(msg.data.toString());
-            if (data.telegramChatId && data.loginUrl) {
-              const txt = `🌐 *YÊU CẦU ĐĂNG NHẬP*\n\nBạn vừa yêu cầu đăng nhập từ Web Portal. Bấm nút dưới đây để vào thẳng hệ thống:`;
-              await sendMessage(Number(data.telegramChatId), txt, {
-                inline_keyboard: [[
-                  { text: "🚀 Mở Storymee Portal", url: data.loginUrl }
-                ]]
-              });
-            }
-          } catch (e) {
-            console.error('[NATS] Error processing login_requested', e);
-          }
-        }
-      }
-    });
-
     nc.subscribe('core.team.leave.request', {
       callback: async (err, msg) => {
         if (!err) {

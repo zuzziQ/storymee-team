@@ -1013,11 +1013,6 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
             const estimateText = tp.estimate ? `\n• Ước tính mới: *${tp.estimate}h*` : '';
             const priorityText = tp.priority ? `\n• Độ ưu tiên: *${tp.priority}*` : '';
             confirmMsg = `💡 *ĐỀ XUẤT CẬP NHẬT CÔNG VIỆC ${tp.id}:*${statusText}${assigneeText}${deadlineText}${estimateText}${priorityText}`;
-          } else if (aiResponse.action === 'update_issues') {
-            const tpList = aiResponse.taskPayload?.tasks || aiResponse.updateIssuesPayload?.tasks || (Array.isArray(aiResponse.taskPayload) ? aiResponse.taskPayload : []);
-            const count = tpList.length;
-            const ids = tpList.map((t: any) => t.id || t.task_id).join(', ');
-            confirmMsg = `💡 *ĐỀ XUẤT CẬP NHẬT HÀNG LOẠT ${count} CÔNG VIỆC:*\n• Danh sách: *${ids}*\n• Trạng thái: *Cập nhật theo ngữ cảnh*`;
           } else if (aiResponse.action === 'archive_issue') {
             const tp = aiResponse.taskPayload || {};
             confirmMsg = `💡 *ĐỀ XUẤT LƯU TRỮ (ARCHIVE) TASK ${tp.task_id || tp.id}:*\n• Lý do: *${tp.reason || 'Ẩn khỏi Kanban'}*\n\n_(Assignee/Admin tự archive — không cần Admin duyệt.)_`;
