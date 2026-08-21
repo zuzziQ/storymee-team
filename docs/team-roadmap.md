@@ -175,7 +175,7 @@ thông luồng         UX + auth            (design đã chốt)
 
 ## 6. Phase P3+ — Ngoài StorymeeTeam core (chỉ plan, chưa làm)
 
-Chi tiết đầy đủ: [`multi-tenant-crm.md`](./multi-tenant-crm.md)
+Chi tiết đầy đủ: [`multi-tenant-crm.md`](../world/multi-tenant-crm.md)
 
 | Phase | Việc | Phụ thuộc |
 |---|---|---|
@@ -271,6 +271,8 @@ Base URL FE: `NEXT_PUBLIC_API_URL` → Hub + consumer prefix `/api/v1/team` và 
 ### Sau đó
 
 - P2 hardening hoặc kickoff P3 org (quyết định product riêng)
+- [ ] **[Backlog] Tạo workflow tạo public URL cho Landing Page**
+  - **Mô tả:** Xây dựng workflow tự động sinh & quản lý Public URL cho các Landing Page (Public Routing qua Gateway/CDN, quản lý trạng thái Draft/Published, tích hợp trigger từ UI & Telegram Bot).
 
 ---
 
@@ -290,11 +292,11 @@ Base URL FE: `NEXT_PUBLIC_API_URL` → Hub + consumer prefix `/api/v1/team` và 
 
 | Việc | Doc |
 |---|---|
-| Task lifecycle FE+Telegram | [`team-work-management.md`](./team/team-work-management.md) |
+| Task lifecycle FE+Telegram | [`team-work-management.md`](./team-work-management.md) |
 | Hồ sơ NV vs account | [`team-hr-vs-account.md`](./team-hr-vs-account.md) |
-| School/org/CRM (sau) | [`multi-tenant-crm.md`](./multi-tenant-crm.md) |
-| Feature folder chuẩn | [`project-structure.md`](./project-structure.md) |
-| Hub ports | [`gateway-and-clients.md`](./gateway/gateway-and-clients.md) |
+| School/org/CRM (sau) | [`multi-tenant-crm.md`](../world/multi-tenant-crm.md) |
+| Feature folder chuẩn | [`project-structure.md`](../world/project-structure.md) |
+| Hub ports | [`gateway-and-clients.md`](../gateway/gateway-and-clients.md) |
 
 ---
 
@@ -311,3 +313,5 @@ Base URL FE: `NEXT_PUBLIC_API_URL` → Hub + consumer prefix `/api/v1/team` và 
 | Ngày | Thay đổi |
 |---|---|
 | 2026-07-17 | v1.0 — Tạo plan; P0 partial done; P1 next; P3+ deferred design-only |
+| 2026-07-29 | v1.1 — Bổ sung task Backlog: "Tạo workflow tạo public URL cho Landing Page" |
+

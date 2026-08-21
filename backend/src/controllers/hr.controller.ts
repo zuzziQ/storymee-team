@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { ITeamMember, ILeaveRequest } from "@storymee/api-client";
+import { ITeamMember, ILeaveRequest } from "@storymeedev/api-client";
 import { prisma } from '../config/prisma';
 import { HrHandoverService } from '../services/hrHandover.service';
 import { HrService } from '../services/hr.service';

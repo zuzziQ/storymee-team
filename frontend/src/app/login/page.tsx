@@ -59,8 +59,28 @@ export default function LoginPage() {
   // 2. Logic xử lý Đăng Nhập Thủ Công (Form Submit)
   const handleDirectLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('Đăng nhập trực tiếp đã tắt. Hãy mở Telegram bot và gửi /portal để nhận liên kết dùng một lần.');
-    setIsSubmitting(false);
+    if (!inputValue.trim()) {
+      setError('Vui lòng nhập Email hoặc @telegram_username');
+      return;
+    }
+    setError('');
+    setIsSubmitting(true);
+    setStatusText('Đang gửi yêu cầu đăng nhập...');
+    
+    try {
+      const res: any = await coreApiClient.post('/auth/one-time/request', { identifier: inputValue });
+      if (res.status === 'success' || res.success) {
+        setStatusText(res.message || 'Đã gửi link đăng nhập qua Telegram! Vui lòng kiểm tra tin nhắn.');
+        // Don't set isSubmitting(false) so it stays on the success message state, or user can refresh.
+      } else {
+        setError(res.message || 'Không thể gửi yêu cầu đăng nhập');
+        setIsSubmitting(false);
+      }
+    } catch (e: any) {
+      console.error('Login request failed:', e);
+      setError(e?.data?.message || 'Không tìm thấy tài khoản hoặc tài khoản chưa liên kết Telegram.');
+      setIsSubmitting(false);
+    }
   };
 
   return (

@@ -11,9 +11,9 @@ related_files:
 
 # StorymeeTeam — Unified Work Management Architecture
 
-**Ngày:** 2026-07-17  
-**Trạng thái:** SSOT ecosystem (task/kanban/Plane/NATS/Telegram).  
-**Index Team:** [`team/README.md`](./team/README.md) · **App implement:** `1-Harness-Apps/StorymeeTeam/docs/SYSTEM_GUIDE.md`  
+**Ngày:** 2026-07-17
+**Trạng thái:** SSOT ecosystem (task/kanban/Plane/NATS/Telegram).
+**Index Team:** [`team/README.md`](./README.md) · **App implement:** `1-Harness-Apps/StorymeeTeam/docs/SYSTEM_GUIDE.md`
 **Plan việc:** [`team-roadmap.md`](./team-roadmap.md) (P0/P1 = NOW; Org/CRM = sau).
 
 ---

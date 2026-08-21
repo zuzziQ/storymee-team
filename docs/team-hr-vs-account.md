@@ -117,7 +117,7 @@ Leftover cookie/keys trong account-api repo: đã chuyển **worker-pool** — k
 - ❌ Gộp TeamMember vào User  
 - ❌ Lưu payroll trên account-api  
 - ❌ Dùng `workspace_members` làm org chart nhân sự  
-- ❌ Coi free user là Organization — xem [multi-tenant-crm.md](./multi-tenant-crm.md)
+- ❌ Coi free user là Organization — xem [multi-tenant-crm.md](../world/multi-tenant-crm.md)
 
 ---
 
