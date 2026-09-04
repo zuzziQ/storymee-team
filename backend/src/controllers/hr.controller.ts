@@ -6,6 +6,7 @@ import { HrService } from '../services/hr.service';
 import { NotificationService } from '../services/notification.service';
 import { TeamAccountService } from '../services/teamAccount.service';
 import { isTeamAdmin, redactMemberPrivacy } from '../services/teamAuth.service';
+import { resolveTeamActor } from '../middlewares/teamSessionAuth';
 import { StringCodec } from 'nats';
 
 function serialize(obj: any): any {
@@ -36,17 +37,7 @@ export class HrController {
       status: status || 'all',
     });
     const privacy = await TeamAccountService.getPrivacySettings();
-    let viewer: any = null;
-    if (viewerId) {
-      viewer = members.find((m: any) => m.id === viewerId) ||
-        (await prisma.teamMember.findUnique({ where: { id: viewerId } }));
-    } else if (viewerEmail) {
-      const email = String(viewerEmail).toLowerCase().trim();
-      viewer = members.find((m: any) => (m.email || '').toLowerCase() === email) ||
-        (await prisma.teamMember.findFirst({
-          where: { email: { equals: email, mode: 'insensitive' } },
-        }));
-    }
+    const viewer = await resolveTeamActor(req, { id: viewerId, email: viewerEmail });
     const viewerIsAdmin = isTeamAdmin(viewer);
     const data = members.map((m: any) => {
       const isSelf = viewer && (m.id === viewer.id || (m.email || '').toLowerCase() === (viewer.email || '').toLowerCase());
@@ -89,13 +80,7 @@ export class HrController {
   /** PATCH /hr/settings/privacy — admin only */
   static async updatePrivacySettings(req: any, reply: any) {
     const { actorId, actorEmail, ...patch } = req.body || {};
-    let actor: any = null;
-    if (actorId) actor = await prisma.teamMember.findUnique({ where: { id: actorId } });
-    else if (actorEmail) {
-      actor = await prisma.teamMember.findFirst({
-        where: { email: { equals: String(actorEmail).trim(), mode: 'insensitive' } },
-      });
-    }
+    const actor = await resolveTeamActor(req, { id: actorId, email: actorEmail });
     if (!isTeamAdmin(actor)) {
       reply.code(403).send({ status: 'error', message: 'Chỉ Admin mới sửa privacy settings' });
       return;
@@ -121,13 +106,7 @@ export class HrController {
       reply.code(400).send({ status: 'error', message: 'isTeamAdmin boolean required' });
       return;
     }
-    let actor: any = null;
-    if (actorId) actor = await prisma.teamMember.findUnique({ where: { id: actorId } });
-    else if (actorEmail) {
-      actor = await prisma.teamMember.findFirst({
-        where: { email: { equals: String(actorEmail).trim(), mode: 'insensitive' } },
-      });
-    }
+    const actor = await resolveTeamActor(req, { id: actorId, email: actorEmail });
     if (!isTeamAdmin(actor)) {
       reply.code(403).send({ status: 'error', message: 'Chỉ Admin mới gán quyền Admin' });
       return;
@@ -245,14 +224,18 @@ export class HrController {
         return;
       }
 
-      // Self-service profile (explicit mode or actor matches target without admin flags)
-      const isSelfMode = mode === 'self' || (
-        actorEmail &&
-        actorEmail.toLowerCase() === email.toLowerCase() &&
+      const actor = await resolveTeamActor(req, { email: actorEmail });
+      const actorIsAdmin = isTeamAdmin(actor);
+      const actorIsSelf = Boolean(
+        actor?.email && actor.email.toLowerCase() === email.toLowerCase()
+      );
+
+      // Self-service profile. A browser cannot select another identity via body.
+      const isSelfMode = actorIsSelf && (mode === 'self' || (
         accountStatus === undefined &&
         isActive === undefined &&
         salaryGross === undefined
-      );
+      ));
 
       if (isSelfMode) {
         const member = await TeamAccountService.updateSelfProfile(email, {
@@ -265,6 +248,11 @@ export class HrController {
           workArrangement,
         });
         reply.code(200).send({ status: 'success', data: serialize(member) });
+        return;
+      }
+
+      if (!actorIsAdmin) {
+        reply.code(403).send({ status: 'error', message: 'Chỉ Admin mới sửa hồ sơ người khác hoặc trường HR' });
         return;
       }
 
@@ -309,17 +297,13 @@ export class HrController {
     try {
       const { id } = req.params;
       const { reviewerId, note } = req.body || {};
-      if (!reviewerId) {
-        reply.code(400).send({ status: 'error', message: 'Thiếu reviewerId' });
-        return;
-      }
-      const reviewer = await TeamAccountService.getById(reviewerId);
+      const reviewer = await resolveTeamActor(req, { id: reviewerId });
       if (!isTeamAdmin(reviewer)) {
         reply.code(403).send({ status: 'error', message: 'Chỉ Admin mới được duyệt tài khoản' });
         return;
       }
-      const member = await TeamAccountService.approve(id, reviewerId, note);
-      publishNats(req, 'core.team.account.approved', { member: serialize(member), reviewerId });
+      const member = await TeamAccountService.approve(id, reviewer.id, note);
+      publishNats(req, 'core.team.account.approved', { member: serialize(member), reviewerId: reviewer.id });
       reply.code(200).send({ status: 'success', message: 'Đã duyệt tài khoản.', data: serialize(member) });
     } catch (err: any) {
       reply.code(500).send({ status: 'error', message: err.message });
@@ -330,17 +314,13 @@ export class HrController {
     try {
       const { id } = req.params;
       const { reviewerId, note } = req.body || {};
-      if (!reviewerId) {
-        reply.code(400).send({ status: 'error', message: 'Thiếu reviewerId' });
-        return;
-      }
-      const reviewer = await TeamAccountService.getById(reviewerId);
+      const reviewer = await resolveTeamActor(req, { id: reviewerId });
       if (!isTeamAdmin(reviewer)) {
         reply.code(403).send({ status: 'error', message: 'Chỉ Admin mới được từ chối tài khoản' });
         return;
       }
-      const member = await TeamAccountService.reject(id, reviewerId, note);
-      publishNats(req, 'core.team.account.rejected', { member: serialize(member), reviewerId });
+      const member = await TeamAccountService.reject(id, reviewer.id, note);
+      publishNats(req, 'core.team.account.rejected', { member: serialize(member), reviewerId: reviewer.id });
       reply.code(200).send({ status: 'success', message: 'Đã từ chối đăng ký.', data: serialize(member) });
     } catch (err: any) {
       reply.code(500).send({ status: 'error', message: err.message });
@@ -351,17 +331,13 @@ export class HrController {
     try {
       const { id } = req.params;
       const { reviewerId, note } = req.body || {};
-      if (!reviewerId) {
-        reply.code(400).send({ status: 'error', message: 'Thiếu reviewerId' });
-        return;
-      }
-      const reviewer = await TeamAccountService.getById(reviewerId);
+      const reviewer = await resolveTeamActor(req, { id: reviewerId });
       if (!isTeamAdmin(reviewer)) {
         reply.code(403).send({ status: 'error', message: 'Chỉ Admin mới được khoá tài khoản' });
         return;
       }
-      const member = await TeamAccountService.suspend(id, reviewerId, note);
-      publishNats(req, 'core.team.account.suspended', { member: serialize(member), reviewerId });
+      const member = await TeamAccountService.suspend(id, reviewer.id, note);
+      publishNats(req, 'core.team.account.suspended', { member: serialize(member), reviewerId: reviewer.id });
       reply.code(200).send({ status: 'success', message: 'Đã khoá tài khoản.', data: serialize(member) });
     } catch (err: any) {
       reply.code(500).send({ status: 'error', message: err.message });
@@ -374,14 +350,12 @@ export class HrController {
       const { id } = req.params;
       const hard = String(req.query?.hard || '') === 'true';
       const { reviewerId, note } = req.body || {};
-      if (reviewerId) {
-        const reviewer = await TeamAccountService.getById(reviewerId);
-        if (!isTeamAdmin(reviewer)) {
-          reply.code(403).send({ status: 'error', message: 'Chỉ Admin mới được xoá tài khoản' });
-          return;
-        }
+      const reviewer = await resolveTeamActor(req, { id: reviewerId });
+      if (!isTeamAdmin(reviewer)) {
+        reply.code(403).send({ status: 'error', message: 'Chỉ Admin mới được xoá tài khoản' });
+        return;
       }
-      const result = await TeamAccountService.remove(id, { hard, reviewerId, note });
+      const result = await TeamAccountService.remove(id, { hard, reviewerId: reviewer.id, note });
       publishNats(req, 'core.team.account.deleted', { id, hard, member: serialize(result) });
       reply.code(200).send({
         status: 'success',
@@ -480,14 +454,7 @@ export class HrController {
     const { memberId, viewerId, viewerEmail } = req.query || {};
     const privacy = await TeamAccountService.getPrivacySettings();
 
-    let viewer: any = null;
-    if (viewerId) {
-      viewer = await prisma.teamMember.findUnique({ where: { id: viewerId } });
-    } else if (viewerEmail) {
-      viewer = await prisma.teamMember.findFirst({
-        where: { email: { equals: String(viewerEmail).trim(), mode: 'insensitive' } },
-      });
-    }
+    const viewer = await resolveTeamActor(req, { id: viewerId, email: viewerEmail });
     const viewerIsAdmin = isTeamAdmin(viewer);
 
     let where: any = memberId ? { memberId: memberId as string } : {};
@@ -656,6 +623,12 @@ export class HrController {
       return;
     }
 
+    const actor = await resolveTeamActor(req, { id: memberId });
+    if (!actor || (actor.id !== memberId && !isTeamAdmin(actor))) {
+      reply.code(403).send({ status: 'error', message: 'Không thể chấm công thay người khác' });
+      return;
+    }
+
     const member = await prisma.teamMember.findUnique({ where: { id: memberId } });
     if (!member) {
       reply.code(404).send({ status: 'error', message: 'Không tìm thấy nhân sự' });
@@ -757,6 +730,12 @@ export class HrController {
       return;
     }
 
+    const actor = await resolveTeamActor(req, { id: memberId });
+    if (!actor || (actor.id !== memberId && !isTeamAdmin(actor))) {
+      reply.code(403).send({ status: 'error', message: 'Không thể check-out thay người khác' });
+      return;
+    }
+
     const now = new Date();
     // Chuyển giờ hệ thống sang giờ VN, sau đó lấy mốc Midnight UTC của ngày hôm đó
     const vnTimeStr = now.toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' });
@@ -817,7 +796,9 @@ export class HrController {
   }
 
   static async getLeaveRequests(req: any, reply: any) {
+    const actor = await resolveTeamActor(req);
     const list = await prisma.leaveRequest.findMany({
+      where: actor && !isTeamAdmin(actor) ? { memberId: actor.id } : undefined,
       include: { member: true },
       orderBy: { createdAt: 'desc' }
     });
@@ -828,6 +809,12 @@ export class HrController {
     const { memberId, leaveType, startDate, endDate, reason } = req.body;
     if (!memberId || !leaveType || !startDate || !endDate) {
       reply.code(400).send({ status: 'error', message: 'Thiếu thông tin yêu cầu phép' });
+      return;
+    }
+
+    const actor = await resolveTeamActor(req, { id: memberId });
+    if (!actor || (actor.id !== memberId && !isTeamAdmin(actor))) {
+      reply.code(403).send({ status: 'error', message: 'Không thể tạo đơn cho người khác' });
       return;
     }
 
@@ -864,7 +851,13 @@ export class HrController {
 
   static async approveLeaveRequest(req: any, reply: any) {
     const { id } = req.params;
-    const { status } = req.body; // "approved" hoặc "rejected"
+    const { status, reviewerId } = req.body; // "approved" hoặc "rejected"
+
+    const reviewer = await resolveTeamActor(req, { id: reviewerId });
+    if (!isTeamAdmin(reviewer)) {
+      reply.code(403).send({ status: 'error', message: 'Chỉ Admin mới được duyệt đơn' });
+      return;
+    }
 
     const current = await prisma.leaveRequest.findUnique({ where: { id }, include: { member: true } });
     if (!current) {

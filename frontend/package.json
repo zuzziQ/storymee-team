@@ -5,6 +5,10 @@
   "scripts": {
     "dev": "next dev -p 3010",
     "build": "rm -rf .next/cache && next build",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "node --test tests/*.test.mjs",
+    "check": "npm run typecheck && npm run lint && npm test && npm run build",
     "start": "next start -p 3010"
   },
   "dependencies": {

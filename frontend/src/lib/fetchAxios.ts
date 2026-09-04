@@ -2,7 +2,11 @@ import axios from 'axios';
 
 export async function fetchAxios(url: string, options: any = {}) {
   const method = (options.method || 'GET').toUpperCase();
-  const headers = options.headers || {};
+  const headers = { ...(options.headers || {}) };
+  if (typeof window !== 'undefined' && url.startsWith('/api/ai/')) {
+    const token = localStorage.getItem('st_team_token');
+    if (token && !headers.Authorization) headers.Authorization = `Bearer ${token}`;
+  }
   let data = options.body;
   
   if (typeof data === 'string') {

@@ -205,6 +205,11 @@ src/app/
 
 **Admin:** `isTeamAdmin(member)` — email allowlist + role keywords (Founder, IT Admin…).
 
+**Authorization boundary:** quyền thật được kiểm tra tại `core-team-api` bằng
+Team JWT. Client không được dùng user selector hoặc các trường
+`actorEmail/reviewerId/viewerEmail` để thay identity đã xác thực. Các Next AI
+routes cũng bắt buộc Team JWT và rate limit trước khi gọi provider.
+
 ---
 
 ## 7. API quick reference

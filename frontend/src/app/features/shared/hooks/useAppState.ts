@@ -50,7 +50,7 @@ export function useAppState() {
     }
   }, [auth.authReady]);
 
-  // --- Polling mỗi 15s khi tab visible ---
+  // --- Socket is primary; polling is a low-frequency recovery path. ---
   useEffect(() => {
     if (!auth.authReady) return;
     const handleVisibilityChange = () => {
@@ -66,7 +66,7 @@ export function useAppState() {
       if (document.visibilityState === 'visible') {
         fetchDbData();
       }
-    }, 15000);
+    }, 60_000);
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       clearInterval(interval);

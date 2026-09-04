@@ -453,7 +453,8 @@ case "upsert_team_member": {
           endTime,
           hostId: user.id,
           attendees: resolvedAttendees,
-          meetLink
+          meetLink,
+          actorId: user.id,
         });
       } catch (err: any) {
         const errMsg = err?.data?.message || err?.message || JSON.stringify(err);
@@ -489,7 +490,8 @@ case "upsert_team_member": {
           endTime,
           attendees: resolvedAttendees,
           status,
-          meetLink
+          meetLink,
+          actorId: user.id,
         });
       } catch (err: any) {
         throw new McpError(ErrorCode.InternalError, `Lỗi cập nhật lịch họp: ${err?.data?.message || err?.message || err}`);
@@ -513,7 +515,10 @@ case "upsert_team_member": {
           ? 'approved'
           : 'rejected';
       try {
-        await apiClient.post(`${API_ROUTES.HR.LEAVE_REQUESTS}/${leave_id}/approve`, { status });
+        await apiClient.post(`${API_ROUTES.HR.LEAVE_REQUESTS}/${leave_id}/approve`, {
+          status,
+          reviewerId: user.id,
+        });
       } catch (err: any) {
         throw new McpError(
           ErrorCode.InternalError,

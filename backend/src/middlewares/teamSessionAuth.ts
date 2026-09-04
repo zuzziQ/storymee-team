@@ -5,6 +5,7 @@ import { TeamSessionService } from '../services/teamSession.service';
 const PUBLIC_PATHS = new Set([
   '/internal/v1/team/health',
   '/internal/v1/team/auth/one-time/exchange',
+  '/internal/v1/team/auth/one-time/request',
   '/internal/v1/team/hr/team-members/register',
 ]);
 
@@ -48,4 +49,27 @@ export function requireServiceKey(request: any, reply: any): boolean {
     message: 'Service credential required',
   });
   return false;
+}
+
+/**
+ * Browser callers are always represented by the member loaded from the signed
+ * Team JWT. Service callers may explicitly identify an actor because they do
+ * not have a human session (Telegram/MCP jobs).
+ */
+export async function resolveTeamActor(
+  request: any,
+  claimed: { id?: string | null; email?: string | null } = {}
+) {
+  if (request.teamMember) return request.teamMember;
+  if (!request.teamService) return null;
+
+  if (claimed.id) {
+    return prisma.teamMember.findUnique({ where: { id: claimed.id } });
+  }
+  if (claimed.email) {
+    return prisma.teamMember.findFirst({
+      where: { email: { equals: String(claimed.email).trim(), mode: 'insensitive' } },
+    });
+  }
+  return null;
 }

@@ -3,6 +3,8 @@ import { TeamSessionService } from '../../services/teamSession.service';
 import { requireServiceKey } from '../../middlewares/teamSessionAuth';
 import { prisma } from '../../config/prisma';
 
+const loginRequestRate = new Map<string, { count: number; resetAt: number }>();
+
 const plugin = async (fastify: any) => {
   fastify.post('/one-time/issue', async (request: any, reply: any) => {
     if (!requireServiceKey(request, reply)) return;
@@ -28,6 +30,17 @@ const plugin = async (fastify: any) => {
   });
 
   fastify.post('/one-time/request', async (request: any, reply: any) => {
+    const now = Date.now();
+    const key = String(request.ip || request.headers['x-forwarded-for'] || 'unknown');
+    const current = loginRequestRate.get(key);
+    const rate = !current || current.resetAt <= now
+      ? { count: 1, resetAt: now + 60_000 }
+      : { ...current, count: current.count + 1 };
+    loginRequestRate.set(key, rate);
+    if (rate.count > 5) {
+      return reply.code(429).send({ status: 'error', message: 'Vui lòng thử lại sau một phút' });
+    }
+
     const identifier = String(request.body?.identifier || '').trim();
     if (!identifier) return reply.code(400).send({ status: 'error', message: 'Vui lòng nhập Email hoặc @telegram_username' });
     

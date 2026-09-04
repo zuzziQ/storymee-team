@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server';
 import { routeLLMRequest } from '@/lib/omniRouter';
+import { authenticateTeamRoute, teamRouteError } from '@/lib/teamRouteAuth';
 
 export const maxDuration = 60; // Allow longer execution time for LLM
 
 export async function POST(request: Request) {
   try {
+    await authenticateTeamRoute(request, 'ai-breakdown', 15);
     const body = await request.json();
     const title = body.title || body.task?.title;
     const description = body.description || body.task?.description;
@@ -69,6 +71,6 @@ Trả về kết quả dưới dạng một mảng JSON các object, mỗi objec
     });
   } catch (error: any) {
     console.error('API Breakdown Error:', error);
-    return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
+    return teamRouteError(error);
   }
 }

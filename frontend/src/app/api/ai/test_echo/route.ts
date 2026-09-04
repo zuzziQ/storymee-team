@@ -1,11 +1,14 @@
 import { NextResponse } from 'next/server';
-export async function GET() {
+import { authenticateTeamRoute, teamRouteError } from '@/lib/teamRouteAuth';
+
+export async function GET(request: Request) {
+  try {
+    await authenticateTeamRoute(request, 'ai-test', 10);
   return NextResponse.json({
     ok: true,
-    msg: "Hello from test_echo!",
-    env: {
-      NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'NOT_SET',
-      NODE_ENV: process.env.NODE_ENV
-    }
+    msg: "Hello from test_echo!"
   });
+  } catch (error) {
+    return teamRouteError(error);
+  }
 }

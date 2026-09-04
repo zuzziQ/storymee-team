@@ -1,4 +1,3 @@
-const isServer = typeof window === 'undefined';
 // dev-hub.storymee.com → Nginx → core-admin-api:4503 (direct, không qua Hub Go Gateway)
 // dev-hub.storymee.com → Hub Go Gateway (chỉ dùng cho LLM/AI routes)
 let defaultBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://dev-hub.storymee.com';
@@ -12,13 +11,15 @@ const baseURL = defaultBaseUrl;
 
 export class CoreApiClient {
     private baseURL: string;
+    private token?: string;
 
-    constructor(config: { baseURL: string }) {
+    constructor(config: { baseURL: string; token?: string }) {
         let url = config.baseURL;
         if (!url.endsWith('/api/v1/team') && !url.endsWith('/api/v1/team/')) {
             url = url.replace(/\/+$/, '') + '/api/v1/team';
         }
         this.baseURL = url;
+        this.token = config.token;
     }
 
     private async resolveBaseUrl() {
@@ -26,7 +27,7 @@ export class CoreApiClient {
     }
 
     private headers(): Record<string, string> {
-        const token = typeof window !== 'undefined' ? localStorage.getItem('st_team_token') : null;
+        const token = this.token || (typeof window !== 'undefined' ? localStorage.getItem('st_team_token') : null);
         return {
             'Content-Type': 'application/json',
             ...(token ? { Authorization: `Bearer ${token}` } : {}),

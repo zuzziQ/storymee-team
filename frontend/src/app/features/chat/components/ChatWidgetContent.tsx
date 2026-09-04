@@ -1,9 +1,8 @@
 import { fetchAxios } from '@/lib/fetchAxios';
 import React, { useState, useRef, useEffect } from 'react';
-import { Bot, Calendar, Laptop, Clock, Maximize2, Minimize2, X, MessageSquare, MicOff, Mic, Send } from 'lucide-react';
+import { Bot, Calendar, Laptop, Clock, Maximize2, Minimize2, X, MicOff, Mic, Send } from 'lucide-react';
 import {
-  Priority, Task, TeamMember, DraftTask, ChatMessage,
-  COMPANY_RULES, getInitials, getMemberColor
+  Priority, Task, TeamMember, ChatMessage
 } from '../../../constants';
 import { coreApiClient } from '../../../../lib/apiClient';
 import { API_ROUTES } from '@/lib/apiClient';
@@ -12,8 +11,6 @@ import {
   normalizeLlmAction,
   pickLlmPayload,
 } from '@/lib/llmActions';
-
-const API_BASE = '';
 
 // ===================== RULES RAG HELPERS =====================
 export function parseMarkdownRules(mdText: string) {
@@ -353,10 +350,6 @@ export function ChatWidgetContent({
 
   function stopRecording() { recognitionRef.current?.stop(); setRecording(false); }
 
-  function formatMsg(text: string) {
-    return text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br/>');
-  }
-
   return (
     <div style={{ display: 'flex', width: '100%', height: '100%', overflow: 'hidden', background: 'transparent' }}>
       {/* LEFT SIDEBAR: QUICK ACTIONS (RỘNG 50PX) */}
@@ -494,10 +487,13 @@ export function ChatWidgetContent({
                     lineHeight: 1.4,
                     background: m.sender === 'user' ? 'linear-gradient(135deg, #6366f1, #4f46e5)' : 'rgba(255,255,255,0.03)',
                     border: m.sender === 'user' ? 'none' : '1px solid rgba(255,255,255,0.04)',
-                    color: m.sender === 'user' ? 'white' : '#fafafa'
+                    color: m.sender === 'user' ? 'white' : '#fafafa',
+                    whiteSpace: 'pre-wrap',
+                    overflowWrap: 'anywhere'
                   }}
-                  dangerouslySetInnerHTML={{ __html: formatMsg(m.text) }}
-                />
+                >
+                  {m.text}
+                </div>
               </div>
 
               {pendingAction && pendingAction.replyId === m.id && (

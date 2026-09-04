@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
 import { routeLLMRequest } from '@/lib/omniRouter';
+import { authenticateTeamRoute, teamRouteError } from '@/lib/teamRouteAuth';
 
 export async function POST(request: Request) {
   try {
+    await authenticateTeamRoute(request, 'ai-project-insights', 10);
     const { project, tasks, config } = await request.json();
 
     if (!project) {
@@ -54,6 +56,6 @@ Hãy thực hiện phân tích:
     return NextResponse.json({ status: 'success', data: result, log });
   } catch (error: any) {
     console.error('API Project Insights Error:', error);
-    return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
+    return teamRouteError(error);
   }
 }

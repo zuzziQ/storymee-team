@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, Bell, LogOut, ChevronDown, Check, User } from 'lucide-react';
+import { Plus, Bell, LogOut, ChevronDown, User } from 'lucide-react';
 import { TeamMember, Project, Announcement, getInitials } from '../../../constants';
 import BroadcastNotify from './BroadcastNotify';
 
@@ -289,19 +289,6 @@ export default function HeaderBar({
                   <div style={{ fontSize: 9, color: 'rgba(167,139,250,0.7)' }}>Xem & Cập nhật thông tin</div>
                 </div>
               </button>
-              <div style={{ height: '1px', background: 'var(--border)', margin: '4px 0' }} />
-              
-              <div style={{ fontSize: 9, color: '#52525b', padding: '6px 10px 4px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Xem với tư cách</div>
-              {teamMembers.map(m => (
-                <button key={m.id} onClick={() => { setActiveUser(m); localStorage.setItem('st_user', JSON.stringify({ email: m.email, name: m.name, role: m.role })); setShowUserMenu(false); }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 8, border: 'none', background: activeUser?.id === m.id ? 'rgba(99,102,241,0.12)' : 'transparent', cursor: 'pointer', color: '#fafafa', transition: 'all 0.15s' }}>
-                  <div className="avatar" style={{ background: m.color + '30', color: m.color, width: 26, height: 26, fontSize: 11 }}>{getInitials(m.name)}</div>
-                  <div style={{ textAlign: 'left' }}>
-                    <div style={{ fontSize: 12, fontWeight: 500 }}>{m.name}</div>
-                    <div style={{ fontSize: 10, color: '#71717a' }}>{m.role.split(' - ')[1] || m.role}</div>
-                  </div>
-                  {activeUser?.id === m.id && <Check size={12} color="#6366f1" style={{ marginLeft: 'auto' }} />}
-                </button>
-              ))}
             </div>
           )}
         </div>

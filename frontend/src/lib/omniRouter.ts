@@ -1,9 +1,7 @@
 import { fetchAxios } from './fetchAxios';
-import { TEAM } from '@/app/constants';
 
-const USE_OMNIR_CLOUD = true;
-const FALLBACK_TO_DIRECT_API = true;
 const OMNIR_BASE_URL = process.env.OMNIR_BASE_URL || 'http://localhost:20128/v1';
+const OMNIR_API_KEY = process.env.OMNIR_API_KEY || '';
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 
 // 1. Thuật toán nén ngữ cảnh Caveman cục bộ (Caveman Compression)
@@ -118,9 +116,11 @@ export async function routeLLMRequest({
 }) {
   const startTime = Date.now();
   
-  const useCloud = config?.useCloud ?? true;
+  const useCloud = (config?.useCloud ?? true) && Boolean(OMNIR_API_KEY);
   const useFallback = config?.useFallback ?? true;
-  const useMasking = config?.useMasking ?? true;
+  const useMasking = process.env.ALLOW_UNMASKED_LLM === 'true'
+    ? (config?.useMasking ?? true)
+    : true;
   const useCompression = config?.useCompression ?? true;
 
   // Lựa chọn model tối ưu theo độ phức tạp tác vụ
@@ -174,7 +174,7 @@ export async function routeLLMRequest({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer omnir-free-token-pool-key'
+          'Authorization': `Bearer ${OMNIR_API_KEY}`
         },
         body: JSON.stringify({
           model: model,

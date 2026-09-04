@@ -1018,7 +1018,10 @@ async function handleCallbackQuery(callbackQuery: any) {
     try {
       const statusParam = action === "approve" ? "approved" : "rejected";
       try {
-          const resJson = await apiClient.post(`${API_ROUTES.HR.LEAVE_REQUESTS}/${requestId}/approve`, { status: statusParam }) as any;
+          const resJson = await apiClient.post(`${API_ROUTES.HR.LEAVE_REQUESTS}/${requestId}/approve`, {
+            status: statusParam,
+            reviewerId: member.id,
+          }) as any;
           const actionStr = action === "approve" ? "Da Phe duyet" : "Da Tu choi";
           const emoji = action === "approve" ? "OK" : "X";
 

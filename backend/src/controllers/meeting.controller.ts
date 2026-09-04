@@ -1,4 +1,7 @@
 import { MeetingService } from '../services/meeting.service';
+import { prisma } from '../config/prisma';
+import { isTeamAdmin } from '../services/teamAuth.service';
+import { resolveTeamActor } from '../middlewares/teamSessionAuth';
 
 export class MeetingController {
   static async getMeetings(req: any, reply: any) {
@@ -14,12 +17,16 @@ export class MeetingController {
   static async createMeeting(req: any, reply: any) {
     try {
       const { title, description, startTime, endTime, hostId, attendees, meetLink } = req.body;
+      const actor = await resolveTeamActor(req, { id: hostId });
+      if (!actor || (actor.id !== hostId && !isTeamAdmin(actor))) {
+        return reply.status(403).send({ status: 'error', message: 'Không thể tạo lịch với host khác' });
+      }
       if (!title || !startTime || !endTime || !hostId) {
         return reply.status(400).send({ status: 'error', message: 'Missing required fields' });
       }
       
       const meeting = await MeetingService.createMeeting({
-        title, description, startTime, endTime, hostId, attendees, meetLink
+        title, description, startTime, endTime, hostId: actor.id, attendees, meetLink
       });
 
       try {
@@ -43,8 +50,13 @@ export class MeetingController {
   static async updateMeeting(req: any, reply: any) {
     try {
       const { id } = req.params;
-      const { title, description, startTime, endTime, attendees, meetLink, status, documents, outputUrls } = req.body;
-      
+      const existing = await prisma.omniMeeting.findUnique({ where: { id } });
+      const { title, description, startTime, endTime, attendees, meetLink, status, documents, outputUrls, actorId } = req.body;
+      const actor = await resolveTeamActor(req, { id: actorId });
+      if (!existing) return reply.status(404).send({ status: 'error', message: 'Meeting not found' });
+      if (!actor || (actor.id !== existing.hostId && !isTeamAdmin(actor))) {
+        return reply.status(403).send({ status: 'error', message: 'Chỉ host hoặc Admin được sửa lịch' });
+      }
       const meeting = await MeetingService.updateMeeting(id, {
         title, description, startTime, endTime, attendees, meetLink, status, documents, outputUrls
       });

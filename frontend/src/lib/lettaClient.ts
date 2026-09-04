@@ -1,4 +1,3 @@
-import axios from 'axios';
 import { coreApiClient } from './apiClient';
 
 const LETTA_BASE_URL = process.env.NEXT_PUBLIC_LETTA_URL || 'http://localhost:8888/v1';
@@ -14,10 +13,14 @@ export interface LettaMessage {
 /**
  * Tìm hoặc tạo mới Letta Conversation cho nhân sự
  */
-export async function getOrCreateConversation(email: string, fullName: string): Promise<string> {
+export async function getOrCreateConversation(
+  email: string,
+  fullName: string,
+  apiClient: typeof coreApiClient = coreApiClient
+): Promise<string> {
   try {
     // 1. Truy cập Core API để lấy thông tin nhân sự và lettaConversationId
-    const data = await coreApiClient.get('/hr/team-members');
+    const data = await apiClient.get('/hr/team-members');
     
     if (data.status === 'success' && Array.isArray(data.data)) {
       const member = data.data.find((m: any) => (m?.email || '').toLowerCase() === (email || '').toLowerCase());
@@ -45,7 +48,7 @@ export async function getOrCreateConversation(email: string, fullName: string): 
           console.log(`[Letta] Đã tạo thành công Conversation ${newConvId}. Đang đồng bộ lên DB...`);
           // 3. Đồng bộ Conversation ID mới lên DB qua Core API upsert
           try {
-            await coreApiClient.post('/hr/team-members', {
+            await apiClient.post('/hr/team-members', {
               fullName: member.fullName,
               email: member.email,
               telegramUsername: member.telegramUsername,

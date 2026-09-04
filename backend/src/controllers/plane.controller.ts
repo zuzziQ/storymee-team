@@ -2,6 +2,7 @@ import { FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../config/prisma';
 import { PlaneService } from '../services/plane.service';
 import { isTeamAdmin, isInReviewState, getAdminEmails } from '../services/teamAuth.service';
+import { resolveTeamActor } from '../middlewares/teamSessionAuth';
 
 function publishNats(fastify: any, subject: string, payload: unknown) {
     if (!fastify?.nats) return;
@@ -130,6 +131,10 @@ export class PlaneController {
     static async createProject(req: FastifyRequest, reply: FastifyReply) {
         try {
             const data = req.body as any;
+            const actor = await resolveTeamActor(req, { id: data.actorId, email: data.actorEmail });
+            if (!isTeamAdmin(actor)) {
+                return reply.status(403).send({ success: false, message: 'Chỉ Admin mới tạo project' });
+            }
             if (!data.name) {
                 return reply.status(400).send({ success: false, message: "Missing project name" });
             }
@@ -183,6 +188,11 @@ export class PlaneController {
     static async deleteProject(req: FastifyRequest, reply: FastifyReply) {
         try {
             const { id } = req.params as { id: string };
+            const body = (req.body || {}) as any;
+            const actor = await resolveTeamActor(req, { id: body.actorId, email: body.actorEmail });
+            if (!isTeamAdmin(actor)) {
+                return reply.status(403).send({ success: false, message: 'Chỉ Admin mới xoá project' });
+            }
             
             // Delete related records (states, issues, etc) depending on Prisma schema cascades.
             // If cascade is enabled, deleting the project deletes states and issues.
@@ -323,6 +333,21 @@ export class PlaneController {
             if (!issue) {
                 return reply.status(404).send({ success: false, message: 'Issue not found' });
             }
+
+            const actor = await resolveTeamActor(req, {
+                id: data.actorId || data.submittedById || data.reviewerId,
+                email: data.actorEmail,
+            });
+            if (!actor || (!isTeamAdmin(actor) && actor.id !== issue.assigneeId)) {
+                return reply.status(403).send({
+                    success: false,
+                    message: 'Chỉ assignee hoặc Admin được cập nhật task',
+                });
+            }
+
+            // Audit identities must come from the authenticated actor.
+            if (data.submittedById !== undefined) data.submittedById = actor.id;
+            delete data.reviewedById;
 
             let finalProjectId = data.projectId || issue.projectId;
             let finalStateId = data.stateId;
@@ -474,12 +499,11 @@ export class PlaneController {
                 reviewNote?: string;
             };
 
-            if (!decision || !reviewerId) {
-                return reply.status(400).send({ success: false, message: 'Missing decision or reviewerId' });
+            if (!decision) {
+                return reply.status(400).send({ success: false, message: 'Missing decision' });
             }
 
-            // Kiểm tra quyền admin (email allowlist + role keywords)
-            const reviewer = await prisma.teamMember.findUnique({ where: { id: reviewerId } });
+            const reviewer = await resolveTeamActor(req, { id: reviewerId });
             if (!isTeamAdmin(reviewer)) {
                 return reply.status(403).send({ success: false, message: 'Không có quyền phê duyệt' });
             }
@@ -518,7 +542,7 @@ export class PlaneController {
                     stateId: newStateId,
                     reviewNote: reviewNote || null,
                     reviewedAt: new Date(),
-                    reviewedById: reviewerId,
+                    reviewedById: reviewer.id,
                 },
                 include: { State: true, Assignee: true }
             });
@@ -624,14 +648,7 @@ export class PlaneController {
                 .toLowerCase()
                 .trim();
 
-            let actor: any = null;
-            if (actorId) {
-                actor = await prisma.teamMember.findUnique({ where: { id: actorId } });
-            } else if (actorEmail) {
-                actor = await prisma.teamMember.findFirst({
-                    where: { email: { equals: actorEmail, mode: 'insensitive' } },
-                });
-            }
+            const actor = await resolveTeamActor(req, { id: actorId, email: actorEmail });
 
             const issue = await prisma.plIssue.findUnique({
                 where: { id },

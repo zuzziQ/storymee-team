@@ -1,4 +1,6 @@
 import { AnnouncementService } from '../services/announcement.service';
+import { isTeamAdmin } from '../services/teamAuth.service';
+import { resolveTeamActor } from '../middlewares/teamSessionAuth';
 
 export class AnnouncementController {
   static async getAnnouncements(req: any, reply: any) {
@@ -14,12 +16,16 @@ export class AnnouncementController {
   static async createAnnouncement(req: any, reply: any) {
     try {
       const { title, content, senderId, targetUserId } = req.body;
+      const actor = await resolveTeamActor(req, { id: senderId });
+      if (!isTeamAdmin(actor)) {
+        return reply.status(403).send({ status: 'error', message: 'Chỉ Admin mới gửi thông báo' });
+      }
       if (!title || !content) {
         return reply.status(400).send({ status: 'error', message: 'Missing required fields' });
       }
       
       const announcement = await AnnouncementService.createAnnouncement({
-        title, content, senderId, targetUserId
+        title, content, senderId: actor.id, targetUserId
       });
 
       // Publish event via NATS (StringCodec — khớp core.team.> → Socket bridge)
@@ -48,8 +54,12 @@ export class AnnouncementController {
       if (!userId) {
         return reply.status(400).send({ status: 'error', message: 'Missing userId' });
       }
+      const actor = await resolveTeamActor(req, { id: userId });
+      if (!actor || (actor.id !== userId && !isTeamAdmin(actor))) {
+        return reply.status(403).send({ status: 'error', message: 'Không thể đánh dấu đã đọc thay người khác' });
+      }
       
-      const ann = await AnnouncementService.markAsRead(id, userId);
+      const ann = await AnnouncementService.markAsRead(id, actor.id);
       reply.send({ status: 'success', data: ann });
     } catch (err: any) {
       req.log.error(err);

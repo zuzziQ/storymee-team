@@ -1,38 +1,51 @@
 // Removes fetchAxios and axios imports
 import { NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
 import { getOrCreateConversation, sendMessageToLetta, getLettaHistory } from '@/lib/lettaClient';
-import { coreApiClient } from '@/lib/apiClient';
+import { CoreApiClient } from '@/lib/apiClient';
 import { normalizeLlmAction, pickLlmPayload } from '@/lib/llmActions';
+import { authenticateTeamRoute, teamRouteError } from '@/lib/teamRouteAuth';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
+function authenticatedTeamClient(request: Request) {
+  const authorization = request.headers.get('authorization') || '';
+  const token = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
+  return new CoreApiClient({
+    baseURL: process.env.NEXT_PUBLIC_API_URL || 'https://dev-hub.storymee.com',
+    token,
+  });
+}
+
 export async function GET(request: Request) {
   try {
+    const identity = await authenticateTeamRoute(request, 'ai-chat-history', 30);
+    const teamClient = authenticatedTeamClient(request);
     const { searchParams } = new URL(request.url);
-    const email = searchParams.get('email');
-    const name = searchParams.get('name') || '';
-
-    if (!email) {
-      return NextResponse.json({ error: 'Email is required' }, { status: 400 });
+    const requestedEmail = searchParams.get('email');
+    const email = identity.email;
+    const name = identity.fullName || identity.name || '';
+    if (requestedEmail && requestedEmail.toLowerCase() !== email.toLowerCase()) {
+      return NextResponse.json({ error: 'Cannot read another member history' }, { status: 403 });
     }
 
-    const lettaConvId = await getOrCreateConversation(email, name);
+    const lettaConvId = await getOrCreateConversation(email, name, teamClient);
     const history = await getLettaHistory(lettaConvId);
 
     return NextResponse.json({ status: 'success', history });
   } catch (err: any) {
     console.error('Lỗi GET history:', err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return teamRouteError(err);
   }
 }
 
 export async function POST(request: Request) {
   const startTime = Date.now();
   try {
-    const { message, tasks, projects, currentUser, config, companyRules } = await request.json();
+    const identity = await authenticateTeamRoute(request, 'ai-chat', 20);
+    const teamClient = authenticatedTeamClient(request);
+    const { message, tasks, projects, currentUser: claimedUser, config, companyRules } = await request.json();
+    const currentUser = { ...(claimedUser || {}), ...identity };
 
     if (!message) {
       return NextResponse.json({ error: 'Message is required' }, { status: 400 });
@@ -63,7 +76,7 @@ export async function POST(request: Request) {
       } else {
       if (!member) {
         try {
-          const membersData = await coreApiClient.get('/hr/team-members');
+          const membersData = await teamClient.get('/hr/team-members');
           if (membersData.status === 'success') {
             member = (membersData.data || []).find((m: any) => (m?.email || '').toLowerCase() === (currentUser?.email || '').toLowerCase());
           }
@@ -79,8 +92,8 @@ export async function POST(request: Request) {
         let leavesData, attData;
         try {
           const [leavesRes, attRes] = await Promise.allSettled([
-            coreApiClient.get('/hr/leave-requests'),
-            coreApiClient.get(`/hr/attendance?memberId=${member.id}`)
+            teamClient.get('/hr/leave-requests'),
+            teamClient.get(`/hr/attendance?memberId=${member.id}`)
           ]);
           if (leavesRes.status === 'fulfilled') leavesData = leavesRes.value;
           if (attRes.status === 'fulfilled') attData = attRes.value;
@@ -197,7 +210,7 @@ Nhiệm vụ của bạn:
       lettaConvId = currentUser.lettaConversationId || null;
       if (!lettaConvId) {
         try {
-          lettaConvId = await getOrCreateConversation(currentUser.email, currentUser.fullName || currentUser.name);
+          lettaConvId = await getOrCreateConversation(currentUser.email, currentUser.fullName || currentUser.name, teamClient);
         } catch (err: any) {
           console.warn("Lỗi khởi tạo Letta Conversation (sẽ fallback sang OmniRouter):", err.message);
         }
@@ -225,7 +238,7 @@ Dùng shortId task (PROJ-n). Không HTML.`
       : `${systemPrompt}\n\nUser Message: ${message}`;
     
     let reply: string | null = null;
-    let fallbackProvider = '';
+    const fallbackProvider = '';
     let fallbackModel = '';
 
     try {
@@ -288,14 +301,14 @@ Dùng shortId task (PROJ-n). Không HTML.`
         }];
 
         let turnCount = 0;
-        let messages: any[] = [{ role: "user", parts: [{ text: fullPrompt }] }];
+        const messages: any[] = [{ role: "user", parts: [{ text: fullPrompt }] }];
         let finalRawText = "";
         let debugTool: any = "Deploy verified";
         const maxTurns = isTelegramFast ? 2 : 3;
         const llmTimeout = isTelegramFast ? 28000 : 45000;
 
         while (turnCount < maxTurns) {
-          let currentToolConfig: any = { functionCallingConfig: { mode: "AUTO" } };
+          const currentToolConfig: any = { functionCallingConfig: { mode: "AUTO" } };
 
           const hubRes = await fetch(geminiUrl, {
             method: "POST",
@@ -337,7 +350,7 @@ Dùng shortId task (PROJ-n). Không HTML.`
             // Thực thi Tool nội bộ
             if (fnCall.name === "get_my_issues") {
               try {
-                const issuesRes = await coreApiClient.get('/plane/issues') as any;
+                const issuesRes = await teamClient.get('/plane/issues') as any;
                 let list = issuesRes.data || [];
                 // Telegram: only current user's open tasks (smaller + faster)
                 if (isTelegramFast && currentUser?.id) {
@@ -356,12 +369,12 @@ Dùng shortId task (PROJ-n). Không HTML.`
                 const q = isTelegramFast && currentUser?.id
                   ? `/hr/attendance?memberId=${currentUser.id}`
                   : '/hr/attendance';
-                const attRes = await coreApiClient.get(q) as any;
+                const attRes = await teamClient.get(q) as any;
                 toolResultObj = { success: true, data: attRes.data?.slice(-30) || [] };
               } catch(e:any) { toolResultObj = { error: e.message }; }
             } else if (fnCall.name === "get_team_leaves") {
               try {
-                const leaveRes = await coreApiClient.get('/hr/leave-requests') as any;
+                const leaveRes = await teamClient.get('/hr/leave-requests') as any;
                 let leaves = leaveRes.data || [];
                 if (isTelegramFast) leaves = leaves.filter((l: any) => l.status === 'pending' || l.memberId === currentUser?.id);
                 toolResultObj = {
@@ -404,12 +417,10 @@ Dùng shortId task (PROJ-n). Không HTML.`
         reply = cleanReply;
         fallbackModel = 'gemini-2.5-flash';
       } catch (hubError: any) {
-        console.error("Gemini Native Tool Calling thất bại:", hubError.message);
-        return NextResponse.json({ 
-          error: 'Hệ thống AI đang quá tải hoặc gặp sự cố.', 
-          gemini_error: hubError.message,
-          stack: hubError.stack
-        }, { status: 500 });
+        console.error('Gemini Native Tool Calling thất bại:', hubError.message);
+        return NextResponse.json({
+          error: 'Hệ thống AI đang quá tải hoặc gặp sự cố.'
+        }, { status: 502 });
       }
     }
 
@@ -445,8 +456,8 @@ Dùng shortId task (PROJ-n). Không HTML.`
     const useCompression = config && config.useCompression;
     const compressedTokens = useCompression ? Math.round(sentTokens * 0.8) : 0;
     
-    let simulatedModel = fallbackModel || (config?.useCloud ? (config?.useFallback ? 'nvidia-auto' : 'openrouter-auto') : 'gemini/gemini-2.5-flash');
-    let simulatedProvider = fallbackProvider || (config?.useCloud ? (config?.useFallback ? 'Nvidia' : 'OpenRouter') : 'Gemini Native');
+    const simulatedModel = fallbackModel || (config?.useCloud ? (config?.useFallback ? 'nvidia-auto' : 'openrouter-auto') : 'gemini/gemini-2.5-flash');
+    const simulatedProvider = fallbackProvider || (config?.useCloud ? (config?.useFallback ? 'Nvidia' : 'OpenRouter') : 'Gemini Native');
 
     const log = {
       timestamp: new Date().toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }),
@@ -459,7 +470,8 @@ Dùng shortId task (PROJ-n). Không HTML.`
     };
 
     try {
-      fetch((process.env.NEXT_PUBLIC_API_URL === '/api' || process.env.NEXT_PUBLIC_API_URL === '/' || (process.env.NEXT_PUBLIC_API_URL || '').includes('//hub.storymee.com') || !process.env.NEXT_PUBLIC_API_URL ? 'https://dev-hub.storymee.com' : process.env.NEXT_PUBLIC_API_URL) ? `${process.env.NEXT_PUBLIC_API_URL}/logs` : 'https://dev-hub.storymee.com/logs', {
+      const logBase = process.env.NEXT_PUBLIC_API_URL || 'https://dev-hub.storymee.com';
+      fetch(`${logBase.replace(/\/+$/, '')}/internal/v1/ai/logs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(log),
@@ -472,6 +484,6 @@ Dùng shortId task (PROJ-n). Không HTML.`
     return NextResponse.json({ status: 'success', data: result, log });
   } catch (error: any) {
     console.error('API Chat Error:', error);
-    return NextResponse.json({ error: error.message || 'Internal Server Error', stack: error.stack }, { status: 500 });
+    return teamRouteError(error);
   }
 }

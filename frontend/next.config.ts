@@ -1,7 +1,9 @@
 import type { NextConfig } from "next";
 
-const nextConfig: any = {
-  typescript: { ignoreBuildErrors: true },
+const nextConfig: NextConfig = {
+  typescript: { ignoreBuildErrors: false },
+  turbopack: { root: process.cwd() },
+  poweredByHeader: false,
   async rewrites() {
     return [
       {
