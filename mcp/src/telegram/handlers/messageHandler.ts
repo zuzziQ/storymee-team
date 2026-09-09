@@ -648,22 +648,32 @@ if (lowerText === "/check_all" || lowerText === "/check_team" || lowerText.start
     const isFullRemoteMem =
       String(member?.workArrangement || "").toLowerCase() === "remote" ||
       String(member?.workArrangement || "").toLowerCase() === "full_remote";
-    const checkinLabel = isFullRemoteMem ? "🏠 Vào ca Remote" : "🌅 Vào ca (Check-in)";
-    const checkinCb = isFullRemoteMem
-      ? "attendance_direct:present:remote"
-      : "attendance_direct:present";
+    const inline_keyboard = isFullRemoteMem
+      ? [
+          [
+            { text: "🏠 Vào ca Remote", callback_data: "attendance_direct:present:remote" },
+            { text: "🏢 Vào ca Văn phòng", callback_data: "attendance_direct:present:office" },
+          ],
+          [
+            { text: "🚪 Tan ca (Check-out)", callback_data: "attendance_direct:checkout" },
+          ],
+        ]
+      : [
+          [
+            { text: "🏢 Vào ca Văn phòng", callback_data: "attendance_direct:present:office" },
+            { text: "🏠 Vào ca Remote", callback_data: "attendance_direct:present:remote" },
+          ],
+          [
+            { text: "🚪 Tan ca (Check-out)", callback_data: "attendance_direct:checkout" },
+          ],
+        ];
     await sendMessage(
       chatId,
       isFullRemoteMem
-        ? "🏠 *ĐIỂM DANH REMOTE*\n\nBạn là full remote (HR). Check-in sẽ ghi **Remote**."
-        : "🌅 *BÁO CÁO ĐIỂM DANH HÀNG NGÀY*\n\nVui lòng chọn ca điểm danh. _(Đơn remote đã duyệt hôm nay → tự ghi Remote.)_",
+        ? "🏠 *ĐIỂM DANH (CHECK-IN / OUT)*\n\nBạn là nhân sự Remote (HR). Vui lòng chọn ca điểm danh hôm nay:"
+        : "🌅 *BÁO CÁO ĐIỂM DANH HÀNG NGÀY*\n\nVui lòng chọn hình thức điểm danh hôm nay:",
       {
-        inline_keyboard: [
-          [
-            { text: checkinLabel, callback_data: checkinCb },
-            { text: "🚪 Tan ca (Check-out)", callback_data: `attendance_direct:checkout` },
-          ],
-        ],
+        inline_keyboard,
       }
     );
     return;

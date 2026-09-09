@@ -1,6 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { TeamMember } from '../../../constants';
 import { isTeamAdmin } from '@/lib/teamAuth';
+import { coreApiClient } from '../../../../lib/apiClient';
+import HolidaySettingsModal from './HolidaySettingsModal';
 
 interface AttendanceSheetProps {
   teamMembers: TeamMember[];
@@ -25,6 +27,21 @@ export default function AttendanceSheet({
   const [selectedMemberId, setSelectedMemberId] = useState<string>('all');
   const [subView, setSubView] = useState<'overview' | 'log'>('overview');
   const [showMemberDropdown, setShowMemberDropdown] = useState(false);
+  const [networkInfo, setNetworkInfo] = useState<{ clientIp?: string; isOfficeNetwork?: boolean } | null>(null);
+  const [holidays, setHolidays] = useState<any[]>([]);
+  const [showHolidayModal, setShowHolidayModal] = useState(false);
+
+  useEffect(() => {
+    coreApiClient.get('/hr/attendance/network-status').then((res: any) => {
+      if (res?.status === 'success' && res?.data) {
+        setNetworkInfo(res.data);
+      } else if (res?.clientIp) {
+        setNetworkInfo(res);
+      }
+    }).catch((err) => {
+      console.warn('Failed to get network status', err);
+    });
+  }, []);
 
   const isAdmin = isTeamAdmin(activeUser);
 
@@ -41,6 +58,42 @@ export default function AttendanceSheet({
   const targetMonth = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
   const targetYear = targetMonth.getFullYear();
   const targetMonthNum = targetMonth.getMonth();
+
+  const fetchHolidays = () => {
+    coreApiClient.get(`/hr/settings/holidays?year=${targetYear}`).then((res: any) => {
+      setHolidays(res?.data || res || []);
+    }).catch(err => {
+      console.warn('Failed to get holidays', err);
+    });
+  };
+
+  useEffect(() => {
+    fetchHolidays();
+  }, [targetYear]);
+
+  // Danh sách các ngày lễ trong tháng được chọn
+  const monthHolidays = useMemo(() => {
+    return holidays.filter(h => {
+      if (!h.date) return false;
+      const parts = h.date.split('-');
+      if (parts.length < 3) return false;
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10) - 1;
+      return y === targetYear && m === targetMonthNum;
+    });
+  }, [holidays, targetYear, targetMonthNum]);
+
+  // Số ngày công tính cho nghỉ lễ trong tháng (Thứ 2 - Thứ 6: 1.0 công, Thứ 7: 0.5 công, CN: 0)
+  const holidayWorkUnits = useMemo(() => {
+    return monthHolidays.reduce((acc, h) => {
+      if (h.paid === false) return acc;
+      const [y, m, d] = h.date.split('-').map(Number);
+      const dayOfWeek = new Date(y, m - 1, d).getDay();
+      if (dayOfWeek === 0) return acc;
+      if (dayOfWeek === 6) return acc + 0.5;
+      return acc + 1.0;
+    }, 0);
+  }, [monthHolidays]);
 
   // Ngày hôm nay (local)
   const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -90,9 +143,9 @@ export default function AttendanceSheet({
 
   const monthLabel = targetMonth.toLocaleDateString('vi-VN', { month: 'long', year: 'numeric' });
 
-  // Filter records theo tháng và user
+  // Filter records theo tháng và user (kèm chèn ngày nghỉ lễ nếu xem cá nhân/từng người)
   const filteredRecords = useMemo(() => {
-    return attendanceList
+    const list = attendanceList
       .filter(a => {
         const d = new Date(a.date);
         const sameMonth = d.getFullYear() === targetYear && d.getMonth() === targetMonthNum;
@@ -104,9 +157,43 @@ export default function AttendanceSheet({
           return a.memberId === selectedMemberId;
         }
         return true; 
-      })
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [attendanceList, targetYear, targetMonthNum, viewMode, isAdmin, myMember, selectedMemberId]);
+      });
+
+    // Nếu đang xem cá nhân hoặc 1 nhân sự cụ thể, interleave các ngày lễ
+    const isSingleMemberView = viewMode === 'mine' || (isAdmin && selectedMemberId !== 'all');
+    if (!isSingleMemberView || monthHolidays.length === 0) {
+      return list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }
+
+    // Map existing records by YYYY-MM-DD
+    const existingDates = new Set(list.map(r => r.date ? r.date.split('T')[0] : ''));
+    
+    // Add holiday rows for holidays that do not have attendance record
+    const holidayRows: any[] = [];
+    monthHolidays.forEach(h => {
+      const hDate = h.date;
+      if (!existingDates.has(hDate)) {
+        const [y, m, d] = hDate.split('-').map(Number);
+        const dayOfWeek = new Date(y, m - 1, d).getDay();
+        if (dayOfWeek !== 0) { // Không tính chủ nhật
+          holidayRows.push({
+            id: `hol-${h.id || h.date}`,
+            date: hDate,
+            workType: 'holiday',
+            checkIn: null,
+            checkOut: null,
+            totalHours: dayOfWeek === 6 ? 3.5 : 8.0,
+            status: 'holiday',
+            notes: `🎉 ${h.name} (Hưởng nguyên lương)`,
+            isHolidayRow: true,
+            holidayName: h.name
+          });
+        }
+      }
+    });
+
+    return [...list, ...holidayRows].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [attendanceList, targetYear, targetMonthNum, viewMode, isAdmin, myMember, selectedMemberId, monthHolidays]);
 
   // Tổng hợp tháng (theo myMember hoặc theo selectedMemberId)
   const summary = useMemo(() => {
@@ -119,12 +206,17 @@ export default function AttendanceSheet({
       if (selectedMemberId !== 'all') return a.memberId === selectedMemberId;
       return true;
     });
-    const totalDays = records.filter(r => r.status !== 'absent').length;
+    const actualDays = records.filter(r => r.status === 'present' || r.status === 'late').length;
+    const leaveDays = records.filter(r => r.status === 'leave' || r.workType === 'leave').length;
+    const absentDays = records.filter(r => r.status === 'absent').length;
+    const isSingleMemberView = viewMode === 'mine' || selectedMemberId !== 'all';
+    const holidayDays = isSingleMemberView ? holidayWorkUnits : 0;
+    const totalDays = actualDays + holidayDays + leaveDays;
     const totalHours = records.reduce((s, r) => s + (r.totalHours || 0), 0);
     const remoteDays = records.filter(r => r.workType === 'remote').length;
     const lateDays = records.filter(r => r.status === 'late').length;
-    return { totalDays, totalHours: Math.round(totalHours * 10) / 10, remoteDays, lateDays };
-  }, [attendanceList, myMember, targetYear, targetMonthNum, viewMode, selectedMemberId]);
+    return { actualDays, holidayDays, leaveDays, absentDays, totalDays, totalHours: Math.round(totalHours * 10) / 10, remoteDays, lateDays };
+  }, [attendanceList, myMember, targetYear, targetMonthNum, viewMode, selectedMemberId, holidayWorkUnits]);
 
   // Dữ liệu bảng tổng hợp toàn team
   const overviewData = useMemo(() => {
@@ -134,7 +226,11 @@ export default function AttendanceSheet({
         const d = new Date(a.date);
         return a.memberId === member.id && d.getFullYear() === targetYear && d.getMonth() === targetMonthNum;
       });
-      const totalDays = mRecords.filter(r => r.status !== 'absent').length;
+      const actualDays = mRecords.filter(r => r.status === 'present' || r.status === 'late').length;
+      const leaveDays = mRecords.filter(r => r.status === 'leave' || r.workType === 'leave').length;
+      const absentDays = mRecords.filter(r => r.status === 'absent').length;
+      const holidayDays = holidayWorkUnits;
+      const totalDays = actualDays + holidayDays + leaveDays;
       const totalHours = mRecords.reduce((s, r) => s + (r.totalHours || 0), 0);
       const remoteDays = mRecords.filter(r => r.workType === 'remote').length;
       const lateDays = mRecords.filter(r => r.status === 'late').length;
@@ -142,6 +238,10 @@ export default function AttendanceSheet({
       
       return {
         member,
+        actualDays,
+        holidayDays,
+        leaveDays,
+        absentDays,
         totalDays,
         totalHours: Math.round(totalHours * 10) / 10,
         remoteDays,
@@ -149,13 +249,15 @@ export default function AttendanceSheet({
         todayRecord: tRec
       };
     });
-  }, [teamMembers, attendanceList, targetYear, targetMonthNum, todayStr, isAdmin, viewMode, subView]);
+  }, [teamMembers, attendanceList, targetYear, targetMonthNum, todayStr, isAdmin, viewMode, subView, holidayWorkUnits]);
 
   const statusBadge = (status: string) => {
     const map: Record<string, { label: string; color: string }> = {
       present: { label: 'Đúng giờ', color: '#22c55e' },
       late: { label: 'Đi muộn', color: '#f59e0b' },
-      absent: { label: 'Vắng', color: '#ef4444' }
+      leave: { label: '🏖️ Có phép', color: '#38bdf8' },
+      absent: { label: '❌ Không phép', color: '#ef4444' },
+      holiday: { label: '🏖️ Nghỉ lễ', color: '#c084fc' }
     };
     const s = map[status] || { label: status, color: '#71717a' };
     return (
@@ -168,33 +270,63 @@ export default function AttendanceSheet({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-      {/* ===== PHẦN TÙY CHỌN ADMIN ===== */}
-      {isAdmin && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: -4 }}>
-          <div style={{ display: 'flex', gap: 4, background: 'rgba(0,0,0,0.2)', borderRadius: 8, padding: 3 }}>
-            {(['mine', 'all'] as const).map(v => (
-              <button
-                key={v}
-                onClick={() => { 
-                  setViewMode(v); 
-                  if (v === 'mine') { 
-                    setSubView('log'); 
-                    setSelectedMemberId('all'); 
-                  } 
-                }}
-                style={{
-                  padding: '6px 12px', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600,
-                  background: viewMode === v ? '#6366f1' : 'transparent',
-                  color: viewMode === v ? 'white' : '#71717a',
-                  transition: 'all 0.2s'
-                }}
-              >
-                {v === 'mine' ? '👤 Xem cá nhân' : '👥 Xem toàn team'}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* ===== PHẦN TÙY CHỌN & LỊCH NGHỈ LỄ ===== */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: -4, gap: 10, flexWrap: 'wrap' }}>
+        <button
+          onClick={() => setShowHolidayModal(true)}
+          style={{
+            padding: '6px 12px', borderRadius: 6, border: '1px solid rgba(168,85,247,0.3)', cursor: 'pointer', fontSize: 12, fontWeight: 600,
+            background: 'rgba(168,85,247,0.1)', color: '#c084fc', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: 6
+          }}
+        >
+          🏖️ Lịch nghỉ lễ ({holidays.length})
+        </button>
+        {isAdmin && (
+          <>
+            <button
+              onClick={async () => {
+                if (window.confirm("Thực hiện tự động chốt giờ ra cho các ca quên checkout và đối soát đơn xin nghỉ phép (tự động phân loại Có phép vs Không phép)?")) {
+                  try {
+                    await coreApiClient.post('/hr/attendance/auto-checkout');
+                    alert("✅ Đã chốt ca và kiểm toán công ngày thành công!");
+                    window.location.reload();
+                  } catch (err: any) {
+                    alert("❌ Lỗi: " + (err?.message || 'Không thể chốt ca'));
+                  }
+                }
+              }}
+              style={{
+                padding: '6px 12px', borderRadius: 6, border: '1px solid rgba(245,158,11,0.3)', cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                background: 'rgba(245,158,11,0.1)', color: '#fbbf24', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: 6
+              }}
+            >
+              ⚡ Chốt công ngày (Auto-Audit)
+            </button>
+            <div style={{ display: 'flex', gap: 4, background: 'rgba(0,0,0,0.2)', borderRadius: 8, padding: 3 }}>
+              {(['mine', 'all'] as const).map(v => (
+                <button
+                  key={v}
+                  onClick={() => { 
+                    setViewMode(v); 
+                    if (v === 'mine') { 
+                      setSubView('log'); 
+                      setSelectedMemberId('all'); 
+                    } 
+                  }}
+                  style={{
+                    padding: '6px 12px', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                    background: viewMode === v ? '#6366f1' : 'transparent',
+                    color: viewMode === v ? 'white' : '#71717a',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  {v === 'mine' ? '👤 Xem cá nhân' : '👥 Xem toàn team'}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
 
       {/* ===== PHẦN SUBVIEW CHO ALL ===== */}
       {isAdmin && viewMode === 'all' && (
@@ -286,6 +418,23 @@ export default function AttendanceSheet({
             )}
           </div>
 
+          {/* HIỂN THỊ BANNER/BADGE MẠNG */}
+          {networkInfo && (
+            <div style={{ marginBottom: 14 }}>
+              {networkInfo.isOfficeNetwork ? (
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.3)', color: '#4ade80', fontSize: 12, fontWeight: 600 }}>
+                  <span>📶</span>
+                  <span>Wi-Fi Văn phòng ({networkInfo.clientIp || 'Đã xác thực'})</span>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 8, background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)', color: '#fbbf24', fontSize: 12, fontWeight: 500 }}>
+                  <span style={{ fontSize: 14 }}>⚠️</span>
+                  <span>Bạn đang dùng 4G / Mạng ngoài ({networkInfo.clientIp}). Vui lòng kết nối Wi-Fi văn phòng để điểm danh Văn phòng, hoặc chọn 'Remote'.</span>
+                </div>
+              )}
+            </div>
+          )}
+
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <label style={{ fontSize: 11, color: '#a1a1aa', fontWeight: 600 }}>
@@ -302,6 +451,10 @@ export default function AttendanceSheet({
                     key={wt}
                     onClick={() => {
                       if (lockedOut || hasCheckedIn) return;
+                      if (wt === 'office' && networkInfo && networkInfo.isOfficeNetwork === false) {
+                        alert("⚠️ Bạn đang kết nối mạng di động / 4G. Vui lòng kết nối Wi-Fi văn phòng để chấm công Office, hoặc chọn hình thức Remote.");
+                        return;
+                      }
                       setWorkType(wt);
                     }}
                     disabled={hasCheckedIn || lockedOut}
@@ -374,18 +527,49 @@ export default function AttendanceSheet({
 
       {/* ===== THỐNG KÊ THÁNG CÁ NHÂN HOẶC ĐƯỢC CHỌN ===== */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
-        {[
-          { label: 'Ngày công', value: `${summary.totalDays} ngày`, color: '#22c55e', icon: '📅' },
-          { label: 'Tổng giờ làm', value: `${summary.totalHours}h`, color: '#6366f1', icon: '⏱️' },
-          { label: 'Ngày remote', value: `${summary.remoteDays} ngày`, color: '#38bdf8', icon: '🏠' },
-          { label: 'Đi muộn', value: `${summary.lateDays} lần`, color: summary.lateDays > 0 ? '#f59e0b' : '#22c55e', icon: '⚠️' }
-        ].map(s => (
-          <div key={s.label} className="glass" style={{ padding: '14px 16px' }}>
-            <div style={{ fontSize: 10, color: '#71717a', fontWeight: 600, marginBottom: 4 }}>{s.icon} {s.label.toUpperCase()}</div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: s.color }}>{s.value}</div>
-            <div style={{ fontSize: 10, color: '#52525b', marginTop: 2 }}>{monthLabel}</div>
+        {/* Card 1: Ngày công */}
+        <div className="glass" style={{ padding: '14px 16px' }}>
+          <div style={{ fontSize: 10, color: '#71717a', fontWeight: 600, marginBottom: 4 }}>📅 NGÀY CÔNG</div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 18, fontWeight: 700, color: '#22c55e' }}>{summary.totalDays} ngày</span>
+            <span style={{ fontSize: 10, color: '#a1a1aa' }}>
+              ({summary.actualDays} làm + ${summary.holidayDays} lễ + ${summary.leaveDays} phép)
+            </span>
           </div>
-        ))}
+          <div style={{ fontSize: 10, color: '#52525b', marginTop: 2 }}>{monthLabel}</div>
+        </div>
+
+        {/* Card 2: Tổng giờ làm */}
+        <div className="glass" style={{ padding: '14px 16px' }}>
+          <div style={{ fontSize: 10, color: '#71717a', fontWeight: 600, marginBottom: 4 }}>⏱️ TỔNG GIỜ LÀM</div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 18, fontWeight: 700, color: '#6366f1' }}>{summary.totalHours}h</span>
+          </div>
+          <div style={{ fontSize: 10, color: '#52525b', marginTop: 2 }}>{monthLabel}</div>
+        </div>
+
+        {/* Card 3: Nghỉ phép */}
+        <div className="glass" style={{ padding: '14px 16px' }}>
+          <div style={{ fontSize: 10, color: '#71717a', fontWeight: 600, marginBottom: 4 }}>🏖️ NGHỈ PHÉP</div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 18, fontWeight: 700, color: '#38bdf8' }}>{summary.leaveDays} có phép</span>
+            {summary.absentDays > 0 && (
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#ef4444' }}>
+                · {summary.absentDays} không phép
+              </span>
+            )}
+          </div>
+          <div style={{ fontSize: 10, color: '#52525b', marginTop: 2 }}>{monthLabel}</div>
+        </div>
+
+        {/* Card 4: Đi muộn */}
+        <div className="glass" style={{ padding: '14px 16px' }}>
+          <div style={{ fontSize: 10, color: '#71717a', fontWeight: 600, marginBottom: 4 }}>⚠️ ĐI MUỘN</div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 18, fontWeight: 700, color: summary.lateDays > 0 ? '#f59e0b' : '#22c55e' }}>{summary.lateDays} lần</span>
+          </div>
+          <div style={{ fontSize: 10, color: '#52525b', marginTop: 2 }}>{monthLabel}</div>
+        </div>
       </div>
 
       {/* ===== BẢNG TỔNG HỢP / NHẬT KÝ CHẤM CÔNG ===== */}
@@ -407,6 +591,7 @@ export default function AttendanceSheet({
                   <th style={{ padding: '10px 12px', color: '#71717a', fontWeight: 600 }}>HÔM NAY</th>
                   <th style={{ padding: '10px 12px', color: '#71717a', fontWeight: 600, textAlign: 'center' }}>NGÀY CÔNG</th>
                   <th style={{ padding: '10px 12px', color: '#71717a', fontWeight: 600, textAlign: 'center' }}>TỔNG GIỜ</th>
+                  <th style={{ padding: '10px 12px', color: '#71717a', fontWeight: 600, textAlign: 'center' }}>NGHỈ PHÉP</th>
                   <th style={{ padding: '10px 12px', color: '#71717a', fontWeight: 600, textAlign: 'center' }}>REMOTE</th>
                   <th style={{ padding: '10px 12px', color: '#71717a', fontWeight: 600, textAlign: 'center' }}>ĐI MUỘN</th>
                   <th style={{ padding: '10px 12px', color: '#71717a', fontWeight: 600, textAlign: 'center' }}>HÀNH ĐỘNG</th>
@@ -436,8 +621,41 @@ export default function AttendanceSheet({
                         </div>
                       </td>
                       <td style={{ padding: '10px 12px' }}>{todayStatus}</td>
-                      <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600 }}>{row.totalDays}</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600 }}>
+                        <span style={{ fontSize: 12, color: '#fafafa' }}>{row.totalDays}</span>
+                        <div style={{ fontSize: 9, color: '#a1a1aa', fontWeight: 400 }}>
+                          (+{row.holidayDays} lễ, +{row.leaveDays} phép)
+                        </div>
+                      </td>
                       <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600, color: '#a78bfa' }}>{row.totalHours}h</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                        <div style={{ display: 'inline-flex', flexDirection: 'column', gap: 4, alignItems: 'center' }}>
+                          <span style={{
+                            padding: '2px 7px',
+                            borderRadius: 4,
+                            fontSize: 10,
+                            fontWeight: 600,
+                            background: 'rgba(56,189,248,0.12)',
+                            color: '#38bdf8',
+                            border: '1px solid rgba(56,189,248,0.25)'
+                          }}>
+                            ✓ {row.leaveDays} có phép
+                          </span>
+                          {row.absentDays > 0 && (
+                            <span style={{
+                              padding: '2px 7px',
+                              borderRadius: 4,
+                              fontSize: 10,
+                              fontWeight: 600,
+                              background: 'rgba(239,68,68,0.12)',
+                              color: '#ef4444',
+                              border: '1px solid rgba(239,68,68,0.25)'
+                            }}>
+                              ❌ {row.absentDays} không phép
+                            </span>
+                          )}
+                        </div>
+                      </td>
                       <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600 }}>{row.remoteDays}</td>
                       <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600 }}>
                         {row.lateDays > 0 ? (
@@ -500,13 +718,30 @@ export default function AttendanceSheet({
                   </tr>
                 ) : (
                   filteredRecords.map((item, idx) => {
-                    const isToday = item.date?.split('T')[0] === todayStr;
+                    const itemDateStr = item.date?.split('T')[0] || '';
+                    const isToday = itemDateStr === todayStr;
+                    const holidayMatch = monthHolidays.find(h => h.date === itemDateStr);
+                    const isOvertimeHoliday = !item.isHolidayRow && !!holidayMatch;
+                    const isLeave = item.status === 'leave' || item.workType === 'leave';
+                    const isAbsent = item.status === 'absent';
+                    const itemDate = new Date(item.date);
+                    const isSaturday = itemDate.getDay() === 6;
+                    const leaveHoursDisplay = isSaturday ? '3.5h (Công phép)' : '8.0h (Công phép)';
+
                     return (
                       <tr
                         key={item.id || idx}
                         style={{
                           borderBottom: '1px solid rgba(255,255,255,0.02)',
-                          background: isToday ? 'rgba(99,102,241,0.05)' : 'transparent'
+                          background: item.isHolidayRow
+                            ? 'rgba(168,85,247,0.06)'
+                            : isLeave
+                            ? 'rgba(56,189,248,0.05)'
+                            : isAbsent
+                            ? 'rgba(239,68,68,0.05)'
+                            : isToday
+                            ? 'rgba(99,102,241,0.05)'
+                            : 'transparent'
                         }}
                       >
                         {(isAdmin && viewMode === 'all') && (
@@ -519,31 +754,98 @@ export default function AttendanceSheet({
                             </div>
                           </td>
                         )}
-                        <td style={{ padding: '10px 12px', fontFamily: 'monospace', color: isToday ? '#818cf8' : '#e4e4e7' }}>
+                        <td style={{
+                          padding: '10px 12px',
+                          fontFamily: 'monospace',
+                          color: item.isHolidayRow ? '#c084fc' : isLeave ? '#38bdf8' : isAbsent ? '#ef4444' : isToday ? '#818cf8' : '#e4e4e7'
+                        }}>
                           {formatDate(item.date)}{isToday && <span style={{ marginLeft: 4, fontSize: 9, color: '#818cf8', fontWeight: 700 }}> HÔM NAY</span>}
                         </td>
                         <td style={{ padding: '10px 12px' }}>
-                          <span style={{
-                            padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600,
-                            background: item.workType === 'remote' ? 'rgba(56,189,248,0.1)' : 'rgba(99,102,241,0.1)',
-                            color: item.workType === 'remote' ? '#38bdf8' : '#818cf8',
-                            border: `1px solid ${item.workType === 'remote' ? '#38bdf820' : '#6366f120'}`
-                          }}>
-                            {item.workType === 'remote' ? '🏠 Remote' : '🏢 Office'}
-                          </span>
+                          {item.isHolidayRow ? (
+                            <span style={{
+                              padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600,
+                              background: 'rgba(168,85,247,0.15)', color: '#c084fc', border: '1px solid rgba(168,85,247,0.3)'
+                            }}>
+                              🎉 Nghỉ lễ
+                            </span>
+                          ) : isLeave ? (
+                            <span style={{
+                              padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600,
+                              background: 'rgba(56,189,248,0.15)', color: '#38bdf8', border: '1px solid rgba(56,189,248,0.3)'
+                            }}>
+                              🏖️ Nghỉ có phép
+                            </span>
+                          ) : isAbsent ? (
+                            <span style={{
+                              padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600,
+                              background: 'rgba(239,68,68,0.15)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)'
+                            }}>
+                              ❌ Vắng mặt
+                            </span>
+                          ) : (
+                            <span style={{
+                              padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600,
+                              background: item.workType === 'remote' ? 'rgba(56,189,248,0.1)' : 'rgba(99,102,241,0.1)',
+                              color: item.workType === 'remote' ? '#38bdf8' : '#818cf8',
+                              border: `1px solid ${item.workType === 'remote' ? '#38bdf820' : '#6366f120'}`
+                            }}>
+                              {item.workType === 'remote' ? '🏠 Remote' : '🏢 Office'}
+                            </span>
+                          )}
+                          {item.workType === 'remote' && item.notes?.includes('Vượt hạn mức Remote') && (
+                            <span style={{ display: 'inline-block', marginLeft: 6, padding: '2px 6px', background: 'rgba(168,85,247,0.15)', color: '#c084fc', borderRadius: 4, fontSize: 9, fontWeight: 700, border: '1px solid rgba(168,85,247,0.3)' }}>
+                              ⚠️ Vượt quota
+                            </span>
+                          )}
+                          {isOvertimeHoliday && (
+                            <span style={{ display: 'inline-block', marginLeft: 6, padding: '2px 6px', background: 'rgba(236,72,153,0.15)', color: '#f472b6', borderRadius: 4, fontSize: 9, fontWeight: 700, border: '1px solid rgba(236,72,153,0.3)' }}>
+                              🎉 Làm lễ ({holidayMatch.name})
+                            </span>
+                          )}
                         </td>
-                        <td style={{ padding: '10px 12px', color: '#22c55e', fontWeight: 500 }}>{formatTime(item.checkIn)}</td>
-                        <td style={{ padding: '10px 12px', color: item.checkOut ? '#f59e0b' : '#52525b', fontWeight: 500 }}>
-                          {item.checkOut ? formatTime(item.checkOut) : '—'}
+                        <td style={{ padding: '10px 12px', color: (item.isHolidayRow || isLeave || isAbsent) ? '#71717a' : '#22c55e', fontWeight: 500 }}>
+                          {(item.isHolidayRow || isLeave || isAbsent) ? '—' : formatTime(item.checkIn)}
                         </td>
-                        <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: item.totalHours ? '#a78bfa' : '#52525b' }}>
-                          {item.totalHours ? `${item.totalHours}h` : (item.checkIn && !item.checkOut ? '⏳ Đang làm' : '—')}
+                        <td style={{ padding: '10px 12px', color: (item.isHolidayRow || isLeave || isAbsent) ? '#71717a' : (item.checkOut ? '#f59e0b' : '#52525b'), fontWeight: 500 }}>
+                          {(item.isHolidayRow || isLeave || isAbsent) ? '—' : (item.checkOut ? formatTime(item.checkOut) : '—')}
+                          {(!item.isHolidayRow && !isLeave && !isAbsent) && (item.notes?.includes('Quên chấm công') || item.notes?.includes('tự động chốt ca')) && (
+                            <span style={{ display: 'inline-block', marginLeft: 6, padding: '2px 6px', background: 'rgba(245,158,11,0.15)', color: '#f59e0b', borderRadius: 4, fontSize: 9, fontWeight: 700, border: '1px solid rgba(245,158,11,0.3)' }}>
+                              ⚠️ Quên check-out
+                            </span>
+                          )}
+                        </td>
+                        <td style={{
+                          padding: '10px 12px',
+                          textAlign: 'right',
+                          fontWeight: 700,
+                          color: item.isHolidayRow ? '#c084fc' : isLeave ? '#38bdf8' : isAbsent ? '#ef4444' : (item.totalHours ? '#a78bfa' : '#52525b')
+                        }}>
+                          {item.isHolidayRow
+                            ? `${item.totalHours}h`
+                            : isLeave
+                            ? leaveHoursDisplay
+                            : isAbsent
+                            ? '0.0h'
+                            : (item.totalHours ? `${item.totalHours}h` : (item.checkIn && !item.checkOut ? '⏳ Đang làm' : '—'))}
                         </td>
                         <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                          {statusBadge(item.status)}
+                          {statusBadge(isLeave ? 'leave' : isAbsent ? 'absent' : item.status)}
                         </td>
-                        <td style={{ padding: '10px 12px', color: '#71717a', fontStyle: 'italic', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {item.notes || '—'}
+                        <td style={{
+                          padding: '10px 12px',
+                          color: item.isHolidayRow ? '#c084fc' : isLeave ? '#38bdf8' : isAbsent ? '#ef4444' : '#71717a',
+                          fontStyle: (item.isHolidayRow || isLeave || isAbsent) ? 'normal' : 'italic',
+                          maxWidth: 180,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {isAbsent
+                            ? (item.notes || '⚠️ Không điểm danh & không có đơn xin nghỉ phép')
+                            : isLeave
+                            ? (item.notes || '🏖️ Nghỉ phép có đơn phê duyệt')
+                            : (item.notes || '—')}
                         </td>
                       </tr>
                     );
@@ -554,6 +856,16 @@ export default function AttendanceSheet({
           </div>
         </div>
       )}
+
+      {/* ===== MODAL QUẢN LÝ LỊCH NGHỈ LỄ ===== */}
+      <HolidaySettingsModal
+        isOpen={showHolidayModal}
+        onClose={() => setShowHolidayModal(false)}
+        onUpdated={() => {
+          fetchHolidays();
+        }}
+        isAdmin={isAdmin}
+      />
     </div>
   );
 }

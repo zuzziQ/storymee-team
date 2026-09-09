@@ -51,10 +51,10 @@ export default function SidebarNav({
           if (t.id === 'hr') {
             const hrSubItems = [
               { id: 'profile', label: '🌿 Hồ sơ & Đội ngũ' },
+              { id: 'settings', label: '⚙️ Quyền & Privacy' },
               { id: 'attendance', label: '📅 Chấm công tự động' },
               { id: 'leaves', label: '🌴 Quản lý Phép & Remote' },
               { id: 'payroll', label: '💳 Bảng lương' },
-              { id: 'importer', label: '🧠 Huấn luyện Quy chế AI' }
             ];
             const isHrActive = tab === 'hr';
             return (
@@ -82,7 +82,7 @@ export default function SidebarNav({
                   marginLeft: 20
                 }}>
                   {hrSubItems.map(st => {
-                    if (st.id === 'importer' && !isAdmin) return null;
+                    if (st.id === 'settings' && !isAdmin) return null;
                     const isSubActive = isHrActive && hrSubTab === st.id;
                     return (
                       <button

@@ -425,9 +425,32 @@ export async function sendDailySummaryAndNotify(type: "morning" | "evening") {
 
       if (type === "morning") {
         const pendingTasks = myIssues.filter(s => !isDoneIssue(s));
+        const isRemoteStaff =
+          String(m.workArrangement || "").toLowerCase() === "remote" ||
+          String(m.workArrangement || "").toLowerCase() === "full_remote";
+        const morningButtons = isRemoteStaff
+          ? [
+              [
+                { text: "🏠 Vào ca Remote", callback_data: "attendance_direct:present:remote" },
+                { text: "🏢 Vào ca Văn phòng", callback_data: "attendance_direct:present:office" },
+              ],
+              [
+                { text: "🚪 Tan ca (Check-out)", callback_data: "attendance_direct:checkout" },
+              ],
+            ]
+          : [
+              [
+                { text: "🏢 Vào ca Văn phòng", callback_data: "attendance_direct:present:office" },
+                { text: "🏠 Vào ca Remote", callback_data: "attendance_direct:present:remote" },
+              ],
+              [
+                { text: "🚪 Tan ca (Check-out)", callback_data: "attendance_direct:checkout" },
+              ],
+            ];
+
         if (pendingTasks.length === 0) {
           await sendMessage(chatId, `☀️ *BÁO CÁO ĐẦU NGÀY (8h30)*\n\nChào *${m.fullName}*, hôm nay bạn không có công việc nào đang chờ xử lý. Chúc bạn một ngày mới làm việc tràn đầy năng lượng!`, {
-            inline_keyboard: [[{ text: "🌅 Vào ca (Check-in)", callback_data: `attendance_direct:present` }]]
+            inline_keyboard: morningButtons
           });
           continue;
         }
@@ -442,7 +465,7 @@ export async function sendDailySummaryAndNotify(type: "morning" | "evening") {
 
         const msg = `☀️ *BÁO CÁO CÔNG VIỆC ĐẦU NGÀY (8h30)*\n\nChào *${m.fullName}*, dưới đây là danh sách các công việc bạn cần tập trung xử lý trong hôm nay:\n\n${taskListStr}\n💪 Chúc bạn một ngày làm việc hiệu quả và hoàn thành xuất sắc mục tiêu!`;
         await sendMessage(chatId, msg, {
-          inline_keyboard: [[{ text: "🌅 Vào ca (Check-in)", callback_data: `attendance_direct:present` }]]
+          inline_keyboard: morningButtons
         });
 
         try {

@@ -22,6 +22,14 @@ fastify.get('/auth/lookup', HrController.authLookup);
 // Privacy / team settings (admin configurable)
 fastify.get('/settings/privacy', HrController.getPrivacySettings);
 fastify.patch('/settings/privacy', HrController.updatePrivacySettings);
+fastify.get('/settings/office-network', HrController.getOfficeNetwork);
+fastify.post('/settings/office-network', HrController.updateOfficeNetwork);
+
+// Holiday settings
+fastify.get('/settings/holidays', HrController.getHolidays);
+fastify.post('/settings/holidays', HrController.saveHoliday);
+fastify.delete('/settings/holidays/:id', HrController.deleteHoliday);
+fastify.post('/settings/holidays/seed-defaults', HrController.seedDefaultHolidays);
 
 // Subtasks routes
 fastify.get('/subtasks', HrController.getSubtasks);
@@ -31,8 +39,10 @@ fastify.delete('/subtasks/:id', HrController.deleteSubTask);
 
 // Attendance routes
 fastify.get('/attendance', HrController.getAttendance);
+fastify.get('/attendance/network-status', HrController.getNetworkStatus);
 fastify.post('/attendance/checkin', HrController.checkin);
 fastify.post('/attendance/checkout', HrController.checkout);
+fastify.post('/attendance/auto-checkout', HrController.autoCheckout);
 
 // Projects & Tasks
 fastify.get('/projects', AdminController.getProjects);

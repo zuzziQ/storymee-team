@@ -1,19 +1,25 @@
 import { fetchAxios } from '@/lib/fetchAxios';
 import React, { useState, useEffect } from 'react';
+import RulesEditor from '../hr/components/RulesEditor';
 
 interface OmnirouterTabProps {
   config: { useCloud: boolean; useFallback: boolean; useMasking: boolean; useCompression: boolean; };
   setConfig: React.Dispatch<React.SetStateAction<{ useCloud: boolean; useFallback: boolean; useMasking: boolean; useCompression: boolean; }>>;
   logs: any[];
   stats: { totalTokens: number; compressedTokens: number; };
+  rawMarkdownRules?: string;
+  setRawMarkdownRules?: (rules: string) => void;
 }
 
 export default function OmnirouterTab({
   config,
   setConfig,
   logs,
-  stats
+  stats,
+  rawMarkdownRules,
+  setRawMarkdownRules,
 }: OmnirouterTabProps) {
+  const [activeSubTab, setActiveSubTab] = useState<'monitor' | 'rag'>('monitor');
   const [keysStatus, setKeysStatus] = useState<any[]>([]);
   const [modelsStatus, setModelsStatus] = useState<any>({});
   const [nvidiaModels, setNvidiaModels] = useState<string[]>([]);
@@ -73,8 +79,53 @@ export default function OmnirouterTab({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      {/* Header section with reset button */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.01)', padding: '12px 18px', borderRadius: 12, border: '1px solid var(--border)' }}>
+      {/* Sub-tab Switcher */}
+      <div style={{ display: 'flex', gap: 8, borderBottom: '1px solid var(--border)', paddingBottom: 10 }}>
+        <button
+          onClick={() => setActiveSubTab('monitor')}
+          className={`tab-btn ${activeSubTab === 'monitor' ? 'active' : ''}`}
+          style={{
+            padding: '6px 14px',
+            fontSize: 12,
+            borderRadius: 8,
+            cursor: 'pointer',
+            border: 'none',
+            background: activeSubTab === 'monitor' ? 'rgba(167,139,250,0.12)' : 'transparent',
+            color: activeSubTab === 'monitor' ? '#a78bfa' : '#71717a',
+            fontWeight: activeSubTab === 'monitor' ? 600 : 400,
+            transition: 'all 0.2s'
+          }}
+        >
+          📊 Giám sát Token & Router
+        </button>
+        <button
+          onClick={() => setActiveSubTab('rag')}
+          className={`tab-btn ${activeSubTab === 'rag' ? 'active' : ''}`}
+          style={{
+            padding: '6px 14px',
+            fontSize: 12,
+            borderRadius: 8,
+            cursor: 'pointer',
+            border: 'none',
+            background: activeSubTab === 'rag' ? 'rgba(167,139,250,0.12)' : 'transparent',
+            color: activeSubTab === 'rag' ? '#a78bfa' : '#71717a',
+            fontWeight: activeSubTab === 'rag' ? 600 : 400,
+            transition: 'all 0.2s'
+          }}
+        >
+          🧠 Cấu hình RAG & Prompt Rules
+        </button>
+      </div>
+
+      {activeSubTab === 'rag' ? (
+        <RulesEditor
+          rawMarkdownRules={rawMarkdownRules || ''}
+          setRawMarkdownRules={setRawMarkdownRules || (() => {})}
+        />
+      ) : (
+        <>
+          {/* Header section with reset button */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.01)', padding: '12px 18px', borderRadius: 12, border: '1px solid var(--border)' }}>
         <div>
           <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#fafafa' }}>Bộ định tuyến OmniRouter Dashboard</h2>
           <span style={{ fontSize: 11, color: '#71717a' }}>Giám sát lượng token tiêu thụ thật, độ trễ và nhật ký VPS thời gian thực</span>
@@ -266,6 +317,8 @@ export default function OmnirouterTab({
           </div>
         </div>
       </div>
-    </div>
+    </>
+  )}
+</div>
   );
 }

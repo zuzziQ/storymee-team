@@ -386,6 +386,8 @@ export default function StorymeeTeamPage() {
               setConfig={setOmniConfig}
               logs={routingLogs}
               stats={tokenStats}
+              rawMarkdownRules={rawMarkdownRules}
+              setRawMarkdownRules={setRawMarkdownRules}
             />
           )}
 

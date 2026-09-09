@@ -5,6 +5,8 @@ import { HrHandoverService } from '../services/hrHandover.service';
 import { HrService } from '../services/hr.service';
 import { NotificationService } from '../services/notification.service';
 import { TeamAccountService } from '../services/teamAccount.service';
+import { OfficeNetworkService } from '../services/officeNetwork.service';
+import { HrHolidayService } from '../services/hrHoliday.service';
 import { isTeamAdmin, redactMemberPrivacy } from '../services/teamAuth.service';
 import { resolveTeamActor } from '../middlewares/teamSessionAuth';
 import { StringCodec } from 'nats';
@@ -26,6 +28,24 @@ function publishNats(req: any, subject: string, payload: unknown) {
 }
 
 export class HrController {
+  /**
+   * GET /hr/attendance/network-status
+   * Kiểm tra IP của client và xác định có phải Wi-Fi văn phòng hay không
+   */
+  static async getNetworkStatus(req: any, reply: any) {
+    const clientIp = OfficeNetworkService.getClientIp(req);
+    const isOfficeNetwork = await OfficeNetworkService.isOfficeIp(clientIp);
+    const config = await OfficeNetworkService.getOfficeNetworkConfig();
+    reply.code(200).send({
+      status: 'success',
+      data: {
+        clientIp,
+        isOfficeNetwork,
+        officeIpsConfigured: config.enabled,
+      },
+    });
+  }
+
   /**
    * GET /hr/team-members?status=all|pending|active|suspended|rejected
    * Optional privacy: ?viewerId= | ?viewerEmail=
@@ -646,6 +666,40 @@ export class HrController {
     const arrangement = String((member as any).workArrangement || 'office').toLowerCase();
     const isFullRemote = resolved.reason === 'full_remote_hr';
 
+    const isServiceCaller = Boolean(req.teamService);
+    const clientIp = OfficeNetworkService.getClientIp(req);
+    let remoteWarning = '';
+
+    if (resolvedWorkType === 'office' && !isServiceCaller) {
+      const isOffice = await OfficeNetworkService.isOfficeIp(clientIp);
+      if (!isOffice) {
+        reply.code(400).send({
+          status: 'error',
+          code: 'OFFICE_IP_REQUIRED',
+          message: `Bạn đang kết nối mạng ngoài / 4G (IP: ${clientIp}). Vui lòng kết nối Wi-Fi văn phòng để chấm công Office, hoặc chọn hình thức Remote.`,
+          clientIp,
+        });
+        return;
+      }
+    } else if (resolvedWorkType === 'remote') {
+      const todayVN = new Date(vnTimeStr);
+      const startOfMonth = new Date(todayVN.getFullYear(), todayVN.getMonth(), 1);
+      const endOfMonth = new Date(todayVN.getFullYear(), todayVN.getMonth() + 1, 0, 23, 59, 59, 999);
+
+      const remoteCount = await prisma.attendance.count({
+        where: {
+          memberId,
+          workType: 'remote',
+          date: { gte: startOfMonth, lte: endOfMonth },
+        },
+      });
+
+      const limit = (member as any).remoteLimit ?? 4;
+      if (remoteCount >= limit) {
+        remoteWarning = ` | [⚠️ Vượt hạn mức Remote: ${remoteCount + 1}/${limit} ngày]`;
+      }
+    }
+
     // Kiểm tra đã check-in chưa
     const existing = await prisma.attendance.findUnique({
       where: { memberId_date: { memberId, date } }
@@ -684,13 +738,18 @@ export class HrController {
     const vietNamHour = new Date(vnTimeStr).getHours();
     const status = vietNamHour >= 9 ? 'late' : 'present';
 
+    let finalNotes = notes;
+    if (isServiceCaller && !notes?.includes('[Telegram')) {
+      finalNotes = `${notes || 'Điểm danh từ Telegram/MCP'}${notes?.includes('[Telegram') ? '' : ' | [📱 Điểm danh qua Telegram/MCP]'}`.trim();
+    }
+
     const defaultNote =
-      notes ||
+      (finalNotes ||
       (resolved.reason === 'approved_remote_leave'
         ? 'Check-in Remote (đơn remote đã duyệt)'
         : isFullRemote
           ? 'Check-in Remote (full remote HR)'
-          : `Check-in ${resolvedWorkType === 'remote' ? 'Remote' : 'Văn phòng'}`);
+          : `Check-in ${resolvedWorkType === 'remote' ? 'Remote' : 'Văn phòng'}`)) + remoteWarning;
 
     const attendance = await prisma.attendance.upsert({
       where: { memberId_date: { memberId, date } },
@@ -706,7 +765,7 @@ export class HrController {
         checkIn: now,
         status,
         workType: resolvedWorkType,
-        notes: notes || undefined
+        notes: finalNotes || undefined
       },
       include: { member: true }
     });
@@ -984,6 +1043,304 @@ export class HrController {
         path: `/internal/v1/team/plane/issues/${taskId}/request-archive`,
         body: { reason: '...' },
       },
+    });
+  }
+
+  /**
+   * POST /hr/attendance/auto-checkout
+   * Tự động chốt ca cho các nhân sự đã check-in nhưng quên check-out
+   * Mon-Fri: 18:00 VN (trừ 1.5h nghỉ trưa 12:00-13:30)
+   * Sat: 12:00 VN
+   * Notes append: [⚠️ Quên chấm công - Hệ thống tự động chốt ca]
+   */
+  static async autoCheckout(req?: any, reply?: any) {
+    const vnNowStr = new Date().toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' });
+    const vnNow = new Date(vnNowStr);
+    const todayVN = new Date(vnNow);
+    todayVN.setHours(23, 59, 59, 999);
+
+    // a. Chốt giờ ra cho các ca quên checkout
+    const pendingRecords = await prisma.attendance.findMany({
+      where: {
+        checkIn: { not: null },
+        checkOut: null,
+        date: { lte: todayVN },
+      },
+      include: { member: true },
+    });
+
+    let updatedCheckouts = 0;
+    const records: any[] = [];
+
+    for (const existing of pendingRecords) {
+      if (!existing.checkIn) continue;
+
+      const recordDateVNStr = new Date(existing.date).toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' });
+      const recordDayOfWeek = new Date(recordDateVNStr).getDay(); // 0 is Sunday, 6 is Saturday
+      const isSaturday = recordDayOfWeek === 6;
+
+      // 18:00 VN (+7) = 11:00 UTC; 12:00 VN (+7) = 05:00 UTC
+      const checkOut = new Date(existing.date);
+      if (isSaturday) {
+        checkOut.setUTCHours(5, 0, 0, 0); // 12:00 VN
+      } else {
+        checkOut.setUTCHours(11, 0, 0, 0); // 18:00 VN
+      }
+
+      const checkInTime = new Date(existing.checkIn);
+      let totalHours = (checkOut.getTime() - checkInTime.getTime()) / (1000 * 60 * 60);
+
+      if (!isSaturday) {
+        const lunchStart = new Date(existing.date);
+        lunchStart.setUTCHours(5, 0, 0, 0); // 12:00 VN
+        const lunchEnd = new Date(existing.date);
+        lunchEnd.setUTCHours(6, 30, 0, 0); // 13:30 VN
+
+        const overlapStart = new Date(Math.max(checkInTime.getTime(), lunchStart.getTime()));
+        const overlapEnd = new Date(Math.min(checkOut.getTime(), lunchEnd.getTime()));
+        if (overlapStart < overlapEnd) {
+          totalHours -= (overlapEnd.getTime() - overlapStart.getTime()) / (1000 * 60 * 60);
+        }
+      }
+
+      if (totalHours < 0) totalHours = 0;
+      totalHours = Math.round(totalHours * 100) / 100;
+
+      const tag = '[⚠️ Quên chấm công - Hệ thống tự động chốt ca]';
+      const existingNotes = existing.notes || '';
+      const newNote = existingNotes.includes(tag) ? existingNotes : `${existingNotes} | ${tag}`.trim().replace(/^\|\s*/, '');
+
+      const updated = await prisma.attendance.update({
+        where: { id: existing.id },
+        data: {
+          checkOut,
+          totalHours,
+          notes: newNote,
+        },
+        include: { member: true },
+      });
+
+      updatedCheckouts++;
+      records.push(serialize(updated));
+    }
+
+    // b. Chốt công và kiểm toán nghỉ phép cho nhân sự không check-in
+    let createdLeaves = 0;
+    let createdAbsents = 0;
+
+    // Xác định targetDate (mặc định là hôm nay theo giờ VN hoặc ngày truyền qua req.body.targetDate)
+    let targetDateStr: string;
+    if (req?.body?.targetDate) {
+      const raw = String(req.body.targetDate).trim();
+      if (/^\d{4}-\d{2}-\d{2}/.test(raw)) {
+        targetDateStr = raw.substring(0, 10);
+      } else {
+        const parsed = new Date(raw);
+        const y = parsed.getFullYear();
+        const m = String(parsed.getMonth() + 1).padStart(2, '0');
+        const d = String(parsed.getDate()).padStart(2, '0');
+        targetDateStr = `${y}-${m}-${d}`;
+      }
+    } else {
+      const y = vnNow.getFullYear();
+      const m = String(vnNow.getMonth() + 1).padStart(2, '0');
+      const d = String(vnNow.getDate()).padStart(2, '0');
+      targetDateStr = `${y}-${m}-${d}`;
+    }
+
+    const [tYear, tMonth, tDay] = targetDateStr.split('-').map(Number);
+    const targetDateMidnight = new Date(Date.UTC(tYear, tMonth - 1, tDay, 0, 0, 0, 0));
+    const targetDate = targetDateMidnight;
+
+    const isSunday = targetDate.getUTCDay() === 0;
+    const isSat = targetDate.getUTCDay() === 6;
+
+    // Kiểm tra Ngày Nghỉ Lễ (dùng HrHolidayService.getHolidays())
+    const holidays = await HrHolidayService.getHolidays();
+    const holidayDateSet = new Set(holidays.map((h: any) => h.date));
+    const isHoliday = holidayDateSet.has(targetDateStr);
+
+    if (!isSunday && !isHoliday) {
+      const activeMembers = await prisma.teamMember.findMany({
+        where: {
+          accountStatus: { notIn: ['suspended', 'rejected'] },
+          isActive: { not: false }
+        }
+      });
+
+      const startOfDay = new Date(targetDateMidnight);
+      startOfDay.setUTCHours(0, 0, 0, 0);
+      const endOfDay = new Date(targetDateMidnight);
+      endOfDay.setUTCHours(23, 59, 59, 999);
+
+      for (const member of activeMembers) {
+        // Kiểm tra xem đã có bản ghi attendance của ngày đó chưa
+        const existingAttendance = await prisma.attendance.findUnique({
+          where: {
+            memberId_date: {
+              memberId: member.id,
+              date: targetDateMidnight
+            }
+          }
+        });
+
+        if (!existingAttendance) {
+          // Kiểm tra đơn xin nghỉ phép của nhân sự
+          const approvedLeave = await prisma.leaveRequest.findFirst({
+            where: {
+              memberId: member.id,
+              status: 'approved',
+              leaveType: { not: 'remote' },
+              startDate: { lte: endOfDay },
+              endDate: { gte: startOfDay }
+            }
+          });
+
+          try {
+            if (approvedLeave) {
+              const typeLabel = approvedLeave.leaveType === 'annual'
+                ? 'Phép năm'
+                : approvedLeave.leaveType === 'sick'
+                  ? 'Nghỉ ốm'
+                  : 'Việc riêng';
+              await prisma.attendance.create({
+                data: {
+                  memberId: member.id,
+                  date: targetDateMidnight,
+                  workType: 'leave',
+                  checkIn: null,
+                  checkOut: null,
+                  totalHours: isSat ? 3.5 : 8.0,
+                  status: 'leave',
+                  notes: `[🏖️ Nghỉ có phép: ${typeLabel}]${approvedLeave.reason ? ` · Lý do: ${approvedLeave.reason}` : ''}`
+                }
+              });
+              createdLeaves++;
+            } else {
+              await prisma.attendance.create({
+                data: {
+                  memberId: member.id,
+                  date: targetDateMidnight,
+                  workType: 'office',
+                  checkIn: null,
+                  checkOut: null,
+                  totalHours: 0,
+                  status: 'absent',
+                  notes: '[⚠️ Vắng không phép] Không có check-in và không có đơn xin nghỉ phép'
+                }
+              });
+              createdAbsents++;
+            }
+          } catch (createErr: any) {
+            console.warn(`[autoCheckout] Failed to create attendance record for member ${member.id}:`, createErr?.message || createErr);
+          }
+        }
+      }
+    }
+
+    const res = {
+      status: 'success',
+      updatedCheckouts,
+      createdLeaves,
+      createdAbsents,
+      updatedCount: updatedCheckouts,
+      records
+    };
+
+    if (reply) {
+      reply.code(200).send({
+        status: 'success',
+        updatedCheckouts,
+        createdLeaves,
+        createdAbsents
+      });
+    }
+    return res;
+  }
+
+  /** GET /hr/settings/holidays */
+  static async getHolidays(req: any, reply: any) {
+    const year = req.query?.year ? parseInt(req.query.year, 10) : undefined;
+    const data = await HrHolidayService.getHolidays(year);
+    reply.code(200).send({ status: 'success', data });
+  }
+
+  /** POST /hr/settings/holidays */
+  static async saveHoliday(req: any, reply: any) {
+    const { actorId, actorEmail, ...item } = req.body || {};
+    const actor = await resolveTeamActor(req, { id: actorId, email: actorEmail });
+    if (!isTeamAdmin(actor)) {
+      reply.code(403).send({ status: 'error', message: 'Chỉ Admin mới có quyền sửa lịch nghỉ lễ' });
+      return;
+    }
+    const data = await HrHolidayService.saveHoliday(item);
+    reply.code(200).send({ status: 'success', data });
+  }
+
+  /** DELETE /hr/settings/holidays/:id */
+  static async deleteHoliday(req: any, reply: any) {
+    const { id } = req.params;
+    const actorId = req.query?.actorId;
+    const actorEmail = req.query?.actorEmail;
+
+    const actor = await resolveTeamActor(req, { id: actorId, email: actorEmail });
+    if (!isTeamAdmin(actor)) {
+      reply.code(403).send({ status: 'error', message: 'Chỉ Admin mới có quyền xóa lịch nghỉ lễ' });
+      return;
+    }
+    const success = await HrHolidayService.deleteHoliday(id);
+    if (!success) {
+      reply.code(404).send({ status: 'error', message: 'Không tìm thấy ngày lễ' });
+      return;
+    }
+    reply.code(200).send({ status: 'success', message: 'Đã xóa ngày lễ' });
+  }
+
+  /** POST /hr/settings/holidays/seed-defaults */
+  static async seedDefaultHolidays(req: any, reply: any) {
+    const { actorId, actorEmail, year } = req.body || {};
+    const actor = await resolveTeamActor(req, { id: actorId, email: actorEmail });
+    if (!isTeamAdmin(actor)) {
+      reply.code(403).send({ status: 'error', message: 'Chỉ Admin mới có quyền nạp lịch nghỉ lễ' });
+      return;
+    }
+    const data = await HrHolidayService.seedDefaultHolidays(year);
+    reply.code(200).send({ status: 'success', data });
+  }
+
+  /** GET /hr/settings/office-network */
+  static async getOfficeNetwork(req: any, reply: any) {
+    const clientIp = OfficeNetworkService.getClientIp(req);
+    const config = await OfficeNetworkService.getOfficeNetworkConfig();
+    reply.code(200).send({
+      status: 'success',
+      data: {
+        ...config,
+        clientIp,
+      },
+    });
+  }
+
+  /** POST /hr/settings/office-network */
+  static async updateOfficeNetwork(req: any, reply: any) {
+    const { actorId, actorEmail, officeIps, enabled } = req.body || {};
+    const actor = await resolveTeamActor(req, { id: actorId, email: actorEmail });
+    if (!isTeamAdmin(actor)) {
+      return reply.code(403).send({
+        status: 'error',
+        message: 'Chỉ Admin mới có quyền cập nhật mạng văn phòng',
+      });
+    }
+
+    const cleanIps = Array.isArray(officeIps)
+      ? officeIps.map((ip: any) => String(ip).trim()).filter(Boolean)
+      : (await OfficeNetworkService.getOfficeNetworkConfig()).officeIps;
+
+    const isEnabled = enabled !== false;
+    const config = await OfficeNetworkService.setOfficeNetworkConfig(cleanIps, isEnabled);
+    return reply.code(200).send({
+      status: 'success',
+      data: config,
     });
   }
 }

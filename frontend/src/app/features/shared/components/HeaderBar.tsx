@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
+import toast from 'react-hot-toast';
 import { Plus, Bell, LogOut, ChevronDown, User } from 'lucide-react';
 import { TeamMember, Project, Announcement, getInitials } from '../../../constants';
 import BroadcastNotify from './BroadcastNotify';
+import { coreApiClient } from '../../../../lib/apiClient';
 
 interface HeaderBarProps {
   tab: string;
@@ -61,11 +63,73 @@ export default function HeaderBar({
   const relevantAnnouncements = announcements.filter(a => !a.targetUserId || a.targetUserId === activeUser?.id);
   const unreadAnnouncements = relevantAnnouncements.filter(a => !(a.readBy || []).includes(activeUser?.id || ''));
 
-  // Determine today's attendance status for active user
-  const todayStr = new Date().toISOString().split('T')[0];
-  const todayRecord = attendanceList?.find(a => a.memberId === activeUser?.id && a.date?.startsWith(todayStr));
+  const myMember = teamMembers.find(
+    (m) => (m?.email || '').toLowerCase() === (activeUser?.email || '').toLowerCase()
+  ) || activeUser;
+
+  // Determine today's attendance status for active user with VN timezone standard
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const todayRecord = attendanceList?.find(
+    (a) => a.memberId === myMember?.id && (a.date || '').startsWith(todayStr)
+  );
   const hasCheckedIn = !!todayRecord?.checkIn;
   const hasCheckedOut = !!todayRecord?.checkOut;
+
+  const [loadingAction, setLoadingAction] = useState<'checkin' | 'checkout' | null>(null);
+
+  const handleQuickCheckout = async () => {
+    if (!myMember?.id) return;
+    if (!window.confirm('Xác nhận kết thúc ca làm việc và check-out?')) return;
+
+    setLoadingAction('checkout');
+    try {
+      await handleCheckoutOffice(myMember.id, 'Check-out nhanh từ Header Bar');
+      toast.success('Check-out thành công!');
+    } catch (err: any) {
+      toast.error(err?.message || 'Check-out thất bại');
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  const handleQuickCheckin = async () => {
+    if (!myMember?.id) return;
+    let wt = (myMember.workArrangement === 'remote') ? 'remote' : 'office';
+
+    setLoadingAction('checkin');
+    try {
+      if (wt === 'office') {
+        try {
+          const netRes: any = await coreApiClient.get('/hr/attendance/network-status');
+          const isOffice = netRes?.data?.isOfficeNetwork ?? netRes?.isOfficeNetwork;
+          if (isOffice === false) {
+            const switchRemote = window.confirm(
+              'Bạn đang kết nối mạng ngoài văn phòng. Bạn có muốn chuyển sang Check-in Remote không?'
+            );
+            if (!switchRemote) {
+              setLoadingAction(null);
+              return;
+            }
+            wt = 'remote';
+          }
+        } catch (netErr) {
+          console.warn('Network check error', netErr);
+        }
+      }
+
+      await handleCheckinOffice(
+        myMember.id,
+        wt === 'remote' ? 'Check-in Remote từ Header Bar' : 'Check-in từ Header Bar',
+        wt
+      );
+      toast.success(wt === 'remote' ? 'Check-in Remote thành công!' : 'Check-in Văn phòng thành công!');
+    } catch (err: any) {
+      toast.error(err?.message || 'Check-in thất bại');
+    } finally {
+      setLoadingAction(null);
+    }
+  };
   
   const formatTime = (isoString?: string) => {
     if (!isoString) return '';
@@ -134,46 +198,42 @@ export default function HeaderBar({
                display: 'flex', alignItems: 'center', gap: 6
              }}
            >
-             <span>👋</span> Đã Check-out ({formatTime(todayRecord.checkIn)} - {formatTime(todayRecord.checkOut)})
+             <span>👋</span> Đã Check-out ({formatTime(todayRecord?.checkIn)} - {formatTime(todayRecord?.checkOut)})
            </button>
         ) : hasCheckedIn ? (
            <button
-             onClick={async () => {
-               if (activeUser) {
-                 await handleCheckoutOffice(activeUser?.id, 'Check-out từ Header Bar');
-               }
-             }}
+             disabled={loadingAction === 'checkout'}
+             onClick={handleQuickCheckout}
              style={{
                padding: '6px 12px', fontSize: 11, fontWeight: 600, borderRadius: 8, border: 'none',
-               background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: 'white', cursor: 'pointer',
-               display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.2s'
+               background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: 'white',
+               cursor: loadingAction === 'checkout' ? 'wait' : 'pointer',
+               display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.2s',
+               opacity: loadingAction === 'checkout' ? 0.7 : 1
              }}
            >
-             <span>🏃</span> Check-out ({formatTime(todayRecord.checkIn)} - --:--)
+             <span>{loadingAction === 'checkout' ? '⏳' : '🏃'}</span>
+             {loadingAction === 'checkout'
+               ? 'Đang check-out...'
+               : `Check-out (${formatTime(todayRecord?.checkIn)} - --:--)`}
            </button>
         ) : (
            <button
-             onClick={async () => {
-               if (activeUser) {
-                 const wt = activeUser.workArrangement === 'remote' ? 'remote' : 'office';
-                 await handleCheckinOffice(
-                   activeUser?.id,
-                   wt === 'remote' ? 'Check-in Remote từ Header Bar' : 'Check-in từ Header Bar',
-                   wt
-                 );
-               }
-             }}
+             disabled={loadingAction === 'checkin'}
+             onClick={handleQuickCheckin}
              style={{
                padding: '6px 12px', fontSize: 11, fontWeight: 600, borderRadius: 8, border: 'none',
-               background: activeUser?.workArrangement === 'remote'
-                 ? 'linear-gradient(135deg, #22c55e, #16a34a)'
-                 : 'linear-gradient(135deg, #22c55e, #16a34a)',
-               color: 'white', cursor: 'pointer',
-               display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.2s'
+               background: 'linear-gradient(135deg, #22c55e, #16a34a)',
+               color: 'white',
+               cursor: loadingAction === 'checkin' ? 'wait' : 'pointer',
+               display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.2s',
+               opacity: loadingAction === 'checkin' ? 0.7 : 1
              }}
            >
-             <span>{activeUser?.workArrangement === 'remote' ? '🏠' : '🕒'}</span>
-             {activeUser?.workArrangement === 'remote' ? 'Check-in Remote' : 'Check-in Văn phòng'}
+             <span>{loadingAction === 'checkin' ? '⏳' : (myMember?.workArrangement === 'remote' ? '🏠' : '🕒')}</span>
+             {loadingAction === 'checkin'
+               ? 'Đang check-in...'
+               : (myMember?.workArrangement === 'remote' ? 'Check-in Remote' : 'Check-in Văn phòng')}
            </button>
         )}
 

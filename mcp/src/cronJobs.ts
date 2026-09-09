@@ -174,25 +174,35 @@ export function startCronJobs(
             (t: any) => !isDoneGroup(t.State?.group || "unstarted")
           );
 
+          const isRemoteStaff =
+            String(m.workArrangement || "").toLowerCase() === "remote" ||
+            String(m.workArrangement || "").toLowerCase() === "full_remote";
+          const morningButtons = isRemoteStaff
+            ? [
+                [
+                  { text: "🏠 Vào ca Remote", callback_data: "attendance_direct:present:remote" },
+                  { text: "🏢 Vào ca Văn phòng", callback_data: "attendance_direct:present:office" },
+                ],
+                [
+                  { text: "🚪 Tan ca (Check-out)", callback_data: "attendance_direct:checkout" },
+                ],
+              ]
+            : [
+                [
+                  { text: "🏢 Vào ca Văn phòng", callback_data: "attendance_direct:present:office" },
+                  { text: "🏠 Vào ca Remote", callback_data: "attendance_direct:present:remote" },
+                ],
+                [
+                  { text: "🚪 Tan ca (Check-out)", callback_data: "attendance_direct:checkout" },
+                ],
+              ];
+
           if (activeIssues.length === 0) {
             await sendMessage(
               chatId,
               `☀️ *BÁO CÁO ĐẦU NGÀY (8h20)*\n\nChào *${m.fullName}*! Hôm nay bạn không có công việc nào đang mở. Chúc một ngày mới tràn đầy năng lượng! 🎉`,
               {
-                inline_keyboard: [
-                  [
-                    {
-                      text:
-                        String(m.workArrangement || "").toLowerCase() === "remote"
-                          ? "🏠 Vào ca Remote"
-                          : "🌅 Vào ca (Check-in)",
-                      callback_data:
-                        String(m.workArrangement || "").toLowerCase() === "remote"
-                          ? "attendance_direct:present:remote"
-                          : "attendance_direct:present",
-                    },
-                  ],
-                ],
+                inline_keyboard: morningButtons,
               }
             );
             continue;
@@ -252,18 +262,8 @@ export function startCronJobs(
 
           msg += `\n💪 Chúc bạn một ngày làm việc hiệu quả!`;
 
-          const isRemoteStaff = String(m.workArrangement || "").toLowerCase() === "remote";
           await sendMessage(chatId, msg, {
-            inline_keyboard: [
-              [
-                {
-                  text: isRemoteStaff ? "🏠 Vào ca Remote" : "🌅 Vào ca (Check-in)",
-                  callback_data: isRemoteStaff
-                    ? "attendance_direct:present:remote"
-                    : "attendance_direct:present",
-                },
-              ],
-            ],
+            inline_keyboard: morningButtons,
           });
         }
         console.log("[Cron 8h20 DM] ✅ Done");

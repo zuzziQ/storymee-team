@@ -7,6 +7,9 @@ const PUBLIC_PATHS = new Set([
   '/internal/v1/team/auth/one-time/exchange',
   '/internal/v1/team/auth/one-time/request',
   '/internal/v1/team/hr/team-members/register',
+  '/internal/v1/team/hr/attendance/network-status',
+  '/internal/v1/team/hr/settings/holidays',
+  '/internal/v1/team/hr/settings/office-network',
 ]);
 
 function bearer(request: any): string {
@@ -22,17 +25,24 @@ function isServiceKey(request: any): boolean {
 
 export async function requireTeamSession(request: any, reply: any) {
   const path = request.url.split('?')[0];
-  if (PUBLIC_PATHS.has(path)) return;
   if (isServiceKey(request)) {
     request.teamService = true;
     return;
   }
-  try {
-    const claims = TeamSessionService.verifySession(bearer(request));
-    const member = await prisma.teamMember.findUnique({ where: { id: claims.sub } });
-    if (!member || !member.isActive || member.accountStatus !== 'active') throw new Error('inactive');
-    request.teamMember = member;
-  } catch {
+  const token = bearer(request);
+  if (token) {
+    try {
+      const claims = TeamSessionService.verifySession(token);
+      const member = await prisma.teamMember.findUnique({ where: { id: claims.sub } });
+      if (member && member.isActive && member.accountStatus === 'active') {
+        request.teamMember = member;
+      }
+    } catch {
+      // Ignored for public routes
+    }
+  }
+  if (PUBLIC_PATHS.has(path)) return;
+  if (!request.teamMember) {
     return reply.code(401).send({
       status: 'error',
       code: 'TEAM_SESSION_REQUIRED',
@@ -61,6 +71,16 @@ export async function resolveTeamActor(
   claimed: { id?: string | null; email?: string | null } = {}
 ) {
   if (request.teamMember) return request.teamMember;
+  if (bearer(request)) {
+    try {
+      const claims = TeamSessionService.verifySession(bearer(request));
+      const member = await prisma.teamMember.findUnique({ where: { id: claims.sub } });
+      if (member && member.isActive && member.accountStatus === 'active') {
+        request.teamMember = member;
+        return member;
+      }
+    } catch {}
+  }
   if (!request.teamService) return null;
 
   if (claimed.id) {

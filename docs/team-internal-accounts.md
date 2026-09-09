@@ -80,6 +80,12 @@ tags: [StorymeeTeam, TeamMember, HR, auth]
 4. Backend consume token atomically và trả Team JWT có `actor=team`, `aud=storymee-team`.
 5. Browser gọi `/api/v1/team/*` và Socket.IO `/api/v1/team/socket.io` bằng Team JWT; `/auth/me` là nguồn xác minh session.
 
+Mọi quyết định phân quyền HTTP phải lấy actor từ Team JWT đã xác minh
+(`request.teamMember`). Các trường `actorEmail`, `actorId`, `reviewerId`,
+`viewerEmail` do browser gửi chỉ là dữ liệu tương thích và không được dùng để
+leo thang quyền. Telegram/MCP chỉ được chỉ định actor khi request đã xác thực
+bằng service credential.
+
 `GET /hr/auth/lookup?q=` không phải endpoint đăng nhập và không được dùng để tạo session. Không dùng `lettaConversationId` hoặc `conv-<memberId>` làm token vì có thể đoán được.
 
 Core AI `POST /internal/v1/ai/team/chat` là machine-to-machine và bắt buộc `STORYMEE_SERVICE_API_KEY`.

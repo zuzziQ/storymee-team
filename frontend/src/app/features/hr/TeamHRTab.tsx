@@ -6,7 +6,6 @@ import OrgChart from './components/OrgChart';
 import AttendanceSheet from './components/AttendanceSheet';
 import LeaveApprovals from './components/LeaveApprovals';
 import PayrollTabContent from './components/PayrollTabContent';
-import RulesEditor from './components/RulesEditor';
 import AdminPrivacyPanel from './components/AdminPrivacyPanel';
 import { isTeamAdmin } from '@/lib/teamAuth';
 import type { AccountFilter } from './components/OrgChart';
@@ -51,7 +50,6 @@ const HR_SUB_TABS = [
   { id: 'attendance', label: '📅 Chấm công' },
   { id: 'leaves', label: '✉️ Đơn xin phép' },
   { id: 'payroll', label: '💵 Bảng lương' },
-  { id: 'importer', label: '🧠 Cấu hình RAG' }
 ] as const;
 
 export default function TeamHRTab({
@@ -102,7 +100,7 @@ export default function TeamHRTab({
           // Legacy: accounts tab merged into profile
           const active =
             hrSubTab === st.id || (hrSubTab === 'accounts' && st.id === 'profile');
-          if ((st.id === 'importer' || st.id === 'payroll' || st.id === 'settings') && !isAdmin) return null;
+          if ((st.id === 'payroll' || st.id === 'settings') && !isAdmin) return null;
           return (
             <button
               key={st.id}
@@ -280,13 +278,7 @@ export default function TeamHRTab({
         <PayrollTabContent
           currentUser={activeUser}
           teamMembers={teamMembers}
-        />
-      )}
-
-      {hrSubTab === 'importer' && (
-        <RulesEditor
-          rawMarkdownRules={rawMarkdownRules}
-          setRawMarkdownRules={setRawMarkdownRules}
+          attendanceList={attendanceList}
         />
       )}
     </div>

@@ -93,12 +93,13 @@ case "check_in_out": {
           const notesLower = String(notes || args?.notes || '').toLowerCase();
           const explicitWt = String(args?.workType || args?.work_type || '').toLowerCase();
           const wantRemote =
-            isFullRemote ||
             explicitWt === 'remote' ||
-            notesLower.includes('remote') ||
-            notesLower.includes('wfh') ||
-            notesLower.includes('từ xa') ||
-            notesLower.includes('tu xa');
+            (explicitWt !== 'office' &&
+              (isFullRemote ||
+                notesLower.includes('remote') ||
+                notesLower.includes('wfh') ||
+                notesLower.includes('từ xa') ||
+                notesLower.includes('tu xa')));
           checkinData = (await apiClient.post(API_ROUTES.HR.ATTENDANCE_CHECKIN, {
             memberId: targetMember.id,
             status: st,
@@ -131,6 +132,16 @@ case "check_in_out": {
             }]
           };
         }
+
+        if (errorData?.message) {
+          return {
+            content: [{
+              type: "text",
+              text: `⚠️ Lỗi điểm danh: ${errorData.message}`
+            }]
+          };
+        }
+
         throw new McpError(ErrorCode.InternalError, `Lỗi kết nối điểm danh với Core API. Chi tiết: ${err.message || JSON.stringify(err)}`);
       }
       const att = checkinData.data;

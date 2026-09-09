@@ -83,6 +83,10 @@ Backlog ──► Todo ──► In Progress ──► In Review ──► Done
 | Check-in workType | Auto | Full remote HR **hoặc** đơn remote **approved** hôm nay → `remote` |
 | Duyệt remote leave | Admin | Auto ghi attendance remote các ngày trong đơn |
 
+Authorization: FE dùng actor từ Team JWT; API không tin `actorId`, `actorEmail`
+hoặc `reviewerId` trong body của browser. Service Telegram/MCP được phép truyền
+actor rõ ràng sau khi đã qua service-key authentication.
+
 ### A.3. Sequence — Tạo task
 
 ```mermaid

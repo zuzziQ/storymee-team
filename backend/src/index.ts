@@ -12,6 +12,7 @@ import hrRoutes from './modules/hr/index';
 import omnitaskRoutes from './modules/omnitask/index';
 import planeRoutes from './modules/plane/index';
 import authRoutes from './modules/auth/index';
+import { HrController } from './controllers/hr.controller';
 import { TeamAccountService } from './services/teamAccount.service';
 import { requireTeamSession } from './middlewares/teamSessionAuth';
 import { TeamSessionService } from './services/teamSession.service';
@@ -125,4 +126,28 @@ async function startServer() {
   });
 }
 
-startServer().catch(console.error);
+function setupAutoCheckoutCron() {
+  let lastRunDate = '';
+  setInterval(() => {
+    try {
+      const vnNowStr = new Date().toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' });
+      const now = new Date(vnNowStr);
+      const dateStr = now.toISOString().substring(0, 10);
+      if (now.getHours() === 23 && now.getMinutes() >= 50 && lastRunDate !== dateStr) {
+        lastRunDate = dateStr;
+        console.log(`[Cron] Running nightly auto-checkout for date: ${dateStr}...`);
+        HrController.autoCheckout().then((res: any) => {
+          console.log(`[Cron] Auto-checkout finished: ${res?.updatedCount} records updated.`);
+        }).catch((err: any) => {
+          console.error('[Cron] Auto-checkout failed:', err);
+        });
+      }
+    } catch (e) {
+      console.error('[Cron] Error in auto-checkout interval:', e);
+    }
+  }, 30000);
+}
+
+startServer().then(() => {
+  setupAutoCheckoutCron();
+}).catch(console.error);
